@@ -1,0 +1,269 @@
+use bevy::prelude::*;
+use std::collections::HashMap;
+
+/// Size of a single tile in world units
+const TILE_X_SIZE: f32 = 64.0;
+const TILE_Y_SIZE: f32 = 32.0;
+
+#[derive(Debug)]
+pub struct GridManager {
+    width: u32,
+    height: u32,
+    // We keep both indexes up to date for easy lookup at the cost of memory and
+    // a lil more expensive updates for now
+    entities: HashMap<GridPosition, Vec<Entity>>,
+    entity_positions: HashMap<Entity, GridPosition>,
+}
+
+impl GridManager {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            entities: HashMap::new(),
+            entity_positions: HashMap::new(),
+        }
+    }
+
+    /// Move an entity to a new position on the grid
+    pub fn move_entity_to(
+        &mut self,
+        entity: Entity,
+        new_position: GridPosition,
+    ) -> anyhow::Result<()> {
+        // Remove from old position, if applicable
+        if let Some(old_position) = self.entity_positions.get(&entity) {
+            if let Some(entities_at_old) = self.entities.get_mut(old_position) {
+                if !entities_at_old.contains(&entity) {
+                    anyhow::bail!("Entity not found in old position list, but was previously tracked!");
+                }
+                entities_at_old.retain(|&e| e != entity);
+            }        
+        }
+
+        // Add to new position
+        self.entity_positions.insert(entity, new_position.clone());
+        self.entities.entry(new_position)
+            .or_insert(Vec::new())
+            .push(entity);
+
+        Ok(())
+    }
+
+    /// Add an entity to the grid at a given position
+    pub fn add_entity(
+        &mut self,
+        entity: Entity,
+        position: GridPosition,
+    ) {
+        self.entity_positions.insert(entity, position.clone());
+        self.entities.entry(position)
+            .or_insert(Vec::new())
+            .push(entity);
+    }
+
+    pub fn get_by_position(
+        &self,
+        position: &GridPosition,
+    ) -> Option<&Vec<Entity>> {
+        self.entities.get(position)
+    }
+
+    pub fn get_by_id(
+        &self,
+        entity: &Entity,
+    ) -> Option<GridPosition> {
+        self.entity_positions.get(entity).copied()
+    }
+}
+
+#[derive(Debug, Resource)]
+pub struct GridManagerResource {
+    pub grid_manager: GridManager,
+}
+
+/// Sync's the grid positions of entities to the grid manager
+/// 
+/// Assumes that entities are already added to the grid manager, but will add them if that happens
+/// Ignores entities that are in the middle of moving
+pub fn sync_grid_positions_to_manager(
+    mut grid_manager_res: ResMut<GridManagerResource>,
+    changed_grid_query: Query<(Entity, &GridPosition), (Changed<GridPosition>, Without<GridMovement>)>,
+) { 
+    for (entity, grid_position) in changed_grid_query.iter() {
+        if let Err(e) = grid_manager_res.grid_manager.move_entity_to(
+            entity,
+            *grid_position,
+        ) {
+            eprintln!("Failed to move entity: {:?}", e);
+        }
+    }
+}
+
+// Add this constant for your tile size
+pub const TILE_SIZE: f32 = 16.0; // Adjust to your actual tile size
+
+/// System to sync GridPosition to world Transform
+///
+/// Not so sure about this just yet.
+pub fn sync_grid_position_to_transform(
+    mut query: Query<(&GridPosition, &mut Transform), Changed<GridPosition>>,
+) {
+    for (grid_pos, mut transform) in query.iter_mut() {
+        // Convert grid coordinates to world coordinates
+        let world = grid_to_world(grid_pos, TILE_X_SIZE, TILE_Y_SIZE);
+        transform.translation = Vec3::new(world.x, world.y, transform.translation.z);
+    }
+}
+
+#[derive(Component, Hash, PartialEq, Eq, Debug, Copy, Clone, Reflect)]
+#[reflect(Component)]
+pub struct GridPosition {
+    pub x: u32,
+    pub y: u32,
+}
+
+#[derive(Component)]
+pub struct GridMovement {
+    waypoints: Vec<GridPosition>,
+    current_waypoint_index: usize,
+    elapsed_time: f32,
+    duration: f32, // Time to move between waypoints
+}
+
+impl GridMovement {
+    pub fn new(waypoints: Vec<GridPosition>, duration: f32) -> Self {
+        Self {
+            waypoints,
+            current_waypoint_index: 0,
+            elapsed_time: 0.0,
+            duration,
+        }
+    }
+
+    fn current_position(&self) -> Option<&GridPosition> {
+        self.waypoints.get(self.current_waypoint_index)
+    }
+
+    fn next_position(&self) -> Option<&GridPosition> {
+        self.waypoints.get(self.current_waypoint_index + 1)
+    }
+
+    fn is_finished(&self) -> bool {
+        self.current_waypoint_index >= self.waypoints.len() - 1
+    }
+}
+
+/// Diamond isometric grid conversion
+fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32) -> Vec2 {
+    let world_x = (grid_pos.x as f32 + grid_pos.y as f32) * (tile_width / 2.0);
+    let world_y = (grid_pos.x as f32 - grid_pos.y as f32) * (tile_height / 2.0);
+    Vec2::new(world_x, world_y)
+}
+
+/// System to sync GridMovement components to Transform components
+pub fn sync_grid_movement_to_transform(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut GridMovement, &mut Transform, &mut GridPosition)>,
+    time: Res<Time>,
+) {    
+    for (entity, mut movement, mut transform, mut grid_pos) in query.iter_mut() {
+        if movement.is_finished() {
+            commands.entity(entity).remove::<GridMovement>();
+            log::debug!("Finished movement for entity {:?}", entity);
+            continue;
+        }
+
+        movement.elapsed_time += time.delta_secs();
+        let progress = (movement.elapsed_time / movement.duration).clamp(0.0, 1.0);
+        
+        let current = movement.current_position().expect("No current position in movement, but movement isn't finished!");
+        let next = movement.next_position().expect("No next position in movement, but movement isn't finished!");
+        
+        let start_world = grid_to_world(current, TILE_X_SIZE, TILE_Y_SIZE);
+        let target_world = grid_to_world(next, TILE_X_SIZE, TILE_Y_SIZE);
+
+        let lerped = start_world.lerp(target_world, progress);
+        
+        transform.translation = Vec3::new(lerped.x, lerped.y, transform.translation.z);
+        
+        // Move to next waypoint when current one completes
+        if progress >= 1.0 {
+            grid_pos.x = next.x;
+            grid_pos.y = next.y;
+            movement.current_waypoint_index += 1;
+            movement.elapsed_time = 0.0;
+        }
+    }
+}
+
+
+
+#[cfg(test)]
+mod test {
+    use bevy::ecs::relationship::RelationshipSourceCollection;
+
+    use super::*;
+
+    #[test]
+    fn test_grid_manager_add_and_move() {
+        let mut grid_manager = GridManager::new(10, 10);
+        let entity = Entity::new();
+        let initial_position = GridPosition { x: 2, y: 3 };
+        let new_position = GridPosition { x: 5, y: 6 };
+
+        grid_manager.add_entity(entity, initial_position.clone());
+        assert_eq!(grid_manager.entity_positions.get(&entity), Some(&initial_position));
+        assert_eq!(grid_manager.entities.get(&initial_position).unwrap(), &vec![entity]);
+
+        grid_manager.move_entity_to(entity, new_position.clone()).unwrap();
+        assert_eq!(grid_manager.entity_positions.get(&entity), Some(&new_position));
+        assert_eq!(grid_manager.entities.get(&initial_position).unwrap().len(), 0);
+        assert_eq!(grid_manager.entities.get(&new_position).unwrap(), &vec![entity]);
+    }
+
+    #[test]
+    fn test_sync_grid_positions_system() {
+        let mut app = App::new();
+        app.insert_resource(GridManagerResource {
+            grid_manager: GridManager::new(10, 10),
+        });
+        app.add_systems(Update, sync_grid_positions_to_manager);
+
+        
+        let entity = app.world_mut().spawn((
+            GridPosition { x: 1, y: 1 },
+        )).id();
+
+        let entity_not_on_grid_init = app.world_mut().spawn((
+            GridPosition { x: 2, y: 3 },
+        )).id();
+
+        {
+            let mut grid_manager_res = app.world_mut().resource_mut::<GridManagerResource>();
+            grid_manager_res.grid_manager.add_entity(entity, GridPosition { x: 1, y: 1 });
+        }
+
+        // Change the GridPosition component of all entities
+        {
+            let mut query = app.world_mut().query::<&mut GridPosition>();
+            for mut grid_pos in query.iter_mut(app.world_mut()) {
+                *grid_pos = GridPosition { x: 4, y: 5 };
+            }
+        }
+
+        // Run the sync system
+        app.update();
+
+        let grid_manager_res = app.world().resource::<GridManagerResource>();
+        assert_eq!(
+            grid_manager_res.grid_manager.get_by_id(&entity),
+            Some(GridPosition { x: 4, y: 5 })
+        );
+
+        assert_eq!(
+            grid_manager_res.grid_manager.get_by_id(&entity_not_on_grid_init),
+            Some(GridPosition { x: 4, y: 5 })
+        );
+    }
+}
