@@ -155,7 +155,7 @@ impl GridMovement {
 }
 
 /// Diamond isometric grid conversion
-fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32) -> Vec2 {
+pub fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32) -> Vec2 {
     let world_x = (grid_pos.x as f32 + grid_pos.y as f32) * (tile_width / 2.0);
     let world_y = (grid_pos.x as f32 - grid_pos.y as f32) * (tile_height / 2.0);
     Vec2::new(world_x, world_y)

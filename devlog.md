@@ -7,7 +7,8 @@ TODO!
 [x] A way of going from a GridPosition to a WorldPosition for rendering
     [ ] Need to figure out how to deal with Z values w.r.t bevy_ecs_tiled
 [ ] These iso_color things are great! Let's use them for showing attack and movement options
-  [ ] Figure out how to adjust opacity of stuff
+  [x] Figure out how to adjust opacity of stuff
+  [ ] Would be fun to make the squares a little smaller than the tiles they sit above.
 [ ] Build a simple demo of moving a few characters around!
   [ ] Learn the Pickable Component and create a cursor that can highlight entities in conjunction with 
   the GridManager
