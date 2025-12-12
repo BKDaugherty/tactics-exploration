@@ -9,21 +9,26 @@ TODO!
 [ ] These iso_color things are great! Let's use them for showing attack and movement options
   [x] Figure out how to adjust opacity of stuff
   [ ] Would be fun to make the squares a little smaller than the tiles they sit above.
+[x] Use leafwing to support multiple players and abstract input
 [ ] Build a simple demo of moving a few characters around!
-  [ ] Learn the Pickable Component and create a cursor that can highlight entities in conjunction with 
-  the GridManager
+  [ ] Create a pixel image for a cursor
+  [x] Create a movement system for the cursor (Use the leafwing_input library)
+  [ ] Consolidate bounds checking / valid grid stuff to the grid library
+    [ ] Use this in the cursor movement code
+  [ ] Use the select action to highlight a "Unit"
   [ ] Find a way to highlight valid "Ground" tiles for movement (assume constant movement for now)
   [ ] Download some characters, and figure out how to render them
   [ ] Use the Movement system and tune the lerping constants
   [ ] Implement a pathfinding algorithm based on valid movement indices nearby
   [ ] Implement a simple camera manager that moves the camera around, or at least centers on the map?
     [ ] I could naively just put it on the center but it'd be nice if we make bigger maps to have it move around.
-  [ ] Look at Gamepad inputs
+  [ ] Figure out a way to tie in GamepadInputs
   [ ] Get a skybox so it looks nice
   [ ] Create a goal for someone to move to (like in a tutorial!)
 [ ] Do some research into Resource / Game State Tracking
   [ ] Build a Start Screen, and Loading Screen for the demo above!
     [ ] Learn basic Bevy UIs
+    [ ] Do some research into the "Pickable" system for hover, etc / other events.
   [ ] Create some silly music to play in different things
   [ ] Look forward and write out the set of states the Game can be in
 [ ] Get the demo running on the Steam Deck

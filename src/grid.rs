@@ -161,6 +161,15 @@ pub fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32)
     Vec2::new(world_x, world_y)
 }
 
+/// Spawning an entity in the real world from a logical grid pos? Use this to hide some 
+/// constants that probably shouldn't exist from yourself.
+pub fn init_grid_to_world_transform(
+    grid_pos: &GridPosition
+) -> Transform {
+    let world = grid_to_world(grid_pos, TILE_X_SIZE, TILE_Y_SIZE);
+    Transform::from_translation(Vec3::new(world.x, world.y, 600.0))
+}
+
 /// System to sync GridMovement components to Transform components
 pub fn sync_grid_movement_to_transform(
     mut commands: Commands,

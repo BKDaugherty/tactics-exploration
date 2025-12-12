@@ -6,9 +6,9 @@ use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use leafwing_input_manager::plugin::InputManagerPlugin;
 use leafwing_input_manager::prelude::ActionState;
-use tactics_exploration::grid::{self, GridManager, GridPosition, grid_to_world };
+use tactics_exploration::grid::{self, GridManager, GridPosition, grid_to_world, init_grid_to_world_transform };
 use tactics_exploration::player::{Player, PlayerInputAction};
-use tactics_exploration::{Ground, player};
+use tactics_exploration::{Ground, grid_cursor, player};
 
 fn main() {
     App::new()
@@ -25,12 +25,12 @@ fn main() {
         // Add your startup system and run the app
         .add_systems(Startup, startup)
         .add_systems(Startup, startup_load_overlay_sprite_data.after(startup))
-        .add_systems(Startup, generate_overlay_on_map.after(startup_load_overlay_sprite_data))
+        .add_systems(Startup, create_cursor_for_player_1.after(startup_load_overlay_sprite_data))
         .add_systems(Update, (change_zoom, grid::sync_grid_positions_to_manager, grid::sync_grid_position_to_transform, grid::sync_grid_movement_to_transform, on_asset_event))
         .add_systems(Update, (destroy_overlay_on_map, generate_overlay_on_map))
+        .add_systems(Update, grid_cursor::handle_cursor_movement)
         .run();
 }
-
 
 /// Resource because one of them? Split screen maybe would need two?
 #[derive(Debug, Resource)]
@@ -85,8 +85,6 @@ impl TileOverlayBundle {
         spritesheet: Handle<Image>,
         atlas_layout_handle: Handle<TextureAtlasLayout>,
     ) -> Self {
-        let world_coords = grid_to_world(&grid_position, 64.0, 32.);
-        let initial_transform = Transform::from_translation(Vec3::new(world_coords.x, world_coords.y, 600.0));
         Self {
             grid_position,
             sprite: Sprite {
@@ -99,10 +97,22 @@ impl TileOverlayBundle {
                 color: Color::linear_rgba(1.0, 1.0, 1.0, 0.3),
                 ..Default::default()
             },
-            transform: initial_transform,
+            transform: init_grid_to_world_transform(&grid_position),
             tile_overlay: TileOverlay {},
         }
     }
+}
+
+fn create_cursor_for_player_1(
+    commands: Commands,
+    tile_overlay_assets: Res<TileOverlayAssets>,
+) {
+    grid_cursor::spawn_cursor(
+        commands,
+        tile_overlay_assets.tile_overlay_image_handle.clone(),
+        tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
+        player::Player::One,
+    );
 }
 
 fn generate_overlay_on_map(
