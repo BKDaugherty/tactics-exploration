@@ -4,8 +4,11 @@ use bevy::prelude::*;
 use bevy_ecs_tiled::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use leafwing_input_manager::plugin::InputManagerPlugin;
+use leafwing_input_manager::prelude::ActionState;
 use tactics_exploration::grid::{self, GridManager, GridPosition, grid_to_world };
-use tactics_exploration::Ground;
+use tactics_exploration::player::{Player, PlayerInputAction};
+use tactics_exploration::{Ground, player};
 
 fn main() {
     App::new()
@@ -18,6 +21,7 @@ fn main() {
         // bevy_ecs_tilemap::TilemapPlugin will be added automatically if needed
         .add_plugins(TiledPlugin::default())
         .add_plugins(TiledDebugPluginGroup)
+        .add_plugins(InputManagerPlugin::<PlayerInputAction>::default())
         // Add your startup system and run the app
         .add_systems(Startup, startup)
         .add_systems(Startup, startup_load_overlay_sprite_data.after(startup))
@@ -105,36 +109,39 @@ fn generate_overlay_on_map(
     mut commands: Commands,
     mut grid_manager_res: ResMut<grid::GridManagerResource>,
     tile_overlay_assets: Res<TileOverlayAssets>,
-    keyboard_input: Res<ButtonInput<KeyCode>>,
+    player_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::Space) {
-        for grid_pos_y in 1..=SQUARE_GRID_BOUNDS {
-        for grid_pos_x in 1..=SQUARE_GRID_BOUNDS {
-            let grid_pos = grid::GridPosition {
-                x: grid_pos_x,
-                y: grid_pos_y,
-            };
-            let e = commands.spawn((
-            TileOverlayBundle::new(grid_pos,
-                tile_overlay_assets.tile_overlay_image_handle.clone(),
-                tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
-            ),
-        )).id();
-
-            grid_manager_res.grid_manager.add_entity(e, grid_pos);
+    for (_, action_state) in player_query.iter() {
+        if action_state.just_pressed(&PlayerInputAction::CreateOverlayRemoveMe) {
+            for grid_pos_y in 1..=SQUARE_GRID_BOUNDS {
+                for grid_pos_x in 1..=SQUARE_GRID_BOUNDS {
+                    let grid_pos = grid::GridPosition {
+                        x: grid_pos_x,
+                        y: grid_pos_y,
+                    };
+                    let e = commands.spawn((
+                    TileOverlayBundle::new(grid_pos,
+                        tile_overlay_assets.tile_overlay_image_handle.clone(),
+                        tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
+                    ),
+                )).id();
+                    grid_manager_res.grid_manager.add_entity(e, grid_pos);
+                }
+            }
         }
-     }
     }
 }
 
 fn destroy_overlay_on_map(
     mut commands: Commands,
-    query: Query<(Entity, &TileOverlay)>,  
-    keyboard_input: Res<ButtonInput<KeyCode>>,
+    overlay_query: Query<(Entity, &TileOverlay)>,  
+    player_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::Backspace) {
-        for (entity, _) in query.iter() {
-            commands.entity(entity).despawn();  
+    for (_, action_state) in player_query.iter() {
+        if action_state.just_pressed(&PlayerInputAction::DeleteOverlayRemoveMe) {
+            for (entity, _) in overlay_query.iter() {
+                commands.entity(entity).despawn();  
+            }
         }
     }
 }
@@ -189,29 +196,35 @@ fn startup(
     commands.insert_resource(grid::GridManagerResource {
         grid_manager: GridManager::new(SQUARE_GRID_BOUNDS, SQUARE_GRID_BOUNDS)
     });
+
+    commands.spawn((
+        Name::new("Player One"),
+        player::PlayerBundle::new(Player::One),
+    ));
 }
 
 fn change_zoom(
     mut camera: Single<&mut Projection, With<Camera>>,
     mut camera_settings: ResMut<CameraSettings>,
-    keyboard_input: Res<ButtonInput<KeyCode>>,
+    player_query: Query<(&Player, &ActionState<PlayerInputAction>)>
 ) {
-    if keyboard_input.just_pressed(KeyCode::KeyZ) {
-        // Switch projection type
-        match **camera {
-            Projection::Orthographic(ref mut current_projection) => {
-                current_projection.scale += 0.1;
-                camera_settings.zoom_value = current_projection.scale;
-            }
-            _ => return,
-        } 
-    } else if keyboard_input.just_pressed(KeyCode::KeyX) {
-        match **camera {
-            Projection::Orthographic(ref mut current_projection) => {
-                current_projection.scale -= 0.1;
-                camera_settings.zoom_value = current_projection.scale;
-            },
-            _ => return,
-        } 
+    for (_, action_state) in player_query.iter() {
+        if action_state.just_pressed(&PlayerInputAction::ZoomIn) {
+            match **camera {
+                Projection::Orthographic(ref mut current_projection) => {
+                    current_projection.scale += 0.1;
+                    camera_settings.zoom_value = current_projection.scale;
+                }
+                _ => return,
+            } 
+        } else if action_state.just_pressed(&PlayerInputAction::ZoomOut) {
+            match **camera {
+                Projection::Orthographic(ref mut current_projection) => {
+                    current_projection.scale -= 0.1;
+                    camera_settings.zoom_value = current_projection.scale;
+                },
+                _ => return,
+            } 
+        }
     }
 }

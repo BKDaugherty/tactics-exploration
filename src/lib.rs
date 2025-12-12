@@ -3,9 +3,12 @@
 use std::collections::HashMap;
 use anyhow::Context;
 
+
+
 use bevy::prelude::*;
 
 pub mod grid;
+pub mod player;
 
 // These locations are valid locations to move to
 // Ideally I make these types of entities
