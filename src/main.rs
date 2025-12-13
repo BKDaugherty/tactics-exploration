@@ -43,6 +43,7 @@ pub const SQUARE_GRID_BOUNDS : u32 = 6;
 #[derive(Resource, Default)]
 struct TileOverlayAssets {
     tile_overlay_image_handle: Handle<Image>,
+    cursor_image: Handle<Image>,
     tile_overlay_atlas_layout_handle: Handle<TextureAtlasLayout>,
 }
 
@@ -109,8 +110,7 @@ fn create_cursor_for_player_1(
 ) {
     grid_cursor::spawn_cursor(
         commands,
-        tile_overlay_assets.tile_overlay_image_handle.clone(),
-        tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
+        tile_overlay_assets.cursor_image.clone(),
         player::Player::One,
     );
 }
@@ -163,12 +163,14 @@ fn startup_load_overlay_sprite_data(
 
 ) {
     let debug_color_spritesheet = asset_server.load("random-assets/iso_color.png");
+    let cursor_image = asset_server.load("cursor.png");
     commands.insert_resource(TileOverlayAssets {
         tile_overlay_image_handle: debug_color_spritesheet.clone(),
         tile_overlay_atlas_layout_handle: {
             let layout = TextureAtlasLayout::from_grid(UVec2::new(64, 32), 6, 1, None, None);
             texture_atlas_layouts.add(layout)
         },
+        cursor_image: cursor_image.clone(),
     });
 }
 

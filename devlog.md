@@ -11,8 +11,9 @@ TODO!
   [ ] Would be fun to make the squares a little smaller than the tiles they sit above.
 [x] Use leafwing to support multiple players and abstract input
 [ ] Build a simple demo of moving a few characters around!
-  [ ] Create a pixel image for a cursor
+  [x] Create a pixel image for a cursor
   [x] Create a movement system for the cursor (Use the leafwing_input library)
+  [ ] Make the "spawn overlay" tie to the cursor!
   [ ] Consolidate bounds checking / valid grid stuff to the grid library
     [ ] Use this in the cursor movement code
   [ ] Use the select action to highlight a "Unit"
