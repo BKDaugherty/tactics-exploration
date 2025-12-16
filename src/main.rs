@@ -1,4 +1,5 @@
-use bevy::ecs::query;
+use std::collections::HashMap;
+
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy_ecs_tiled::prelude::*;
@@ -8,6 +9,7 @@ use leafwing_input_manager::plugin::InputManagerPlugin;
 use leafwing_input_manager::prelude::ActionState;
 use tactics_exploration::grid::{self, GridManager, GridPosition, GridVec, grid_to_world, init_grid_to_world_transform };
 use tactics_exploration::player::{Player, PlayerInputAction};
+use tactics_exploration::unit::{self, spawn_unit};
 use tactics_exploration::{Ground, grid_cursor, player};
 
 fn main() {
@@ -115,42 +117,76 @@ fn create_cursor_for_player_1(
     );
 }
 
+
+// TODO: This guy needs to be broken down into some more composable systems!
 fn generate_overlay_on_map(
     mut commands: Commands,
     mut grid_manager_res: ResMut<grid::GridManagerResource>,
     tile_overlay_assets: Res<TileOverlayAssets>,
+    mut player_state: ResMut<player::PlayerGameStates>,
     player_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
     cursor_query: Query<(&Player, &grid::GridPosition), With<grid_cursor::Cursor>>,
+    unit_query: Query<(Entity, &unit::Unit, &player::Player)>,
 ) {
     for (player, action_state) in player_query.iter() {
         for (cursor_player, cursor_grid_pos) in cursor_query.iter() {
             if player != cursor_player {
                 continue;
             }
-        
-        if action_state.just_pressed(&PlayerInputAction::CreateOverlayRemoveMe) {
 
-            for deltas in [
-                GridVec { x: 1, y: 0 },
-                GridVec { x: -1, y: 0 },
-                GridVec { x: 0, y: 1 },
-                GridVec { x: 0, y: -1 },
-            ] {
-                // TODO: Don't render two overlays on the same tile (Check result)
-                let grid_pos_result = grid_manager_res.grid_manager.change_position_with_bounds(*cursor_grid_pos, deltas);
-                
-                // Don't spawn TileOverlayBundle if we were clamped
-                // (Can only do this because we know our deltas have a magnitude of 1)
-                let grid::GridPositionChangeResult::Moved(grid_pos) = grid_pos_result else {
+        let Some(player_state) = player_state.player_state.get_mut(player) else {
+            log::error!("No player state found for player {:?}", player);
+            continue;
+        };
+
+        // If the cursor is idle, and there's a unit at the cursor position, 
+        // generate overlays using that unit's movement
+        if player_state.cursor_state == player::PlayerCursorState::Idle && action_state.just_pressed(&PlayerInputAction::Select) {
+            let entities_at_pos = grid_manager_res.grid_manager.get_by_position(cursor_grid_pos).cloned().unwrap_or_default();
+            // If there's a unit here, select them (assuming they are ours to select!)
+            let unit = entities_at_pos.iter().map(|entity| {
+                unit_query.get(*entity)
+            }).find_map(|res| res.ok());
+
+            if let Some((entity, unit, unit_player)) = unit {
+                if player != unit_player {
+                    log::warn!("Player {:?} tried to select unit owned by player {:?}", player, unit_player);
                     continue;
-                };
-                let e = commands.spawn((
-                    TileOverlayBundle::new(grid_pos,
-                        tile_overlay_assets.tile_overlay_image_handle.clone(),
-                        tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
-                    ),
-                )).id();
-                grid_manager_res.grid_manager.add_entity(e, grid_pos);
+                }
+                
+                // Change Player State to moving the unit
+                player_state.cursor_state = player::PlayerCursorState::MovingUnit(entity, *cursor_grid_pos);
+
+                // For now, just generate overlays in a cross pattern based on movement stat
+                let movement_range = unit.stats.movement as i32;
+
+                for delta in -movement_range..=movement_range {
+                    // Horizontal line
+                    let grid_pos_result = grid_manager_res.grid_manager.change_position_with_bounds(*cursor_grid_pos, GridVec { x: delta, y: 0 });
+                    let grid::GridPositionChangeResult::Moved(grid_pos) = grid_pos_result else {
+                        continue;
+                    };
+                    let e = commands.spawn((
+                        TileOverlayBundle::new(grid_pos,
+                            tile_overlay_assets.tile_overlay_image_handle.clone(),
+                            tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
+                        ),
+                    )).id();
+                    grid_manager_res.grid_manager.add_entity(e, grid_pos);
+
+                    // Vertical line
+                    let grid_pos_result = grid_manager_res.grid_manager.change_position_with_bounds(*cursor_grid_pos, GridVec { x: 0, y: delta });
+                    let grid::GridPositionChangeResult::Moved(grid_pos) = grid_pos_result else {
+                        continue;
+                    };
+                    let e = commands.spawn((
+                        TileOverlayBundle::new(grid_pos,
+                            tile_overlay_assets.tile_overlay_image_handle.clone(),
+                            tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
+                        ),
+                    )).id();
+                    grid_manager_res.grid_manager.add_entity(e, grid_pos);
+                }
             }
         }
     }
@@ -161,12 +197,21 @@ fn destroy_overlay_on_map(
     mut commands: Commands,
     overlay_query: Query<(Entity, &TileOverlay)>,  
     player_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
+    mut player_state: ResMut<player::PlayerGameStates>,
 ) {
-    for (_, action_state) in player_query.iter() {
-        if action_state.just_pressed(&PlayerInputAction::DeleteOverlayRemoveMe) {
+    for (player, action_state) in player_query.iter() {
+        let Some(player_state) = player_state.player_state.get_mut(player) else {
+            log::error!("No player state found for player {:?}", player);
+            continue;
+        };
+        if action_state.just_pressed(&PlayerInputAction::Deselect) && matches!(player_state.cursor_state, player::PlayerCursorState::MovingUnit(..)) {
+            // TODO: Only despawn overlays for this player.
             for (entity, _) in overlay_query.iter() {
                 commands.entity(entity).despawn();  
             }
+
+            // Change Player State back to idle (May want to also send cursor back to original position)
+            player_state.cursor_state = player::PlayerCursorState::Idle;
         }
     }
 }
@@ -187,6 +232,10 @@ fn startup_load_overlay_sprite_data(
         },
         cursor_image: cursor_image.clone(),
     });
+
+    // TODO: Remove me
+    spawn_unit(commands, GridPosition {x: 4, y:4}, debug_color_spritesheet, Player::One);
+
 }
 
 
@@ -222,6 +271,13 @@ fn startup(
     
     commands.insert_resource(grid::GridManagerResource {
         grid_manager: GridManager::new(SQUARE_GRID_BOUNDS, SQUARE_GRID_BOUNDS)
+    });
+
+    commands.insert_resource(player::PlayerGameStates {
+        player_state: HashMap::from([
+            (Player::One, player::PlayerState::default()),
+            (Player::Two, player::PlayerState::default()),
+        ])
     });
 
     commands.spawn((

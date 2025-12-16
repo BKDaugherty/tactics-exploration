@@ -7,6 +7,7 @@ use bevy::prelude::*;
 pub mod grid;
 pub mod grid_cursor;
 pub mod player;
+pub mod unit;
 
 
 // These locations are valid locations to move to
@@ -22,24 +23,7 @@ pub struct Ground {}
 #[derive(Component)]
 struct Interactable {}
 
-/// A unit! Units can't share spaces (for now I guess)
-/// 
-/// The base controllable entity that can exist and do things on the map
-/// Units would have stats, skills, etc?
-#[derive(Component, Debug)]
-struct Unit {
-    stats: Stats,
-    // effect_modifiers: ()
-    // equipment?
-}
 
-#[derive(Debug)]
-struct Stats {
-    max_health: u32,
-    strength: u32,
-    // TBD if it makes sense for this to be here.
-    health: u32,
-}
 
 struct Obstructed {}
 
@@ -47,7 +31,7 @@ fn can_unit_stand_here(
     grid_manager: grid::GridManager,
     grid_position: grid::GridPosition,
     // Component needs to have a GridPosition, and Ground, and can't have a Unit!
-    stand_query: Query<(&grid::GridPosition, &Ground, Option<&Unit>)>,
+    stand_query: Query<(&grid::GridPosition, &Ground, Option<&unit::Unit>)>,
 ) -> anyhow::Result<bool> {
     let entities = grid_manager.get_by_position(&grid_position).context("Invalid position given to grid manager!")?;
     for entity in entities {
