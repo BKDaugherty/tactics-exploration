@@ -1,3 +1,4 @@
+use anyhow::Context;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -13,6 +14,70 @@ pub struct GridManager {
     // a lil more expensive updates for now
     entities: HashMap<GridPosition, Vec<Entity>>,
     entity_positions: HashMap<Entity, GridPosition>,
+}
+
+pub enum GridPositionChangeResult {
+    Moved(GridPosition),
+    OutOfBounds(GridPosition),
+}
+
+impl GridPositionChangeResult {
+    pub fn hit_boundary(&self) -> bool {
+        match self {
+            GridPositionChangeResult::Moved(_) => false,
+            GridPositionChangeResult::OutOfBounds(_) => true,
+        }
+    }
+
+    pub fn position(&self) -> GridPosition {
+        match self {
+            GridPositionChangeResult::Moved(pos) => *pos,
+            GridPositionChangeResult::OutOfBounds(pos) => *pos,
+        }
+    }
+}
+
+impl GridPosition {
+    /// Assumes a lower bound of 0
+    const LOWER_BOUND: i32 = 0;
+
+    fn change(&self, bounds: GridPosition, delta: GridVec) -> GridPositionChangeResult {
+        let mut new_x = self.x as i32 + delta.x;
+        let mut new_y = self.y as i32 + delta.y;
+
+        let mut out_of_bounds = false;
+
+        if new_x < GridPosition::LOWER_BOUND {
+            new_x = GridPosition::LOWER_BOUND;
+            out_of_bounds = true;
+        }
+
+        if new_y < GridPosition::LOWER_BOUND {
+            new_y = GridPosition::LOWER_BOUND;
+            out_of_bounds = true;
+        }
+
+        if new_x > bounds.x as i32 {
+            new_x = bounds.x as i32;
+            out_of_bounds = true;
+        }
+
+        if new_y > bounds.y as i32 {
+            new_y = bounds.y as i32;
+            out_of_bounds = true;
+        }
+
+        let new_position = GridPosition {
+            x: new_x as u32,
+            y: new_y as u32,
+        };
+
+        if out_of_bounds {
+            GridPositionChangeResult::OutOfBounds(new_position)
+        } else {
+            GridPositionChangeResult::Moved(new_position)
+        }
+    }
 }
 
 impl GridManager {
@@ -75,6 +140,19 @@ impl GridManager {
     ) -> Option<GridPosition> {
         self.entity_positions.get(entity).copied()
     }
+
+    /// TODO: how bad is it to take &self for just the bounds? Does this affect update fn?
+    pub fn change_position_with_bounds(
+        &self,
+        origin : GridPosition,
+        delta: GridVec,
+    ) -> GridPositionChangeResult {
+        let bounds = GridPosition {
+            x: self.width - 1,
+            y: self.height - 1,
+        };
+        origin.change(bounds, delta)
+    }
 }
 
 #[derive(Debug, Resource)]
@@ -121,6 +199,12 @@ pub fn sync_grid_position_to_transform(
 pub struct GridPosition {
     pub x: u32,
     pub y: u32,
+}
+
+#[derive(Hash, PartialEq, Debug, Copy, Clone)]
+pub struct GridVec {
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Component)]

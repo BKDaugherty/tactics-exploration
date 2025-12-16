@@ -6,7 +6,7 @@ use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use leafwing_input_manager::plugin::InputManagerPlugin;
 use leafwing_input_manager::prelude::ActionState;
-use tactics_exploration::grid::{self, GridManager, GridPosition, grid_to_world, init_grid_to_world_transform };
+use tactics_exploration::grid::{self, GridManager, GridPosition, GridVec, grid_to_world, init_grid_to_world_transform };
 use tactics_exploration::player::{Player, PlayerInputAction};
 use tactics_exploration::{Ground, grid_cursor, player};
 
@@ -38,7 +38,7 @@ struct CameraSettings {
     pub zoom_value: f32,
 }
 
-pub const SQUARE_GRID_BOUNDS : u32 = 6;
+pub const SQUARE_GRID_BOUNDS : u32 = 8;
 
 #[derive(Resource, Default)]
 struct TileOverlayAssets {
@@ -120,26 +120,41 @@ fn generate_overlay_on_map(
     mut grid_manager_res: ResMut<grid::GridManagerResource>,
     tile_overlay_assets: Res<TileOverlayAssets>,
     player_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
+    cursor_query: Query<(&Player, &grid::GridPosition), With<grid_cursor::Cursor>>,
 ) {
-    for (_, action_state) in player_query.iter() {
+    for (player, action_state) in player_query.iter() {
+        for (cursor_player, cursor_grid_pos) in cursor_query.iter() {
+            if player != cursor_player {
+                continue;
+            }
+        
         if action_state.just_pressed(&PlayerInputAction::CreateOverlayRemoveMe) {
-            for grid_pos_y in 1..=SQUARE_GRID_BOUNDS {
-                for grid_pos_x in 1..=SQUARE_GRID_BOUNDS {
-                    let grid_pos = grid::GridPosition {
-                        x: grid_pos_x,
-                        y: grid_pos_y,
-                    };
-                    let e = commands.spawn((
+
+            for deltas in [
+                GridVec { x: 1, y: 0 },
+                GridVec { x: -1, y: 0 },
+                GridVec { x: 0, y: 1 },
+                GridVec { x: 0, y: -1 },
+            ] {
+                // TODO: Don't render two overlays on the same tile (Check result)
+                let grid_pos_result = grid_manager_res.grid_manager.change_position_with_bounds(*cursor_grid_pos, deltas);
+                
+                // Don't spawn TileOverlayBundle if we were clamped
+                // (Can only do this because we know our deltas have a magnitude of 1)
+                let grid::GridPositionChangeResult::Moved(grid_pos) = grid_pos_result else {
+                    continue;
+                };
+                let e = commands.spawn((
                     TileOverlayBundle::new(grid_pos,
                         tile_overlay_assets.tile_overlay_image_handle.clone(),
                         tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
                     ),
                 )).id();
-                    grid_manager_res.grid_manager.add_entity(e, grid_pos);
-                }
+                grid_manager_res.grid_manager.add_entity(e, grid_pos);
             }
         }
     }
+}
 }
 
 fn destroy_overlay_on_map(
