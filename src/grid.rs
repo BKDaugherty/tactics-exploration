@@ -127,6 +127,15 @@ impl GridManager {
             .push(entity);
     }
 
+    pub fn remove_entity(
+        &mut self,
+        entity: &Entity
+    ) {
+        if let Some((_, v)) = self.entity_positions.remove_entry(entity) {
+            self.entities.entry(v).and_modify(|t| t.retain(|e| e != entity));
+        }
+    }
+
     pub fn get_by_position(
         &self,
         position: &GridPosition,
@@ -152,6 +161,42 @@ impl GridManager {
             y: self.height - 1,
         };
         origin.change(bounds, delta)
+    }
+
+    /// TODO: But wait! You would need to know the "set" of movable options (obstacles, enemy units, etc)
+    /// 
+    /// (Potentially could pass in some closure that checks validity of a position to abstract from Bevy)
+    pub fn get_path(&self, origin: GridPosition, target: GridPosition) -> Vec<GridPosition> {
+        // Very naive pathfinding for now: just go in straight lines
+        let mut waypoints = Vec::new();
+        let mut current_pos = origin;
+
+        waypoints.push(current_pos);
+
+        while current_pos != target {
+            let mut delta_x = 0;
+            let mut delta_y = 0;
+
+            if current_pos.x < target.x {
+                delta_x = 1;
+            } else if current_pos.x > target.x {
+                delta_x = -1;
+            }
+
+            if current_pos.y < target.y {
+                delta_y = 1;
+            } else if current_pos.y > target.y {
+                delta_y = -1;
+            }
+
+            current_pos = GridPosition {
+                x: (current_pos.x as i32 + delta_x) as u32,
+                y: (current_pos.y as i32 + delta_y) as u32,
+            };
+
+            waypoints.push(current_pos);
+        }
+        waypoints
     }
 }
 
@@ -257,6 +302,7 @@ pub fn init_grid_to_world_transform(
 /// System to sync GridMovement components to Transform components
 pub fn sync_grid_movement_to_transform(
     mut commands: Commands,
+    mut grid_manager_res: ResMut<GridManagerResource>,
     mut query: Query<(Entity, &mut GridMovement, &mut Transform, &mut GridPosition)>,
     time: Res<Time>,
 ) {    
@@ -269,6 +315,8 @@ pub fn sync_grid_movement_to_transform(
 
         movement.elapsed_time += time.delta_secs();
         let progress = (movement.elapsed_time / movement.duration).clamp(0.0, 1.0);
+
+        log::debug!("Moving entity {:} at progress {:?}", entity, progress);
         
         let current = movement.current_position().expect("No current position in movement, but movement isn't finished!");
         let next = movement.next_position().expect("No next position in movement, but movement isn't finished!");
@@ -286,8 +334,33 @@ pub fn sync_grid_movement_to_transform(
             grid_pos.y = next.y;
             movement.current_waypoint_index += 1;
             movement.elapsed_time = 0.0;
+
+            // Update the GridManager
+            if let Err(e) = grid_manager_res.grid_manager.move_entity_to(entity, *grid_pos) {
+                log::error!("Failed to move entity to position: {:?}, entity: {:?}, pos: {:?}", e, entity, grid_pos);
+            };
         }
     }
+}
+
+/// Given a range of movement, return the discrete grid vecs of possible movement options
+/// 
+/// Naively assumes no obstacles
+pub fn get_movement_options(movement: u32) -> Vec<GridVec> {
+    let mut options = Vec::new();
+    let movement = movement as i32;
+
+    for dx in -movement..=movement {
+        let dy_range = movement - dx.abs();
+        for dy in -dy_range..=dy_range {
+            if dx == 0 && dy == 0 {
+                continue; // Skip the origin
+            }
+            options.push(GridVec { x: dx, y: dy });
+        }
+    }
+
+    options
 }
 
 
@@ -358,5 +431,30 @@ mod test {
             grid_manager_res.grid_manager.get_by_id(&entity_not_on_grid_init),
             Some(GridPosition { x: 4, y: 5 })
         );
+    }
+
+    #[test]
+    fn test_get_movement_options() {
+        let options = get_movement_options(2);
+        let expected_options = vec![
+            GridVec { x: -2, y: 0 },
+            GridVec { x: -1, y: -1 },
+            GridVec { x: -1, y: 0 },
+            GridVec { x: -1, y: 1 },
+            GridVec { x: 0, y: -2 },
+            GridVec { x: 0, y: -1 },
+            GridVec { x: 0, y: 1 },
+            GridVec { x: 0, y: 2 },
+            GridVec { x: 1, y: -1 },
+            GridVec { x: 1, y: 0 },
+            GridVec { x: 1, y: 1 },
+            GridVec { x: 2, y: 0 },
+        ];
+
+        for option in &expected_options {
+            assert!(options.contains(&option), "Missing option: {:?}", option);
+        }
+
+        assert_eq!(options.len(), expected_options.len(), "Unexpected number of options");
     }
 }

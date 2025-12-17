@@ -18,7 +18,7 @@ pub struct CursorBundle {
 }
 
 pub fn spawn_cursor(
-    mut commands: Commands,
+    commands: &mut Commands,
     image: Handle<Image>,
     player: player::Player,
 ) {

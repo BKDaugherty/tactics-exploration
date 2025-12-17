@@ -13,16 +13,26 @@ TODO!
 [ ] Build a simple demo of moving a few characters around!
   [x] Create a pixel image for a cursor
   [x] Create a movement system for the cursor (Use the leafwing_input library)
-  [ ] Make the "spawn overlay" tie to the cursor!
-  [ ] Consolidate bounds checking / valid grid stuff to the grid library
-    [ ] Use this in the cursor movement code
-  [ ] Use the select action to highlight a "Unit"
-  [ ] Find a way to highlight valid "Ground" tiles for movement (assume constant movement for now)
-  [ ] Download some characters, and figure out how to render them
-  [ ] Use the Movement system and tune the lerping constants
-  [ ] Implement a pathfinding algorithm based on valid movement indices nearby
+  [x] Make the "spawn overlay" tie to the cursor!
+  [x] Consolidate bounds checking / valid grid stuff to the grid library
+    [x] Use this in the cursor movement code
+  [x] Use the select action to highlight a "Unit"
+  [ ] Pathfinding and Unit Movement
+    [x] Move the unit movement code into it's own lil library
+    [ ] Use pathfinding / depth first search with "valid" movement tiles
+    [ ] Only highlight "valid" tiles
+    [x] Make the unit movement more testable!
+    [ ] Create an "obstacle"
+    [ ] Create a "passable, but not landable tile"
+  [ ] Basic Animation
+    [ ] Write some code to load in an animated character
+    [ ] Write some asset specific code for "tinytactics_battlekiti"
+    [ ] Write an animation controller for switching to the right animation
+      [ ] Do some research to see what people do here!
+  [x] Download some characters, and figure out how to render them
+  [x] Use the Movement system and tune the lerping constants
   [ ] Implement a simple camera manager that moves the camera around, or at least centers on the map?
-    [ ] I could naively just put it on the center but it'd be nice if we make bigger maps to have it move around.
+    [x] I could naively just put it on the center but it'd be nice if we make bigger maps to have it move around.
   [ ] Figure out a way to tie in GamepadInputs
   [ ] Get a skybox so it looks nice
   [ ] Create a goal for someone to move to (like in a tutorial!)
@@ -39,6 +49,8 @@ TODO!
   [ ] Create a combat system
   [ ] Create a skill system
   [ ] Create an inventory system
+[ ] Pathfinding and Unit Movement in Multiplayer
+  [ ] If two units are moving at the same time, how do I ensure they can't move to the same spot? When should I do the movement calculation? How can I refresh / lock?
 [ ] Another demo!
 [ ] I want to spend some time learning about Tiled, and creating Custom data on my map
   [ ] It'd be great to use this to be able to load in "Ground" tiles for example.

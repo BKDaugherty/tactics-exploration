@@ -8,7 +8,7 @@ use leafwing_input_manager::prelude::*;
 
 use crate::grid::GridPosition;
 
-#[derive(Component, Reflect, PartialEq, Eq, Hash, Debug)]
+#[derive(Component, Reflect, PartialEq, Eq, Hash, Debug, Copy, Clone)]
 pub enum Player {
     One,
     Two,
@@ -73,17 +73,17 @@ pub enum PlayerInputAction {
 }
 
 // TODO:  Is this really how I want to track this?
-#[derive(Resource)]
+#[derive(Resource, Reflect)]
 pub struct PlayerGameStates {
     pub player_state: HashMap<Player, PlayerState>,
 }
 
 /// The current state of the player's cursor
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Reflect, Clone)]
 pub enum PlayerCursorState {
     Idle,
     /// Moving Entity from source position
-    MovingUnit(Entity, GridPosition),
+    MovingUnit(Entity, GridPosition, Vec<GridPosition>),
 }
 
 impl Default for PlayerCursorState {
@@ -92,7 +92,7 @@ impl Default for PlayerCursorState {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Reflect)]
 pub struct PlayerState { 
     pub cursor_state: PlayerCursorState
 }
