@@ -36,6 +36,14 @@ TODO!
   [ ] Figure out a way to tie in GamepadInputs
   [ ] Get a skybox so it looks nice
   [ ] Create a goal for someone to move to (like in a tutorial!)
+[ ] Make the game code easier to share / collaborate on
+  [ ] remove any assets we aren't using
+  [ ] Use Git LFS or something else for the assets you are actually using
+  [ ] Add a README for how to setup the project
+  [ ] Fix all compiler warnings
+  [ ] Code reorganization
+  [ ] Clippy + Rustfmt
+  [ ] Add some more tests / split up test utils maybe?
 [ ] Do some research into Resource / Game State Tracking
   [ ] Build a Start Screen, and Loading Screen for the demo above!
     [ ] Learn basic Bevy UIs
