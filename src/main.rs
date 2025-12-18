@@ -1,11 +1,16 @@
 use bevy::prelude::*;
+use bevy_common_assets::json::JsonAssetPlugin;
 use bevy_ecs_tiled::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use leafwing_input_manager::plugin::InputManagerPlugin;
 use leafwing_input_manager::prelude::ActionState;
 use std::collections::HashMap;
-use tactics_exploration::animation::{TinytacticsAssets, startup_load_tinytactics_assets};
+use tactics_exploration::animation::tinytactics::AnimationAsset;
+use tactics_exploration::animation::{
+    TinytacticsAssets, animate_sprite, startup_load_tinytactics_assets, update_facing_direction,
+    update_sprite_on_animation_change,
+};
 use tactics_exploration::assets::{CURSOR_PATH, EXAMPLE_MAP_PATH, OVERLAY_PATH};
 use tactics_exploration::grid::{self, GridManager, GridPosition, init_grid_to_world_transform};
 use tactics_exploration::player::{Player, PlayerInputAction};
@@ -21,6 +26,7 @@ fn main() {
     App::new()
         // Add Bevy's default plugins
         .add_plugins(DefaultPlugins)
+        .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
         // TODO: Dev Mode
         .add_plugins(EguiPlugin::default())
         .add_plugins(WorldInspectorPlugin::new())
@@ -51,6 +57,14 @@ fn main() {
         .add_systems(Update, grid_cursor::handle_cursor_movement)
         .add_systems(Update, handle_overlays_events_system)
         .add_systems(Update, handle_unit_movement)
+        .add_systems(
+            Update,
+            (
+                animate_sprite,
+                update_sprite_on_animation_change,
+                update_facing_direction,
+            ),
+        )
         .run();
 }
 
@@ -94,16 +108,18 @@ fn populate_demo_map(
 
     spawn_unit(
         &mut commands,
+        &tt_assets,
         player_1_grid_pos,
-        tt_assets.spritesheet.clone(),
+        tt_assets.fighter_spritesheet.clone(),
         tt_assets.layout.clone(),
         Player::One,
         PLAYER_TEAM,
     );
     spawn_unit(
         &mut commands,
+        &tt_assets,
         player_2_grid_pos,
-        tt_assets.spritesheet.clone(),
+        tt_assets.mage_spritesheet.clone(),
         tt_assets.layout.clone(),
         Player::Two,
         PLAYER_TEAM,

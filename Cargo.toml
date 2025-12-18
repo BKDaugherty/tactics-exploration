@@ -10,6 +10,7 @@ anyhow = "1.0.100"
 # https://bevy.org/learn/quick-start/getting-started/setup/#enable-fast-compiles-optional
 bevy = { version = "0.17.3", features = ["dynamic_linking"] }
 bevy-inspector-egui = "0.35.0"
+bevy_common_assets = { version = "0.14.0", features = ["json"] }
 bevy_ecs_tiled = { version = "0.10.0", features = ["debug"] }
 bevy_ecs_tilemap = "0.17.0"
 bevy_egui = "0.38.0"
