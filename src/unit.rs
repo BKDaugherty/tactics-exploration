@@ -74,6 +74,7 @@ pub fn spawn_unit(
     commands: &mut Commands,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
+    texture_atlas_layout: Handle<TextureAtlasLayout>,
     player: crate::player::Player,
     team: Team,
 ) {
@@ -92,6 +93,10 @@ pub fn spawn_unit(
         grid_position,
         sprite: Sprite {
             image: spritesheet,
+            texture_atlas: Some(TextureAtlas {
+                layout: texture_atlas_layout,
+                index: 0,
+            }),
             color: Color::linear_rgb(1.0, 1.0, 1.0),
             ..Default::default()
         },

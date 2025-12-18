@@ -5562,6 +5562,8 @@ dependencies = [
  "image",
  "leafwing-input-manager",
  "log",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
