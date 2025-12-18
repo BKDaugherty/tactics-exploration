@@ -229,7 +229,7 @@ where
     F: Fn(&Entity) -> Option<(Entity, Player, T)>,
 {
     let entities_at_pos = grid_manager
-        .get_by_position(&cursor_grid_pos)
+        .get_by_position(cursor_grid_pos)
         .cloned()
         .unwrap_or_default();
     entities_at_pos.iter().map(query).next().flatten()
@@ -257,7 +257,7 @@ where
             },
         );
     }
-    return UnitMovementSelection::NoPlayerUnitOnTile;
+    UnitMovementSelection::NoPlayerUnitOnTile
 }
 
 fn handle_select_unit_for_movement(
@@ -271,7 +271,7 @@ fn handle_select_unit_for_movement(
 ) {
     log::debug!("Player {:?}, is selecting unit", player);
     // Note that here we don't allow a given player to access a Unit that is not associated with them
-    let selection = select_unit_for_movement(&cursor_grid_pos, grid_manager, |entity| {
+    let selection = select_unit_for_movement(cursor_grid_pos, grid_manager, |entity| {
         // Get the first Unit owned by this player, and then clone the values to satisfy lifetimes.
         let queried = player_unit_query
             .get(*entity)
@@ -303,6 +303,7 @@ fn handle_select_unit_for_movement(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_unit_movement(
     mut commands: Commands,
     mut grid_manager_res: ResMut<grid::GridManagerResource>,
@@ -455,16 +456,13 @@ pub mod overlay {
     ) {
         for event in events.read() {
             // You can check the type of event and the specific handle
-            match event {
-                AssetEvent::LoadedWithDependencies { id } => {
-                    if *id == asset_handles.tile_overlay_image_handle.id() {
-                        info!("Our specific image asset and its dependencies are loaded!");
-                        if let Some(image) = images.get_mut(*id) {
-                            image.sampler = ImageSampler::nearest();
-                        }
-                    }
+            if let AssetEvent::LoadedWithDependencies { id } = event
+                && *id == asset_handles.tile_overlay_image_handle.id()
+            {
+                info!("Our specific image asset and its dependencies are loaded!");
+                if let Some(image) = images.get_mut(*id) {
+                    image.sampler = ImageSampler::nearest();
                 }
-                _ => {}
             }
         }
     }

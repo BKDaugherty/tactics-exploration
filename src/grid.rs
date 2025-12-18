@@ -96,34 +96,26 @@ impl GridManager {
         new_position: GridPosition,
     ) -> anyhow::Result<()> {
         // Remove from old position, if applicable
-        if let Some(old_position) = self.entity_positions.get(&entity) {
-            if let Some(entities_at_old) = self.entities.get_mut(old_position) {
-                if !entities_at_old.contains(&entity) {
-                    anyhow::bail!(
-                        "Entity not found in old position list, but was previously tracked!"
-                    );
-                }
-                entities_at_old.retain(|&e| e != entity);
+        if let Some(old_position) = self.entity_positions.get(&entity)
+            && let Some(entities_at_old) = self.entities.get_mut(old_position)
+        {
+            if !entities_at_old.contains(&entity) {
+                anyhow::bail!("Entity not found in old position list, but was previously tracked!");
             }
+            entities_at_old.retain(|&e| e != entity);
         }
 
         // Add to new position
-        self.entity_positions.insert(entity, new_position.clone());
-        self.entities
-            .entry(new_position)
-            .or_insert(Vec::new())
-            .push(entity);
+        self.entity_positions.insert(entity, new_position);
+        self.entities.entry(new_position).or_default().push(entity);
 
         Ok(())
     }
 
     /// Add an entity to the grid at a given position
     pub fn add_entity(&mut self, entity: Entity, position: GridPosition) {
-        self.entity_positions.insert(entity, position.clone());
-        self.entities
-            .entry(position)
-            .or_insert(Vec::new())
-            .push(entity);
+        self.entity_positions.insert(entity, position);
+        self.entities.entry(position).or_default().push(entity);
     }
 
     pub fn remove_entity(&mut self, entity: &Entity) {
@@ -201,6 +193,7 @@ pub struct GridManagerResource {
 ///
 /// Assumes that entities are already added to the grid manager, but will add them if that happens
 /// Ignores entities that are in the middle of moving
+#[allow(clippy::type_complexity)]
 pub fn sync_grid_positions_to_manager(
     mut grid_manager_res: ResMut<GridManagerResource>,
     changed_grid_query: Query<

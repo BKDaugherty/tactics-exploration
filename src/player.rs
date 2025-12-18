@@ -80,17 +80,14 @@ pub struct PlayerGameStates {
 
 /// The current state of the player's cursor
 #[derive(Debug, PartialEq, Eq, Reflect, Clone)]
+#[derive(Default)]
 pub enum PlayerCursorState {
+    #[default]
     Idle,
     /// Moving Entity from source position
     MovingUnit(Entity, GridPosition, Vec<GridPosition>),
 }
 
-impl Default for PlayerCursorState {
-    fn default() -> Self {
-        PlayerCursorState::Idle
-    }
-}
 
 #[derive(Debug, Default, Reflect)]
 pub struct PlayerState {
