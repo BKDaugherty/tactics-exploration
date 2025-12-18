@@ -5,7 +5,8 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use leafwing_input_manager::plugin::InputManagerPlugin;
 use leafwing_input_manager::prelude::ActionState;
 use std::collections::HashMap;
-use tactics_exploration::assets::{CURSOR_PATH, EXAMPLE_MAP_PATH, EXAMPLE_UNIT_PATH, OVERLAY_PATH};
+use tactics_exploration::animation::{TinytacticsAssets, startup_load_tinytactics_assets};
+use tactics_exploration::assets::{CURSOR_PATH, EXAMPLE_MAP_PATH, OVERLAY_PATH};
 use tactics_exploration::grid::{self, GridManager, GridPosition, init_grid_to_world_transform};
 use tactics_exploration::player::{Player, PlayerInputAction};
 use tactics_exploration::unit::overlay::{
@@ -32,7 +33,11 @@ fn main() {
         .add_message::<OverlaysMessage>()
         .add_systems(Startup, startup)
         .add_systems(Startup, startup_load_overlay_sprite_data.after(startup))
-        .add_systems(Startup, populate_demo_map)
+        .add_systems(Startup, startup_load_tinytactics_assets)
+        .add_systems(
+            Startup,
+            populate_demo_map.after(startup_load_tinytactics_assets),
+        )
         .add_systems(
             Update,
             (
@@ -76,9 +81,12 @@ fn startup_load_overlay_sprite_data(
     });
 }
 
-fn populate_demo_map(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn populate_demo_map(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    tt_assets: Res<TinytacticsAssets>,
+) {
     // Spawn players and player cursors
-    let example_unit = asset_server.load(EXAMPLE_UNIT_PATH);
     let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
     let player_1_grid_pos = GridPosition { x: 4, y: 6 };
@@ -87,14 +95,16 @@ fn populate_demo_map(mut commands: Commands, asset_server: Res<AssetServer>) {
     spawn_unit(
         &mut commands,
         player_1_grid_pos,
-        example_unit.clone(),
+        tt_assets.spritesheet.clone(),
+        tt_assets.layout.clone(),
         Player::One,
         PLAYER_TEAM,
     );
     spawn_unit(
         &mut commands,
         player_2_grid_pos,
-        example_unit.clone(),
+        tt_assets.spritesheet.clone(),
+        tt_assets.layout.clone(),
         Player::Two,
         PLAYER_TEAM,
     );
