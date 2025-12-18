@@ -3,10 +3,10 @@ use leafwing_input_manager::prelude::ActionState;
 
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
 use crate::player::{Player, PlayerInputAction, PlayerState};
-use crate::unit::overlay::{OverlaysMessage, TileOverlay, TileOverlayBundle};
+use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
 use crate::{grid, grid_cursor, player};
 
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 
 #[derive(PartialEq, Eq, Debug, Reflect, Clone)]
 pub enum ObstacleType {

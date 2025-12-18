@@ -1,25 +1,20 @@
-use std::collections::{HashMap, HashSet};
-
-use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy_ecs_tiled::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use leafwing_input_manager::plugin::InputManagerPlugin;
 use leafwing_input_manager::prelude::ActionState;
+use std::collections::HashMap;
 use tactics_exploration::assets::{CURSOR_PATH, EXAMPLE_MAP_PATH, EXAMPLE_UNIT_PATH, OVERLAY_PATH};
-use tactics_exploration::grid::{
-    self, GridManager, GridMovement, GridPosition, GridVec, grid_to_world,
-    init_grid_to_world_transform,
-};
+use tactics_exploration::grid::{self, GridManager, GridPosition, init_grid_to_world_transform};
 use tactics_exploration::player::{Player, PlayerInputAction};
 use tactics_exploration::unit::overlay::{
     OverlaysMessage, TileOverlayAssets, handle_overlays_events_system, on_asset_event,
 };
 use tactics_exploration::unit::{
-    self, PLAYER_TEAM, handle_unit_movement, spawn_obstacle_unit, spawn_unit,
+    PLAYER_TEAM, handle_unit_movement, spawn_obstacle_unit, spawn_unit,
 };
-use tactics_exploration::{Ground, grid_cursor, player};
+use tactics_exploration::{grid_cursor, player};
 
 fn main() {
     App::new()

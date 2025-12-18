@@ -1,6 +1,5 @@
 use crate::grid;
 use crate::player;
-use bevy::core_pipeline::core_3d::graph::input;
 use bevy::prelude::*;
 
 /// A cursor that can be moved on the grid
