@@ -7,6 +7,7 @@ use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use leafwing_input_manager::plugin::InputManagerPlugin;
 use leafwing_input_manager::prelude::ActionState;
+use tactics_exploration::assets::{CURSOR_PATH, EXAMPLE_MAP_PATH, EXAMPLE_UNIT_PATH, OVERLAY_PATH};
 use tactics_exploration::grid::{self, GridManager, GridMovement, GridPosition, GridVec, grid_to_world, init_grid_to_world_transform };
 use tactics_exploration::player::{Player, PlayerInputAction};
 use tactics_exploration::unit::overlay::{OverlaysMessage, TileOverlayAssets, on_asset_event, handle_overlays_events_system};
@@ -50,8 +51,8 @@ fn startup_load_overlay_sprite_data(
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
-    let debug_color_spritesheet = asset_server.load("random-assets/iso_color.png");
-    let cursor_image: Handle<Image> = asset_server.load("cursor.png");
+    let debug_color_spritesheet = asset_server.load(OVERLAY_PATH);
+    let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
     // TODO: Better asset management resources
     commands.insert_resource(TileOverlayAssets {
@@ -69,8 +70,8 @@ fn populate_demo_map(
     asset_server: Res<AssetServer>,
 ) {
     // Spawn players and player cursors
-    let example_unit = asset_server.load("tinytactics_battlekiti_v1_0/20240427cleric-weakNE.png");
-    let cursor_image: Handle<Image> = asset_server.load("cursor.png");
+    let example_unit = asset_server.load(EXAMPLE_UNIT_PATH);
+    let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
     let player_1_grid_pos = GridPosition {x: 4, y: 6};
     let player_2_grid_pos = GridPosition {x: 1, y: 3};
@@ -148,7 +149,7 @@ fn startup(
     commands.insert_resource(camera_settings);
 
     // Load a map asset and retrieve its handle
-    let map_handle: Handle<TiledMapAsset> = asset_server.load("random-assets/example-map.tmx");
+    let map_handle: Handle<TiledMapAsset> = asset_server.load(EXAMPLE_MAP_PATH);
     // let map_handle: Handle<TiledMapAsset> = asset_server.load("example-map.tmx");
 
     // Spawn a new entity with the TiledMap component

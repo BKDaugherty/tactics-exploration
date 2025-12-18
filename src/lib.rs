@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use anyhow::Context;
 
 use bevy::prelude::*;
+pub mod assets;
 pub mod grid;
 pub mod grid_cursor;
 pub mod player;
