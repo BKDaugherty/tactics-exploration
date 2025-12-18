@@ -56,3 +56,6 @@ assets/unit_assets/tinytactics_battlekiti_v1_0/20240427mage-deadSE.png filter=lf
 assets/utility_assets/cursor.png filter=lfs diff=lfs merge=lfs -text
 assets/utility_assets/iso_color.png filter=lfs diff=lfs merge=lfs -text
 assets/map_assets/example-map/iso-64x64-building.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/cleric_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/fighter_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/mage_spritesheet.png filter=lfs diff=lfs merge=lfs -text
