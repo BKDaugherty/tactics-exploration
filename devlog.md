@@ -46,14 +46,12 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
 
 - [ ] Handle Gamepad Inputs
 
-- [ ] Make the game code easier to share / collaborate on (and clean it up!)
+- [x] Make the game code easier to share / collaborate on (and clean it up!)
   - [x] remove any assets we aren't using
   - [x] Use Git LFS or something else for the assets you are actually using
   - [x] Add a README for how to setup the project
-  - [ ] Fix all compiler warnings
-  - [ ] Code reorganization
-  - [ ] Clippy + Rustfmt
-  - [ ] Add some more tests / split up test utils maybe?
+  - [x] Fix all compiler warnings
+  - [x] Clippy + Rustfmt
 
 - [ ] Do some research into Resource / Game State Tracking
   - [ ] Build a Start Screen, and Loading Screen for the demo above!
