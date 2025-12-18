@@ -17,13 +17,13 @@ TODO!
   [x] Consolidate bounds checking / valid grid stuff to the grid library
     [x] Use this in the cursor movement code
   [x] Use the select action to highlight a "Unit"
-  [ ] Pathfinding and Unit Movement
+  [x] Pathfinding and Unit Movement
     [x] Move the unit movement code into it's own lil library
-    [ ] Use pathfinding / depth first search with "valid" movement tiles
-    [ ] Only highlight "valid" tiles
+    [x] Use pathfinding / search with "valid" movement tiles
+    [x] Only highlight "valid" tiles
     [x] Make the unit movement more testable!
-    [ ] Create an "obstacle"
-    [ ] Create a "passable, but not landable tile"
+    [x] Create an "obstacle"
+    [x] Create a "passable, but not landable tile"
   [ ] Basic Animation
     [ ] Write some code to load in an animated character
     [ ] Write some asset specific code for "tinytactics_battlekiti"

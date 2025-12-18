@@ -21,8 +21,8 @@ pub fn spawn_cursor(
     commands: &mut Commands,
     image: Handle<Image>,
     player: player::Player,
+    initial_grid_pos: grid::GridPosition,
 ) {
-    let initial_grid_pos = grid::GridPosition { x: 1, y: 1 };
     let initial_transform = grid::init_grid_to_world_transform(&initial_grid_pos);
     commands.spawn((
         CursorBundle {

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
@@ -10,7 +10,7 @@ use leafwing_input_manager::prelude::ActionState;
 use tactics_exploration::grid::{self, GridManager, GridMovement, GridPosition, GridVec, grid_to_world, init_grid_to_world_transform };
 use tactics_exploration::player::{Player, PlayerInputAction};
 use tactics_exploration::unit::overlay::{OverlaysMessage, TileOverlayAssets, on_asset_event, handle_overlays_events_system};
-use tactics_exploration::unit::{self, handle_unit_movement, spawn_unit};
+use tactics_exploration::unit::{self, PLAYER_TEAM, handle_unit_movement, spawn_obstacle_unit, spawn_unit};
 use tactics_exploration::{Ground, grid_cursor, player};
 
 fn main() {
@@ -29,7 +29,7 @@ fn main() {
         .add_message::<OverlaysMessage>()
         .add_systems(Startup, startup)
         .add_systems(Startup, startup_load_overlay_sprite_data.after(startup))
-        .add_systems(Startup, create_cursor_for_players.after(startup_load_overlay_sprite_data))
+        .add_systems(Startup, populate_demo_map)
         .add_systems(Update, (change_zoom, grid::sync_grid_positions_to_manager, grid::sync_grid_position_to_transform, grid::sync_grid_movement_to_transform, on_asset_event))
         .add_systems(Update, grid_cursor::handle_cursor_movement)
         .add_systems(Update, handle_overlays_events_system)
@@ -45,28 +45,15 @@ struct CameraSettings {
 
 pub const SQUARE_GRID_BOUNDS : u32 = 8;
 
-
-fn create_cursor_for_players(
-    mut commands: Commands,
-    tile_overlay_assets: Res<TileOverlayAssets>,
-) {
-    grid_cursor::spawn_cursor(
-        &mut commands,
-        tile_overlay_assets.cursor_image.clone(),
-        player::Player::One,
-    );
-
-    grid_cursor::spawn_cursor(&mut commands, tile_overlay_assets.cursor_image.clone(), player::Player::Two);
-}
-
 fn startup_load_overlay_sprite_data(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     let debug_color_spritesheet = asset_server.load("random-assets/iso_color.png");
-    let cursor_image = asset_server.load("cursor.png");
-    let example_unit = asset_server.load("tinytactics_battlekiti_v1_0/20240427cleric-weakNE.png");
+    let cursor_image: Handle<Image> = asset_server.load("cursor.png");
+
+    // TODO: Better asset management resources
     commands.insert_resource(TileOverlayAssets {
         tile_overlay_image_handle: debug_color_spritesheet.clone(),
         tile_overlay_atlas_layout_handle: {
@@ -75,12 +62,65 @@ fn startup_load_overlay_sprite_data(
         },
         cursor_image: cursor_image.clone(),
     });
-
-    // TODO: Remove me
-    spawn_unit(&mut commands, GridPosition {x: 1, y: 6}, example_unit.clone(), Player::One);
 }
 
+fn populate_demo_map(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    // Spawn players and player cursors
+    let example_unit = asset_server.load("tinytactics_battlekiti_v1_0/20240427cleric-weakNE.png");
+    let cursor_image: Handle<Image> = asset_server.load("cursor.png");
 
+    let player_1_grid_pos = GridPosition {x: 4, y: 6};
+    let player_2_grid_pos = GridPosition {x: 1, y: 3};
+
+    spawn_unit(&mut commands, player_1_grid_pos, example_unit.clone(), Player::One, PLAYER_TEAM);
+    spawn_unit(&mut commands, player_2_grid_pos, example_unit.clone(), Player::Two, PLAYER_TEAM);
+
+    grid_cursor::spawn_cursor(
+        &mut commands,
+        cursor_image.clone(),
+        player::Player::One,
+        player_1_grid_pos
+    );
+
+    grid_cursor::spawn_cursor(
+        &mut commands, 
+        cursor_image.clone(), 
+        player::Player::Two,
+        player_2_grid_pos
+    );
+
+    let door_location = GridPosition {x: 7, y: 1};
+
+    // Spawn Obstacles (All walls / corners except the door)
+    let stool_locations = [
+        GridPosition { x: 2, y: 3},
+        GridPosition { x: 4, y: 1},
+        GridPosition { x: 4, y: 3},
+        GridPosition { x: 4, y: 5},
+        GridPosition { x: 6 , y: 3}
+    ];
+
+    let mut obstacle_locations = Vec::new();
+    for i in 0..SQUARE_GRID_BOUNDS {
+        // Set X to zero
+        obstacle_locations.push(GridPosition {x: 0, y: i});
+        obstacle_locations.push(GridPosition {x: i, y: 0});
+        obstacle_locations.push(GridPosition {x: i, y: SQUARE_GRID_BOUNDS - 1});
+        obstacle_locations.push(GridPosition {x: SQUARE_GRID_BOUNDS - 1, y: i});
+    }
+
+    // Remove door location
+    obstacle_locations.retain(|t| *t != door_location);
+
+    obstacle_locations.extend_from_slice(&stool_locations);
+
+    for obstacle_location in obstacle_locations {
+        spawn_obstacle_unit(&mut commands, obstacle_location);
+    }
+}
 
 fn startup(
     mut commands: Commands,

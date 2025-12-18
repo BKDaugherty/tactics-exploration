@@ -1,11 +1,27 @@
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::ActionState;
 
-use crate::grid::{GridManager, GridMovement, GridPosition};
+use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
 use crate::unit::overlay::{OverlaysMessage, TileOverlay, TileOverlayBundle};
 use crate::{grid, grid_cursor, player};
 use crate::player::{Player, PlayerInputAction, PlayerState};
 
+use std::collections::{BTreeSet, HashSet, VecDeque};
+
+#[derive(PartialEq, Eq, Debug, Reflect, Clone)]
+pub enum ObstacleType {
+    /// Obstacles of neutral type block anything
+    Neutral,
+    /// Obstacles of filter type allow the set of teams they carry through
+    Filter(HashSet<Team>),
+}
+
+/// The id for a team (do I need this?)
+#[derive(PartialEq, Eq, Hash, Debug, Reflect, Clone, Copy)]
+pub struct Team(u32);
+
+pub const PLAYER_TEAM: Team = Team(1);
+pub const ENEMY_TEAM: Team = Team(2);
 
 /// A unit! Units can't share spaces (for now I guess)
 /// 
@@ -14,6 +30,8 @@ use crate::player::{Player, PlayerInputAction, PlayerState};
 #[derive(Component, Debug, Reflect, Clone)]
 pub struct Unit {
     pub stats: Stats,
+    pub obstacle: ObstacleType,
+    pub team: Team,
     // effect_modifiers: ()
     // equipment?
 }
@@ -35,12 +53,30 @@ pub struct UnitBundle {
     pub transform: Transform,
 }
 
+pub fn spawn_obstacle_unit(
+    commands: &mut Commands,
+    grid_position: crate::grid::GridPosition,
+) {
+    commands.spawn(
+        (
+            grid_position,
+            Unit {
+                stats: Stats { max_health: 0, strength: 0, health: 0, movement: 0 },
+                obstacle: ObstacleType::Neutral,
+                team: Team(0),
+            },
+
+        )
+    );
+}
+
 /// Temporary function for spawning a test unit
 pub fn spawn_unit(
     commands: &mut Commands,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
     player: crate::player::Player,
+    team: Team,
 ) {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
     commands.spawn((
@@ -52,6 +88,8 @@ pub fn spawn_unit(
                     strength: 5,
                     movement: 2,
                 },
+                obstacle: ObstacleType::Filter(HashSet::from([team])),
+                team,
             },
             grid_position,
             sprite: Sprite {
@@ -76,8 +114,7 @@ fn end_move(
     player_state.cursor_state = player::PlayerCursorState::Idle;
 }
 
-/// Need some abstract representation to say what units can move through what I think
-/// Maybe a "Team"?
+
 #[derive(Debug)]
 pub struct Movement {
     origin: GridPosition,
@@ -109,23 +146,79 @@ fn spawn_overlays(
     }
 }
 
+pub const DIRECTION_VECS: [GridVec; 4] = [
+    GridVec {x: 1, y: 0},
+    GridVec {x: 0, y: 1},
+    GridVec {x: -1, y: 0},
+    GridVec {x: 0, y: -1}
+];
+
+/// Search for valid moves, exploring the grid until we are out of movement stat using bfs
 fn get_valid_moves_for_unit(
     grid_manager: &GridManager,
     movement: Movement,
+    unit_query: Query<(Entity, &Unit)>
 )-> Vec<GridPosition> {
-    let mut positions = Vec::new();
-    let movement_options = grid::get_movement_options(movement.unit.stats.movement);
-    
-    for move_vec in movement_options {
-        let grid_pos_result = grid_manager.change_position_with_bounds(movement.origin, move_vec);
-            let grid::GridPositionChangeResult::Moved(grid_pos) = grid_pos_result else {
+    let movement_left = movement.unit.stats.movement;
+
+    let mut spaces_explored = HashSet::new();
+    let mut queue = VecDeque::new();
+    queue.push_back((movement.origin, movement_left as i32, false));
+
+    while let Some((to_explore, movement_left, is_obstructed)) = queue.pop_front() {
+        if !is_obstructed && !spaces_explored.insert(to_explore) {
+            continue
+        };
+
+        let movement_after_moved_onto_tile = movement_left  - 1; 
+        if movement_after_moved_onto_tile < 0 {
+            continue;
+        }
+
+        for dir in DIRECTION_VECS {
+            // Skip running into walls of the Grid
+            let grid::GridPositionChangeResult::Moved(grid_pos) = grid_manager.change_position_with_bounds(to_explore, dir) else {
                 continue;
             };
-            positions.push(grid_pos);   
+
+            // Can the unit move to `grid_pos`?
+            // Assumes that there is only one unit on a tile.
+            // 
+            // TODO: Could cache this if this query is expensivo
+            let obstacle_on_target = grid_manager.get_by_position(&grid_pos).cloned().unwrap_or_default().iter().map(|e| {
+                unit_query.get(*e).ok().map(|(_, u)| u.obstacle.clone())
+            }).next().flatten();
+
+
+            if let Some(obstacle) = obstacle_on_target {
+                match obstacle {
+                    // Can't move here, or through here.
+                    ObstacleType::Neutral => {
+                        continue;
+                    }
+                    // Can move through here, but can't move here.
+                    ObstacleType::Filter(hash_set) => {
+                        if !hash_set.contains(&movement.unit.team) {
+                            continue;
+                        } else {
+                            queue.push_back(
+                               (grid_pos, movement_after_moved_onto_tile, true)
+                            )
+                        }
+                    }
+                }
+            } else {
+                queue.push_back(
+                    (grid_pos, movement_after_moved_onto_tile, false)
+                )
+            };
         }
-    positions
+    }
+
+    spaces_explored.into_iter().collect()
 }
 
+// TODO: This abstraction kind of sucks. It's really hard to get what I want out of it
 fn get_singleton_component_on_grid_by_player<F, T>(
     cursor_grid_pos: &GridPosition,
     grid_manager: &GridManager,
@@ -155,7 +248,8 @@ where F: Fn(&Entity) -> Option<(Entity, Player, Unit)>
 
 fn handle_select_unit_for_movement(
     overlay_message_writer: &mut MessageWriter<OverlaysMessage>,
-    unit_query: Query<(Entity, &player::Player, &Unit)>,
+    player_unit_query: Query<(Entity, &player::Player, &Unit)>,
+    unit_query: Query<(Entity, &Unit)>,
     grid_manager: &mut GridManager,
     player_state: &mut PlayerState,
     cursor_grid_pos: &GridPosition,
@@ -165,13 +259,13 @@ fn handle_select_unit_for_movement(
     // Note that here we don't allow a given player to access a Unit that is not associated with them
     let selection = select_unit_for_movement(&cursor_grid_pos, grid_manager, |entity|  {
         // Get the first Unit owned by this player, and then clone the values to satisfy lifetimes.
-        let queried = unit_query.get(*entity).ok().filter(|(_, p, _)| **p == *player);
+        let queried = player_unit_query.get(*entity).ok().filter(|(_, p, _)| **p == *player);
         queried.map(|(a, b, c)| (a, *b, c.clone()))
     });
 
     match selection {
         UnitMovementSelection::Selected(entity, movement) => {
-            let valid_moves = get_valid_moves_for_unit(grid_manager, movement);
+            let valid_moves = get_valid_moves_for_unit(grid_manager, movement, unit_query);
             // Change Player State to moving the unit
             player_state.cursor_state = player::PlayerCursorState::MovingUnit(entity, *cursor_grid_pos, valid_moves.clone());
             overlay_message_writer.write(OverlaysMessage {
@@ -192,9 +286,9 @@ pub fn handle_unit_movement(
     mut player_state: ResMut<player::PlayerGameStates>,
     player_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
     mut cursor_query: Query<(&Player, &mut grid::GridPosition), With<grid_cursor::Cursor>>,
-    unit_query: Query<(Entity, &player::Player, &Unit)>,
+    player_unit_query: Query<(Entity, &player::Player, &Unit)>,
+    unit_query: Query<(Entity, &Unit)>,
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
-
 ) {
     for (player, action_state) in player_query.iter() {
         for (cursor_player, mut cursor_grid_pos) in cursor_query.iter_mut() {
@@ -210,7 +304,7 @@ pub fn handle_unit_movement(
         // If the cursor is idle, and there's a unit at the cursor position, 
         // generate overlays using that unit's movement
         if player_state.cursor_state == player::PlayerCursorState::Idle && action_state.just_pressed(&PlayerInputAction::Select) {
-            handle_select_unit_for_movement(&mut overlay_message_writer, unit_query, &mut grid_manager_res.grid_manager,  player_state, &cursor_grid_pos, player);
+            handle_select_unit_for_movement(&mut overlay_message_writer, player_unit_query, unit_query, &mut grid_manager_res.grid_manager,  player_state, &cursor_grid_pos, player);
         }
 
         // If we're moving a unit, and we press select again, attempt to move the unit to that position
@@ -219,12 +313,13 @@ pub fn handle_unit_movement(
                 // TODO: What to do if this changes between start and end of movement?
                 if !valid_moves.contains(&cursor_grid_pos) {
                     log::warn!("Attempting to move to invalid position");
+                    continue;
                 }
 
                 // Should unit entities have an "Obstruction" component?
                 // TODO: I think I actually need to calculate obstructions when the unit was selected (but if so, how do I deal with two units moving at once?)
                 let unit_at_position = get_singleton_component_on_grid_by_player(&cursor_grid_pos, &grid_manager_res.grid_manager, |entity| {
-                    unit_query.get(*entity).ok().map(|(a, b, c)| (a, *b, c))
+                    player_unit_query.get(*entity).ok().map(|(a, b, c)| (a, *b, c))
                 });
                
                 if unit_at_position.is_some() {
@@ -339,14 +434,13 @@ pub struct OverlaysMessage {
     pub action: OverlaysAction,
 }
 
-// New event for overlay spawning
 #[derive(Debug)]
 pub enum OverlaysAction {
     Spawn { positions: Vec<GridPosition> },
     Despawn
 }
 
-// Update systems to use the single event
+/// Handle an OverlaysAction for spawning and despawning overlays
 pub fn handle_overlays_events_system(
     mut commands: Commands,
     mut grid_manager_res: ResMut<grid::GridManagerResource>,
@@ -373,11 +467,11 @@ pub fn handle_overlays_events_system(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use bevy::{app::App, ecs::system::RunSystemOnce, input::keyboard::{KeyCode, KeyboardInput}, time::{Real, Time, Virtual}, transform::components::Transform};
     use leafwing_input_manager::{plugin::InputManagerPlugin, prelude::{ActionState, Buttonlike}};
-    use crate::{grid::{self, GridManager, GridManagerResource, GridMovement, GridPosition, sync_grid_positions_to_manager}, grid_cursor, player::{self, Player, PlayerGameStates, PlayerInputAction, PlayerState}, unit::{Stats, Unit, handle_unit_movement, overlay::{OverlaysMessage, handle_overlays_events_system}}};
+    use crate::{grid::{self, GridManager, GridManagerResource, GridMovement, GridPosition, sync_grid_positions_to_manager}, grid_cursor, player::{self, Player, PlayerGameStates, PlayerInputAction, PlayerState}, unit::{PLAYER_TEAM, Stats, Unit, handle_unit_movement, overlay::{OverlaysMessage, handle_overlays_events_system}}};
 
 
     fn init_logger() {
@@ -407,6 +501,7 @@ mod tests {
         // Spawn player to handle movement events
         let player_entity = app.world_mut().spawn(player::PlayerBundle::new(Player::One)).id();
         let unit_entity = app.world_mut().spawn((
+            // TODO: Make constructor
             Unit {
                 stats: Stats {
                     max_health: 10,
@@ -414,6 +509,8 @@ mod tests {
                     strength: 5,
                     movement: 2,
                 },
+                team: PLAYER_TEAM,
+                obstacle: crate::unit::ObstacleType::Filter(HashSet::from([PLAYER_TEAM]))
             },
             Player::One,
             GridPosition { x: 2, y: 2 },
