@@ -151,7 +151,7 @@ impl GridManager {
     ///
     /// (Potentially could pass in some closure that checks validity of a position to abstract from Bevy)
     pub fn get_path(&self, origin: GridPosition, target: GridPosition) -> Vec<GridPosition> {
-        // Very naive pathfinding for now: just go in straight lines
+        // Very naive pathfinding for now: just go in straight lines, and use X first (even though there may be an obstacle!)
         let mut waypoints = Vec::new();
         let mut current_pos = origin;
 
@@ -167,10 +167,12 @@ impl GridManager {
                 delta_x = -1;
             }
 
-            if current_pos.y < target.y {
-                delta_y = 1;
-            } else if current_pos.y > target.y {
-                delta_y = -1;
+            if delta_x == 0 {
+                if current_pos.y < target.y {
+                    delta_y = 1;
+                } else if current_pos.y > target.y {
+                    delta_y = -1;
+                }
             }
 
             current_pos = GridPosition {
@@ -242,10 +244,10 @@ pub struct GridVec {
 
 #[derive(Component)]
 pub struct GridMovement {
-    waypoints: Vec<GridPosition>,
-    current_waypoint_index: usize,
-    elapsed_time: f32,
-    duration: f32, // Time to move between waypoints
+    pub waypoints: Vec<GridPosition>,
+    pub current_waypoint_index: usize,
+    pub elapsed_time: f32,
+    pub duration: f32, // Time to move between waypoints
 }
 
 impl GridMovement {

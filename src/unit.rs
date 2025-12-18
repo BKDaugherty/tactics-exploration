@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::ActionState;
 
+use crate::animation::{
+    AnimationState, AnimationTimer, AnimationType, Direction, FacingDirection, TinytacticsAssets,
+};
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
 use crate::player::{Player, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
@@ -51,6 +54,9 @@ pub struct UnitBundle {
     pub grid_position: crate::grid::GridPosition,
     pub sprite: Sprite,
     pub transform: Transform,
+    pub facing_direction: FacingDirection,
+    pub animation_state: AnimationState,
+    pub animation_timer: AnimationTimer,
 }
 
 pub fn spawn_obstacle_unit(commands: &mut Commands, grid_position: crate::grid::GridPosition) {
@@ -72,6 +78,7 @@ pub fn spawn_obstacle_unit(commands: &mut Commands, grid_position: crate::grid::
 /// Temporary function for spawning a test unit
 pub fn spawn_unit(
     commands: &mut Commands,
+    tt_assets: &Res<TinytacticsAssets>,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
     texture_atlas_layout: Handle<TextureAtlasLayout>,
@@ -79,6 +86,12 @@ pub fn spawn_unit(
     team: Team,
 ) {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
+    let direction = Direction::SW;
+    let animation_data = tt_assets
+        .unit_animation_data
+        .idle
+        .get(&direction)
+        .expect("Must have animation data");
     commands.spawn((UnitBundle {
         unit: Unit {
             stats: Stats {
@@ -95,13 +108,16 @@ pub fn spawn_unit(
             image: spritesheet,
             texture_atlas: Some(TextureAtlas {
                 layout: texture_atlas_layout,
-                index: 0,
+                index: animation_data.start_index,
             }),
             color: Color::linear_rgb(1.0, 1.0, 1.0),
             ..Default::default()
         },
         transform,
         player,
+        facing_direction: FacingDirection(crate::animation::Direction::SW),
+        animation_state: AnimationState(AnimationType::Idle),
+        animation_timer: AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
     },));
 }
 
@@ -387,7 +403,7 @@ pub fn handle_unit_movement(
 
                     commands
                         .entity(unit_entity)
-                        .insert(GridMovement::new(path, 0.2));
+                        .insert(GridMovement::new(path, 0.4));
 
                     end_move(&mut overlay_message_writer, player, player_state);
                 } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
