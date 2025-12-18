@@ -1,5 +1,5 @@
 //! The player module handles player input, controlling units, and moving around the player's cursor.
-//! 
+//!
 
 use std::collections::HashMap;
 
@@ -34,25 +34,25 @@ impl PlayerBundle {
 impl Player {
     fn get_input_map(&self) -> InputMap<PlayerInputAction> {
         match self {
-            Player::One => InputMap::new(
-                [(PlayerInputAction::MoveCursorUp , KeyCode::KeyW),
-                 (PlayerInputAction::MoveCursorDown, KeyCode::KeyS),
-                 (PlayerInputAction::MoveCursorLeft, KeyCode::KeyA),
-                 (PlayerInputAction::MoveCursorRight, KeyCode::KeyD),
-                 (PlayerInputAction::Select, KeyCode::Space),
-                 (PlayerInputAction::Deselect, KeyCode::ShiftLeft),
-                 (PlayerInputAction::ZoomIn, KeyCode::KeyQ),
-                 (PlayerInputAction::ZoomOut, KeyCode::KeyE),
-                 (PlayerInputAction::DeleteOverlayRemoveMe, KeyCode::Backspace)]
-            ),
-            Player::Two => InputMap::new(
-                [(PlayerInputAction::MoveCursorUp, KeyCode::ArrowUp),
-                 (PlayerInputAction::MoveCursorDown, KeyCode::ArrowDown),
-                 (PlayerInputAction::MoveCursorLeft, KeyCode::ArrowLeft),
-                 (PlayerInputAction::MoveCursorRight, KeyCode::ArrowRight),
-                 (PlayerInputAction::Select, KeyCode::Enter),
-                 (PlayerInputAction::Deselect, KeyCode::ShiftRight)]
-            ),
+            Player::One => InputMap::new([
+                (PlayerInputAction::MoveCursorUp, KeyCode::KeyW),
+                (PlayerInputAction::MoveCursorDown, KeyCode::KeyS),
+                (PlayerInputAction::MoveCursorLeft, KeyCode::KeyA),
+                (PlayerInputAction::MoveCursorRight, KeyCode::KeyD),
+                (PlayerInputAction::Select, KeyCode::Space),
+                (PlayerInputAction::Deselect, KeyCode::ShiftLeft),
+                (PlayerInputAction::ZoomIn, KeyCode::KeyQ),
+                (PlayerInputAction::ZoomOut, KeyCode::KeyE),
+                (PlayerInputAction::DeleteOverlayRemoveMe, KeyCode::Backspace),
+            ]),
+            Player::Two => InputMap::new([
+                (PlayerInputAction::MoveCursorUp, KeyCode::ArrowUp),
+                (PlayerInputAction::MoveCursorDown, KeyCode::ArrowDown),
+                (PlayerInputAction::MoveCursorLeft, KeyCode::ArrowLeft),
+                (PlayerInputAction::MoveCursorRight, KeyCode::ArrowRight),
+                (PlayerInputAction::Select, KeyCode::Enter),
+                (PlayerInputAction::Deselect, KeyCode::ShiftRight),
+            ]),
         }
     }
 }
@@ -93,7 +93,6 @@ impl Default for PlayerCursorState {
 }
 
 #[derive(Debug, Default, Reflect)]
-pub struct PlayerState { 
-    pub cursor_state: PlayerCursorState
+pub struct PlayerState {
+    pub cursor_state: PlayerCursorState,
 }
-

@@ -1,7 +1,7 @@
-use bevy::core_pipeline::core_3d::graph::input;
-use bevy::prelude::*;
 use crate::grid;
 use crate::player;
+use bevy::core_pipeline::core_3d::graph::input;
+use bevy::prelude::*;
 
 /// A cursor that can be moved on the grid
 #[derive(Component)]
@@ -24,25 +24,26 @@ pub fn spawn_cursor(
     initial_grid_pos: grid::GridPosition,
 ) {
     let initial_transform = grid::init_grid_to_world_transform(&initial_grid_pos);
-    commands.spawn((
-        CursorBundle {
-            grid_position: initial_grid_pos,
-            transform: initial_transform,
-            sprite: Sprite {
-                image,
-                color: Color::linear_rgb(0.5, 0.0, 0.5),
-                ..Default::default()
-            },
-            cursor: Cursor {},
-            player,
+    commands.spawn((CursorBundle {
+        grid_position: initial_grid_pos,
+        transform: initial_transform,
+        sprite: Sprite {
+            image,
+            color: Color::linear_rgb(0.5, 0.0, 0.5),
+            ..Default::default()
         },
-    ));
+        cursor: Cursor {},
+        player,
+    },));
 }
 
 /// Translates Input Actions to grid movement for the cursor
 pub fn handle_cursor_movement(
     grid_manager: Res<grid::GridManagerResource>,
-    input_query: Query<(&player::Player, &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>)>,
+    input_query: Query<(
+        &player::Player,
+        &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
+    )>,
     mut cursor_query: Query<(&player::Player, &mut grid::GridPosition), With<Cursor>>,
 ) {
     for (player, action_state) in input_query.iter() {
@@ -63,7 +64,10 @@ pub fn handle_cursor_movement(
             if action_state.just_pressed(&player::PlayerInputAction::MoveCursorRight) {
                 delta.x += 1;
             }
-            *grid_pos = grid_manager.grid_manager.change_position_with_bounds(*grid_pos, delta).position();
+            *grid_pos = grid_manager
+                .grid_manager
+                .change_position_with_bounds(*grid_pos, delta)
+                .position();
         }
     }
 }
