@@ -37,7 +37,7 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
     - [x] Write some code to load in an animated character
     - [x] Write some asset specific code for "tinytactics_battlekiti"
     - [x] Handle FacingDirections
-    - [ ] Write an animation controller for switching to the right animation
+    
       - [x] Do some research to see what people do here!
   - [x] Download some characters, and figure out how to render them
   - [x] Use the Movement system and tune the lerping constants
@@ -48,6 +48,12 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
 
 - [ ] Handle Gamepad Inputs
 
+- [ ] Animations
+  - [ ] Write an animation controller for switching to the right animation state
+    - [ ] Might scale better if we use a MessageReader / Writer?
+  - [ ] Update derived animation data to populate expected texture atlas indices
+  - [ ] Actually use derived animation data instead of hardcoding values
+
 - [x] Make the game code easier to share / collaborate on (and clean it up!)
   - [x] remove any assets we aren't using
   - [x] Use Git LFS or something else for the assets you are actually using
@@ -57,12 +63,16 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
 
 - [ ] Do some research into Resource / Game State Tracking
   - [ ] Build a Start Screen, and Loading Screen for the demo above!
+    - [ ] Ensure assets are loaded before moving to scene
     - [ ] Learn basic Bevy UIs
     - [ ] Do some research into the "Pickable" system for hover, etc / other events.
   - [ ] Create some silly music to play in different things
   - [ ] Look forward and write out the set of states the Game can be in
 
 - [ ] Get the demo running on the Steam Deck
+
+- [ ] Code organization
+  - [ ] Create plugins for systems that are associated with eachother?
 
 - [ ] Pathfinding and Unit Movement in Multiplayer
   - [ ] If two units are moving at the same time, how do I ensure they can't move to the same spot? When should I do the movement calculation? How can I refresh / lock?
