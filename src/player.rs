@@ -6,7 +6,10 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
-use crate::grid::GridPosition;
+use crate::{
+    grid::GridPosition,
+    unit::ValidMove,
+};
 
 #[derive(Component, Reflect, PartialEq, Eq, Hash, Debug, Copy, Clone)]
 pub enum Player {
@@ -73,23 +76,21 @@ pub enum PlayerInputAction {
 }
 
 // TODO:  Is this really how I want to track this?
-#[derive(Resource, Reflect)]
+#[derive(Resource)]
 pub struct PlayerGameStates {
     pub player_state: HashMap<Player, PlayerState>,
 }
 
 /// The current state of the player's cursor
-#[derive(Debug, PartialEq, Eq, Reflect, Clone)]
-#[derive(Default)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub enum PlayerCursorState {
     #[default]
     Idle,
     /// Moving Entity from source position
-    MovingUnit(Entity, GridPosition, Vec<GridPosition>),
+    MovingUnit(Entity, GridPosition, HashMap<GridPosition, ValidMove>),
 }
 
-
-#[derive(Debug, Default, Reflect)]
+#[derive(Debug, Default)]
 pub struct PlayerState {
     pub cursor_state: PlayerCursorState,
 }

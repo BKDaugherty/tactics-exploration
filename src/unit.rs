@@ -9,7 +9,7 @@ use crate::player::{Player, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
 use crate::{grid, grid_cursor, player};
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 #[derive(PartialEq, Eq, Debug, Reflect, Clone)]
 pub enum ObstacleType {
@@ -134,7 +134,7 @@ fn end_move(
     player_state.cursor_state = player::PlayerCursorState::Idle;
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Movement {
     origin: GridPosition,
     unit: Unit,
@@ -173,22 +173,46 @@ pub const DIRECTION_VECS: [GridVec; 4] = [
     GridVec { x: 0, y: -1 },
 ];
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ValidMove {
+    pub target: GridPosition,
+    pub path: Vec<GridPosition>,
+    movement_used: u32,
+}
+
 /// Search for valid moves, exploring the grid until we are out of movement stat using bfs
 fn get_valid_moves_for_unit(
     grid_manager: &GridManager,
     movement: Movement,
     unit_query: Query<(Entity, &Unit)>,
-) -> Vec<GridPosition> {
+) -> HashMap<GridPosition, ValidMove> {
     let movement_left = movement.unit.stats.movement;
 
     let mut spaces_explored = HashSet::new();
     let mut queue = VecDeque::new();
-    queue.push_back((movement.origin, movement_left as i32, false));
+    let mut valid_moves = HashMap::new();
+    queue.push_back((
+        movement.origin,
+        movement_left as i32,
+        vec![movement.origin],
+        false,
+    ));
 
-    while let Some((to_explore, movement_left, is_obstructed)) = queue.pop_front() {
+    while let Some((to_explore, movement_left, path, is_obstructed)) = queue.pop_front() {
         if !is_obstructed && !spaces_explored.insert(to_explore) {
             continue;
         };
+
+        if to_explore != movement.origin && !is_obstructed {
+            valid_moves.insert(
+                to_explore.clone(),
+                ValidMove {
+                    target: to_explore,
+                    path: path.clone(),
+                    movement_used: movement.unit.stats.movement - movement_left as u32,
+                },
+            );
+        }
 
         let movement_after_moved_onto_tile = movement_left - 1;
         if movement_after_moved_onto_tile < 0 {
@@ -227,17 +251,26 @@ fn get_valid_moves_for_unit(
                         if !hash_set.contains(&movement.unit.team) {
                             continue;
                         } else {
-                            queue.push_back((grid_pos, movement_after_moved_onto_tile, true))
+                            let mut new_path = path.clone();
+                            new_path.push(grid_pos);
+                            queue.push_back((
+                                grid_pos,
+                                movement_after_moved_onto_tile,
+                                new_path,
+                                true,
+                            ))
                         }
                     }
                 }
             } else {
-                queue.push_back((grid_pos, movement_after_moved_onto_tile, false))
+                let mut new_path = path.clone();
+                new_path.push(grid_pos);
+                queue.push_back((grid_pos, movement_after_moved_onto_tile, new_path, false))
             };
         }
     }
 
-    spaces_explored.into_iter().collect()
+    valid_moves
 }
 
 // TODO: This abstraction kind of sucks. It's really hard to get what I want out of it
@@ -303,7 +336,7 @@ fn handle_select_unit_for_movement(
 
     match selection {
         UnitMovementSelection::Selected(entity, movement) => {
-            let valid_moves = get_valid_moves_for_unit(grid_manager, movement, unit_query);
+            let valid_moves = get_valid_moves_for_unit(grid_manager, movement.clone(), unit_query);
             // Change Player State to moving the unit
             player_state.cursor_state = player::PlayerCursorState::MovingUnit(
                 entity,
@@ -313,7 +346,7 @@ fn handle_select_unit_for_movement(
             overlay_message_writer.write(OverlaysMessage {
                 player: *player,
                 action: overlay::OverlaysAction::Spawn {
-                    positions: valid_moves,
+                    positions: valid_moves.keys().cloned().collect(),
                 },
             });
             log::debug!("Selected Player: {:?}", player_state.cursor_state);
@@ -370,13 +403,12 @@ pub fn handle_unit_movement(
             {
                 if action_state.just_pressed(&PlayerInputAction::Select) {
                     // TODO: What to do if this changes between start and end of movement?
-                    if !valid_moves.contains(&cursor_grid_pos) {
+                    let Some(valid_move) = valid_moves.get(&cursor_grid_pos) else {
                         log::warn!("Attempting to move to invalid position");
                         continue;
-                    }
+                    };
 
-                    // Should unit entities have an "Obstruction" component?
-                    // TODO: I think I actually need to calculate obstructions when the unit was selected (but if so, how do I deal with two units moving at once?)
+                    // TODO: Remove this bad check for watching if a player moves onto one of our valid moves
                     let unit_at_position = get_singleton_component_on_grid_by_player(
                         &cursor_grid_pos,
                         &grid_manager_res.grid_manager,
@@ -396,14 +428,9 @@ pub fn handle_unit_movement(
                         continue;
                     }
 
-                    // Get the path to the new position
-                    let path = grid_manager_res
-                        .grid_manager
-                        .get_path(original_position, *cursor_grid_pos);
-
                     commands
                         .entity(unit_entity)
-                        .insert(GridMovement::new(path, 0.4));
+                        .insert(GridMovement::new(valid_move.path.clone(), 0.4));
 
                     end_move(&mut overlay_message_writer, player, player_state);
                 } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
