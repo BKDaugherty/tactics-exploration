@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+
 /// Size of a single tile in world units
 const TILE_X_SIZE: f32 = 64.0;
 const TILE_Y_SIZE: f32 = 32.0;
@@ -145,44 +146,6 @@ impl GridManager {
             y: self.height - 1,
         };
         origin.change(bounds, delta)
-    }
-
-    /// TODO: But wait! You would need to know the "set" of movable options (obstacles, enemy units, etc)
-    ///
-    /// (Potentially could pass in some closure that checks validity of a position to abstract from Bevy)
-    pub fn get_path(&self, origin: GridPosition, target: GridPosition) -> Vec<GridPosition> {
-        // Very naive pathfinding for now: just go in straight lines, and use X first (even though there may be an obstacle!)
-        let mut waypoints = Vec::new();
-        let mut current_pos = origin;
-
-        waypoints.push(current_pos);
-
-        while current_pos != target {
-            let mut delta_x = 0;
-            let mut delta_y = 0;
-
-            if current_pos.x < target.x {
-                delta_x = 1;
-            } else if current_pos.x > target.x {
-                delta_x = -1;
-            }
-
-            if delta_x == 0 {
-                if current_pos.y < target.y {
-                    delta_y = 1;
-                } else if current_pos.y > target.y {
-                    delta_y = -1;
-                }
-            }
-
-            current_pos = GridPosition {
-                x: (current_pos.x as i32 + delta_x) as u32,
-                y: (current_pos.y as i32 + delta_y) as u32,
-            };
-
-            waypoints.push(current_pos);
-        }
-        waypoints
     }
 }
 

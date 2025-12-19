@@ -8,7 +8,6 @@ pub use tinytactics::Direction;
 use crate::{
     animation::tinytactics::Character,
     grid::{GridMovement, GridVec},
-    unit,
 };
 
 #[derive(Component, Debug, Clone)]

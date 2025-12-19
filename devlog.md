@@ -32,12 +32,11 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
     - [x] Make the unit movement more testable!
     - [x] Create an "obstacle"
     - [x] Create a "passable, but not landable tile"
-    - [ ] Ensure that the Transform mutation logic follows "valid" paths
+    - [x] Ensure that the Transform mutation logic follows "valid" paths
   - [x] Basic Animation
     - [x] Write some code to load in an animated character
     - [x] Write some asset specific code for "tinytactics_battlekiti"
     - [x] Handle FacingDirections
-    
       - [x] Do some research to see what people do here!
   - [x] Download some characters, and figure out how to render them
   - [x] Use the Movement system and tune the lerping constants
