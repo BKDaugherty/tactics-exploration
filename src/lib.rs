@@ -1,6 +1,19 @@
 pub mod animation;
 pub mod assets;
+pub mod battle;
+pub mod camera;
 pub mod grid;
 pub mod grid_cursor;
+pub mod main_menu;
 pub mod player;
 pub mod unit;
+
+use bevy::prelude::*;
+
+/// The state of the Game
+#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
+pub enum GameState {
+    #[default]
+    MainMenu,
+    Battle,
+}

@@ -60,28 +60,38 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
   - [x] Fix all compiler warnings
   - [x] Clippy + Rustfmt
 
-- [ ] Do some research into Resource / Game State Tracking
-  - [ ] Build a Start Screen, and Loading Screen for the demo above!
-    - [ ] Ensure assets are loaded before moving to scene
-    - [ ] Learn basic Bevy UIs
-    - [ ] Do some research into the "Pickable" system for hover, etc / other events.
-  - [ ] Create some silly music to play in different things
-  - [ ] Look forward and write out the set of states the Game can be in
-
-- [ ] Get the demo running on the Steam Deck
-
-- [ ] Code organization
-  - [ ] Create plugins for systems that are associated with eachother?
-
-- [ ] Pathfinding and Unit Movement in Multiplayer
-  - [ ] If two units are moving at the same time, how do I ensure they can't move to the same spot? When should I do the movement calculation? How can I refresh / lock?
+- [ ] Build a basic Menu screen for the demo
+  - [x] Build a screen following example
+  - [ ] Customize the UI a bit
+  - [ ] Make the screen work with Gamepad / Keyboard
 
 - [ ] Do some UI Research into how to build bevy_uis for selecting characters / viewing stats
+  - [ ] Build a smol UI for looking at Units on the battlefield based on the current cursor position?
+  - [ ] Build a smol UI for attacking
+  - [ ] Build a smol UI for waiting (and choosing a faced direction)
 
 - [ ] Have a think through the Unit types and what should be on them
   - [ ] Create a combat system
   - [ ] Create a skill system
   - [ ] Create an inventory system
+
+- [ ] Do some further research into Resource / Game State Tracking
+  - [ ] Ensure assets are loaded before moving to scene
+    - [ ] Learn basic Bevy UIs
+
+- [ ] Create some silly game music, and play it in the different states
+  - [ ] Create some silly music to play in different things
+
+- [ ] Get the demo running on the Steam Deck
+
+- [ ] Code organization
+  - [x] Create plugins for systems that are associated with eachother?
+  - [ ] Pull all of the Battle stuff into it's own module?
+
+- [ ] Pathfinding and Unit Movement in Multiplayer
+  - [ ] If two units are moving at the same time, how do I ensure they can't move to the same spot? When should I do the movement calculation? How can I refresh / lock?
+
+
 
 - [ ] Create a camera manager that balances where to focus based on player movement
 
