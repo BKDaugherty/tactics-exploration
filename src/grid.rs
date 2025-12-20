@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-
 /// Size of a single tile in world units
 const TILE_X_SIZE: f32 = 64.0;
 const TILE_Y_SIZE: f32 = 32.0;

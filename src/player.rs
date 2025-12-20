@@ -6,10 +6,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
-use crate::{
-    grid::GridPosition,
-    unit::ValidMove,
-};
+use crate::{grid::GridPosition, unit::ValidMove};
 
 #[derive(Component, Reflect, PartialEq, Eq, Hash, Debug, Copy, Clone)]
 pub enum Player {
@@ -93,4 +90,11 @@ pub enum PlayerCursorState {
 #[derive(Debug, Default)]
 pub struct PlayerState {
     pub cursor_state: PlayerCursorState,
+}
+
+// TODO: This should be replaced with some system to ask
+// players to join the game by pressing bumpers or something
+pub fn spawn_coop_players(mut commands: Commands) {
+    commands.spawn((Name::new("Player One"), PlayerBundle::new(Player::One)));
+    commands.spawn((Name::new("Player Two"), PlayerBundle::new(Player::Two)));
 }
