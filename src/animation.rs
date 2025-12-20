@@ -81,9 +81,9 @@ pub struct TinytacticsAssets {
 }
 
 pub fn startup_load_tinytactics_assets(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    commands: &mut Commands,
+    asset_server: &Res<AssetServer>,
+    texture_atlas_layouts: &mut ResMut<Assets<TextureAtlasLayout>>,
 ) {
     let fighter_spritesheet = asset_server.load(tinytactics::spritesheet_path(Character::Fighter));
     let mage_spritesheet = asset_server.load(tinytactics::spritesheet_path(Character::Mage));
