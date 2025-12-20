@@ -8,7 +8,6 @@ use bevy_ecs_tiled::{
     prelude::{TiledMap, TiledMapAsset},
     tiled::TiledPlugin,
 };
-use leafwing_input_manager::plugin::InputManagerPlugin;
 
 use crate::{
     GameState,
@@ -20,7 +19,7 @@ use crate::{
     camera::change_zoom,
     grid::{self, GridManager, GridPosition},
     grid_cursor,
-    player::{self, Player, PlayerInputAction},
+    player::{self, Player},
     unit::{
         PLAYER_TEAM, handle_unit_movement,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
@@ -34,7 +33,6 @@ pub fn battle_plugin(app: &mut App) {
         .add_plugins(TiledPlugin::default())
         // I wonder if I should put this guy on the top level if I want to
         // have it be used for the UI too
-        .add_plugins(InputManagerPlugin::<PlayerInputAction>::default())
         .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
         .add_systems(OnEnter(GameState::Battle), load_battle_asset_resources)
         .add_systems(
@@ -189,14 +187,4 @@ fn load_demo_battle_players(commands: &mut Commands) {
             (Player::Two, player::PlayerState::default()),
         ]),
     });
-
-    commands.spawn((
-        Name::new("Player One"),
-        player::PlayerBundle::new(Player::One),
-    ));
-
-    commands.spawn((
-        Name::new("Player Two"),
-        player::PlayerBundle::new(Player::Two),
-    ));
 }
