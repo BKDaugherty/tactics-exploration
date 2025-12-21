@@ -1,10 +1,14 @@
 use crate::grid;
 use crate::player;
+
 use bevy::prelude::*;
 
 /// A cursor that can be moved on the grid
 #[derive(Component)]
 pub struct Cursor {}
+
+#[derive(Component)]
+pub struct LockedOn {}
 
 #[derive(Bundle)]
 pub struct CursorBundle {
@@ -43,7 +47,10 @@ pub fn handle_cursor_movement(
         &player::Player,
         &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
     )>,
-    mut cursor_query: Query<(&player::Player, &mut grid::GridPosition), With<Cursor>>,
+    mut cursor_query: Query<
+        (&player::Player, &mut grid::GridPosition),
+        (With<Cursor>, Without<LockedOn>),
+    >,
 ) {
     for (player, action_state) in input_query.iter() {
         for (cursor_player, mut grid_pos) in cursor_query.iter_mut() {

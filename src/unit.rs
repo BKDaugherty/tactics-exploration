@@ -4,7 +4,9 @@ use leafwing_input_manager::prelude::ActionState;
 use crate::animation::{
     AnimationState, AnimationTimer, AnimationType, Direction, FacingDirection, TinytacticsAssets,
 };
+use crate::battle::{UnitCommandMessage, UnitSelectionMessage};
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
+use crate::grid_cursor::LockedOn;
 use crate::player::{Player, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
 use crate::{grid, grid_cursor, player};
@@ -32,6 +34,7 @@ pub const ENEMY_TEAM: Team = Team(2);
 /// Units would have stats, skills, etc?
 #[derive(Component, Debug, Reflect, Clone)]
 pub struct Unit {
+    pub name: String,
     pub stats: Stats,
     pub obstacle: ObstacleType,
     pub team: Team,
@@ -59,20 +62,26 @@ pub struct UnitBundle {
     pub animation_timer: AnimationTimer,
 }
 
-pub fn spawn_obstacle_unit(commands: &mut Commands, grid_position: crate::grid::GridPosition) {
-    commands.spawn((
-        grid_position,
-        Unit {
-            stats: Stats {
-                max_health: 0,
-                strength: 0,
-                health: 0,
-                movement: 0,
+pub fn spawn_obstacle_unit(
+    commands: &mut Commands,
+    grid_position: crate::grid::GridPosition,
+) -> Entity {
+    commands
+        .spawn((
+            grid_position,
+            Unit {
+                stats: Stats {
+                    max_health: 0,
+                    strength: 0,
+                    health: 0,
+                    movement: 0,
+                },
+                obstacle: ObstacleType::Neutral,
+                team: Team(0),
+                name: "Obstacle".to_string(),
             },
-            obstacle: ObstacleType::Neutral,
-            team: Team(0),
-        },
-    ));
+        ))
+        .id()
 }
 
 /// Temporary function for spawning a test unit
@@ -102,6 +111,7 @@ pub fn spawn_unit(
             },
             obstacle: ObstacleType::Filter(HashSet::from([team])),
             team,
+            name: "Mark".to_string(),
         },
         grid_position,
         sprite: Sprite {
@@ -142,7 +152,7 @@ pub struct Movement {
 
 #[derive(Debug)]
 enum UnitMovementSelection {
-    Selected(Entity, Movement),
+    Selected(Entity),
     NoPlayerUnitOnTile,
 }
 
@@ -302,74 +312,108 @@ where
         grid_manager,
         unit_player_from_entity_query,
     );
-    if let Some((entity, _, unit)) = unit {
-        return UnitMovementSelection::Selected(
-            entity,
-            Movement {
-                origin: *cursor_grid_pos,
-                unit: unit.clone(),
-            },
-        );
+    if let Some((entity, _, _)) = unit {
+        return UnitMovementSelection::Selected(entity);
     }
     UnitMovementSelection::NoPlayerUnitOnTile
 }
 
-fn handle_select_unit_for_movement(
-    overlay_message_writer: &mut MessageWriter<OverlaysMessage>,
+pub fn handle_unit_command(
+    mut commands: Commands,
+    grid_manager_res: Res<grid::GridManagerResource>,
+    mut player_state: ResMut<player::PlayerGameStates>,
+    mut unit_command_message: MessageReader<UnitCommandMessage>,
+    mut overlay_message_writer: MessageWriter<OverlaysMessage>,
+    cursor_query: Query<(Entity, &Player, &GridPosition), With<LockedOn>>,
     player_unit_query: Query<(Entity, &player::Player, &Unit)>,
     unit_query: Query<(Entity, &Unit)>,
-    grid_manager: &mut GridManager,
-    player_state: &mut PlayerState,
-    cursor_grid_pos: &GridPosition,
-    player: &Player,
 ) {
-    log::debug!("Player {:?}, is selecting unit", player);
-    // Note that here we don't allow a given player to access a Unit that is not associated with them
-    let selection = select_unit_for_movement(cursor_grid_pos, grid_manager, |entity| {
-        // Get the first Unit owned by this player, and then clone the values to satisfy lifetimes.
-        let queried = player_unit_query
-            .get(*entity)
-            .ok()
-            .filter(|(_, p, _)| **p == *player);
-        queried.map(|(a, b, c)| (a, *b, c.clone()))
-    });
+    for message in unit_command_message.read() {
+        for (e, cursor_player, cursor_grid_pos) in cursor_query.iter() {
+            if *cursor_player != message.player {
+                continue;
+            }
 
-    match selection {
-        UnitMovementSelection::Selected(entity, movement) => {
-            let valid_moves = get_valid_moves_for_unit(grid_manager, movement.clone(), unit_query);
-            // Change Player State to moving the unit
-            player_state.cursor_state = player::PlayerCursorState::MovingUnit(
-                entity,
-                *cursor_grid_pos,
-                valid_moves.clone(),
-            );
-            overlay_message_writer.write(OverlaysMessage {
-                player: *player,
-                action: overlay::OverlaysAction::Spawn {
-                    positions: valid_moves.keys().cloned().collect(),
-                },
-            });
-            log::debug!("Selected Player: {:?}", player_state.cursor_state);
-        }
-        UnitMovementSelection::NoPlayerUnitOnTile => {
-            warn!("Selected tile with no player unit");
+            let Some(player_state) = player_state.player_state.get_mut(cursor_player) else {
+                log::error!("No player state found for player {:?}", cursor_player);
+                continue;
+            };
+
+            match message.command {
+                crate::battle::UnitCommand::Move => {
+                    let Some((unit_entity, _, unit)) = get_singleton_component_on_grid_by_player(
+                        cursor_grid_pos,
+                        &grid_manager_res.grid_manager,
+                        |e| {
+                            let queried = player_unit_query
+                                .get(*e)
+                                .ok()
+                                .filter(|(_, p, _)| **p == *cursor_player);
+                            queried.map(|(a, b, c)| (a, *b, c.clone()))
+                        },
+                    ) else {
+                        // TODO: Fix this
+                        panic!("Uh oh, somebody moved the unit out from under us!!!");
+                    };
+
+                    let valid_moves = get_valid_moves_for_unit(
+                        &grid_manager_res.grid_manager,
+                        Movement {
+                            origin: *cursor_grid_pos,
+                            unit,
+                        },
+                        unit_query,
+                    );
+
+                    // Change Player State to moving the unit (Only do this when )
+                    player_state.cursor_state = player::PlayerCursorState::MovingUnit(
+                        unit_entity,
+                        *cursor_grid_pos,
+                        valid_moves.clone(),
+                    );
+
+                    overlay_message_writer.write(OverlaysMessage {
+                        player: *cursor_player,
+                        action: overlay::OverlaysAction::Spawn {
+                            positions: valid_moves.keys().cloned().collect(),
+                        },
+                    });
+                }
+                crate::battle::UnitCommand::Attack => {
+                    warn!("Uh oh, they want to attack! We haven't built that yet!")
+                }
+                crate::battle::UnitCommand::Cancel => {}
+                crate::battle::UnitCommand::Wait => {
+                    warn!("Uh oh, they want to wait! We haven't built that yet!")
+                }
+            }
+
+            commands.entity(e).remove::<LockedOn>();
         }
     }
 }
 
+// Click on Guy sends Clicked on Guy event
+// Click on Move, sends Clicked On Move event
+// On Move event spawns overlay and sets PlayerState
+// On selecting tile, character is moved
+
 #[allow(clippy::too_many_arguments)]
 pub fn handle_unit_movement(
     mut commands: Commands,
-    mut grid_manager_res: ResMut<grid::GridManagerResource>,
+    grid_manager_res: Res<grid::GridManagerResource>,
     mut player_state: ResMut<player::PlayerGameStates>,
     player_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
-    mut cursor_query: Query<(&Player, &mut grid::GridPosition), With<grid_cursor::Cursor>>,
+    mut cursor_query: Query<
+        (Entity, &Player, &mut grid::GridPosition),
+        (With<grid_cursor::Cursor>, Without<LockedOn>),
+    >,
     player_unit_query: Query<(Entity, &player::Player, &Unit)>,
-    unit_query: Query<(Entity, &Unit)>,
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
+    mut unit_selection_message: MessageWriter<UnitSelectionMessage>,
 ) {
     for (player, action_state) in player_query.iter() {
-        for (cursor_player, mut cursor_grid_pos) in cursor_query.iter_mut() {
+        for (cursor_entity, cursor_player, mut cursor_grid_pos) in cursor_query.iter_mut() {
             if player != cursor_player {
                 continue;
             }
@@ -384,15 +428,32 @@ pub fn handle_unit_movement(
             if player_state.cursor_state == player::PlayerCursorState::Idle
                 && action_state.just_pressed(&PlayerInputAction::Select)
             {
-                handle_select_unit_for_movement(
-                    &mut overlay_message_writer,
-                    player_unit_query,
-                    unit_query,
-                    &mut grid_manager_res.grid_manager,
-                    player_state,
+                let selection = select_unit_for_movement(
                     &cursor_grid_pos,
-                    player,
+                    &grid_manager_res.grid_manager,
+                    |entity| {
+                        // Get the first Unit owned by this player, and then clone the values to satisfy lifetimes.
+                        let queried = player_unit_query
+                            .get(*entity)
+                            .ok()
+                            .filter(|(_, p, _)| **p == *player);
+                        queried.map(|(a, b, c)| (a, *b, c.clone()))
+                    },
                 );
+
+                match selection {
+                    UnitMovementSelection::Selected(entity) => {
+                        unit_selection_message.write(UnitSelectionMessage {
+                            entity,
+                            player: *player,
+                        });
+
+                        commands.entity(cursor_entity).insert(LockedOn {});
+                    }
+                    UnitMovementSelection::NoPlayerUnitOnTile => {
+                        warn!("Selected tile with no player unit");
+                    }
+                }
             }
             // If we're moving a unit, and we press select again, attempt to move the unit to that position
             else if let player::PlayerCursorState::MovingUnit(
@@ -436,8 +497,15 @@ pub fn handle_unit_movement(
                 } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
                     end_move(&mut overlay_message_writer, player, player_state);
 
-                    // Snap the cursor position back to the origin
+                    // Snap the cursor position back to the origin, and re-open the menu
                     *cursor_grid_pos = original_position;
+
+                    unit_selection_message.write(UnitSelectionMessage {
+                        entity: unit_entity,
+                        player: *player,
+                    });
+
+                    commands.entity(cursor_entity).insert(LockedOn {});
                 }
             }
         }
@@ -562,13 +630,17 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use crate::{
+        battle::{UnitCommand, UnitCommandMessage, UnitSelectionMessage},
         grid::{
             self, GridManager, GridManagerResource, GridMovement, GridPosition,
             sync_grid_positions_to_manager,
         },
         grid_cursor,
         player::{self, Player, PlayerGameStates, PlayerInputAction, PlayerState},
-        unit::{PLAYER_TEAM, Stats, Unit, handle_unit_movement, overlay::OverlaysMessage},
+        unit::{
+            PLAYER_TEAM, Stats, Unit, handle_unit_command, handle_unit_movement,
+            overlay::OverlaysMessage,
+        },
     };
     use bevy::{
         app::App, ecs::system::RunSystemOnce, time::Time, transform::components::Transform,
@@ -582,6 +654,8 @@ mod tests {
     fn create_test_app() -> App {
         let mut app = App::new();
         app.add_message::<OverlaysMessage>();
+        app.add_message::<UnitSelectionMessage>();
+        app.add_message::<UnitCommandMessage>();
         app.insert_resource(GridManagerResource {
             grid_manager: GridManager::new(6, 6),
         });
@@ -616,6 +690,7 @@ mod tests {
                     },
                     team: PLAYER_TEAM,
                     obstacle: crate::unit::ObstacleType::Filter(HashSet::from([PLAYER_TEAM])),
+                    name: "Bob".to_string(),
                 },
                 Player::One,
                 GridPosition { x: 2, y: 2 },
@@ -650,6 +725,20 @@ mod tests {
             .run_system_once(handle_unit_movement)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
+        // Handle Unit Movement should incur a message to the UI to say that the given unit was selected.
+        // It then expects to be told what the player wants to do with the unit. Let's assume they want to
+        // move.
+        app.world_mut().write_message(UnitCommandMessage {
+            player: Player::One,
+            command: UnitCommand::Move,
+        });
+
+        app.world_mut()
+            .run_system_once(handle_unit_command)
+            .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
+
+        // Let's also simulate a move of the cursor to a valid destination, and
+        // press Select.
         app.world_mut()
             .get_mut::<GridPosition>(cursor_entity)
             .unwrap()

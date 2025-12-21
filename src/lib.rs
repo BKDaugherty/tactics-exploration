@@ -1,10 +1,12 @@
 pub mod animation;
 pub mod assets;
 pub mod battle;
+pub mod battle_menu;
 pub mod camera;
 pub mod grid;
 pub mod grid_cursor;
 pub mod main_menu;
+pub mod menu;
 pub mod player;
 pub mod unit;
 
