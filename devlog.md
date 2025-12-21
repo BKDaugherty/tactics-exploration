@@ -60,15 +60,26 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
   - [x] Fix all compiler warnings
   - [x] Clippy + Rustfmt
 
-- [ ] Build a basic Menu screen for the demo
+- [x] Build a basic Menu screen for the demo
   - [x] Build a screen following example
-  - [ ] Customize the UI a bit
-  - [ ] Make the screen work with Gamepad / Keyboard
+  - [x] Customize the UI a bit
+  - [x] Make the screen work with Gamepad / Keyboard
 
-- [ ] Do some UI Research into how to build bevy_uis for selecting characters / viewing stats
-  - [ ] Build a smol UI for looking at Units on the battlefield based on the current cursor position?
+- [x] Do some UI Research into how to build bevy_uis for selecting characters / viewing stats
+  - [x] Build a smol UI for looking at Units on the battlefield based on the current cursor position?
+  - [ ] Figure out a simple communication system between UI and movement code
+    - [ ] Ensure that cursor locks only when we choose a valid Unit
+    - [ ] Ensure that we only perform a move action when the player clicks Move
   - [ ] Build a smol UI for attacking
-  - [ ] Build a smol UI for waiting (and choosing a faced direction)
+  - [ ] Build a smol UI for waiting
+
+- [ ] Create a Phased (for now) turn system
+  - [ ] Track Action Points
+  - [ ] Movement Points
+  - [ ] Create a component to manage a "Phase"
+  - [ ] Create a system to renew the phase
+
+- [ ] Allow the user to pick a FacedDirection on Wait
 
 - [ ] Have a think through the Unit types and what should be on them
   - [ ] Create a combat system

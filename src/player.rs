@@ -43,7 +43,6 @@ impl Player {
                 (PlayerInputAction::Deselect, KeyCode::ShiftLeft),
                 (PlayerInputAction::ZoomIn, KeyCode::KeyQ),
                 (PlayerInputAction::ZoomOut, KeyCode::KeyE),
-                (PlayerInputAction::DeleteOverlayRemoveMe, KeyCode::Backspace),
             ]),
             Player::Two => InputMap::new([
                 (PlayerInputAction::MoveCursorUp, KeyCode::ArrowUp),
@@ -67,9 +66,6 @@ pub enum PlayerInputAction {
     Deselect,
     ZoomIn,
     ZoomOut,
-    /// Temporary actions for testing overlay generation/removal
-    CreateOverlayRemoveMe,
-    DeleteOverlayRemoveMe,
 }
 
 // TODO:  Is this really how I want to track this?

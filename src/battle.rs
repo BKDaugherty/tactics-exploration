@@ -16,20 +16,50 @@ use crate::{
         tinytactics::AnimationAsset, update_facing_direction, update_sprite_on_animation_change,
     },
     assets::{CURSOR_PATH, EXAMPLE_MAP_PATH, OVERLAY_PATH},
+    battle_menu::{
+        activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions, update_player_ui_info,
+    },
     camera::change_zoom,
     grid::{self, GridManager, GridPosition},
     grid_cursor,
+    menu::menu_navigation::{handle_menu_cursor_navigation, highlight_menu_option},
     player::{self, Player},
     unit::{
-        PLAYER_TEAM, handle_unit_movement,
+        PLAYER_TEAM, handle_unit_command, handle_unit_movement,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_obstacle_unit, spawn_unit,
     },
 };
 
+#[derive(Message, Debug)]
+pub struct UnitSelectionMessage {
+    /// Unit that was selected
+    pub entity: Entity,
+    /// Player that selected entity
+    pub player: Player,
+}
+
+#[derive(Message)]
+pub struct UnitCommandMessage {
+    /// Player that sent command
+    pub player: Player,
+    /// The Command itself
+    pub command: UnitCommand,
+}
+
+#[derive(Debug)]
+pub enum UnitCommand {
+    Move,
+    Attack,
+    Cancel,
+    Wait,
+}
+
 /// All logic necessary during a battle
 pub fn battle_plugin(app: &mut App) {
     app.add_message::<OverlaysMessage>()
+        .add_message::<UnitSelectionMessage>()
+        .add_message::<UnitCommandMessage>()
         .add_plugins(TiledPlugin::default())
         // I wonder if I should put this guy on the top level if I want to
         // have it be used for the UI too
@@ -39,6 +69,7 @@ pub fn battle_plugin(app: &mut App) {
             OnEnter(GameState::Battle),
             load_demo_battle_scene.after(load_battle_asset_resources),
         )
+        .add_systems(OnEnter(GameState::Battle), battle_ui_setup)
         .add_systems(
             Update,
             (
@@ -56,7 +87,13 @@ pub fn battle_plugin(app: &mut App) {
                 update_facing_direction,
                 // Battle Camera Zoom
                 change_zoom,
-                // on_asset_event
+                // UI
+                update_player_ui_info,
+                activate_battle_ui,
+                handle_menu_cursor_navigation,
+                highlight_menu_option,
+                handle_battle_ui_interactions, // on_asset_event
+                handle_unit_command,
             )
                 .run_if(in_state(GameState::Battle)),
         );
@@ -173,9 +210,14 @@ pub fn load_demo_battle_scene(
 
     obstacle_locations.extend_from_slice(&stool_locations);
 
+    let mut obstacle_entities = Vec::new();
     for obstacle_location in obstacle_locations {
-        spawn_obstacle_unit(&mut commands, obstacle_location);
+        let e = spawn_obstacle_unit(&mut commands, obstacle_location);
+        obstacle_entities.push(e);
     }
+
+    let mut static_obstacles = commands.spawn(Name::new("Static Demo Map Obstacles"));
+    static_obstacles.add_children(&obstacle_entities);
 }
 
 // TODO: This should be based on how many players have joined game,
