@@ -87,6 +87,7 @@ pub fn spawn_obstacle_unit(
 /// Temporary function for spawning a test unit
 pub fn spawn_unit(
     commands: &mut Commands,
+    unit_name: String,
     tt_assets: &Res<TinytacticsAssets>,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
@@ -111,7 +112,7 @@ pub fn spawn_unit(
             },
             obstacle: ObstacleType::Filter(HashSet::from([team])),
             team,
-            name: "Mark".to_string(),
+            name: unit_name,
         },
         grid_position,
         sprite: Sprite {

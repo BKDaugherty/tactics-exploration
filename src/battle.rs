@@ -142,13 +142,14 @@ pub fn load_demo_battle_scene(
     // Spawn players and player cursors
     let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
-    let player_1_grid_pos = GridPosition { x: 4, y: 6 };
-    let player_2_grid_pos = GridPosition { x: 1, y: 3 };
+    let player_1_grid_pos = GridPosition { x: 1, y: 3 };
+    let player_2_grid_pos = GridPosition { x: 4, y: 6 };
 
     load_demo_battle_players(&mut commands);
 
     spawn_unit(
         &mut commands,
+        "Marc".to_string(),
         &tt_assets,
         player_1_grid_pos,
         tt_assets.fighter_spritesheet.clone(),
@@ -158,6 +159,7 @@ pub fn load_demo_battle_scene(
     );
     spawn_unit(
         &mut commands,
+        "Caroline".to_string(),
         &tt_assets,
         player_2_grid_pos,
         tt_assets.mage_spritesheet.clone(),
