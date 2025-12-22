@@ -34,8 +34,7 @@ fn main() -> anyhow::Result<()> {
         .iter()
         .filter(|((c, _, _), _)| *c == Character::Mage)
         .map(|(_, v)| v.height())
-        .sum::<u32>()
-        * 2;
+        .sum::<u32>();
 
     for character in [Character::Cleric, Character::Fighter, Character::Mage] {
         let keys_of_character: Vec<&(Character, Action, Direction)> = image_data
@@ -56,19 +55,6 @@ fn main() -> anyhow::Result<()> {
             animation_data.push(calculate_animation_data(action, direction, height, image));
 
             height += image.height();
-
-            // TODO: Just flipping the whole Vec of images isn't valid for multi-length images
-            let flipped = image::imageops::flip_horizontal(image);
-            image::imageops::replace(&mut output_img, &flipped, 0, height.into());
-
-            animation_data.push(calculate_animation_data(
-                action,
-                direction.flip_across_y(),
-                height,
-                image,
-            ));
-
-            height += image.height();
         }
         let animation_data_file = OpenOptions::new()
             .create(true)
@@ -84,7 +70,7 @@ fn main() -> anyhow::Result<()> {
             },
         )?;
 
-        output_img.save(Path::new("assets").join(spritesheet_data_path(character)))?;
+        output_img.save(Path::new("assets").join(spritesheet_path(character)))?;
     }
     Ok(())
 }
