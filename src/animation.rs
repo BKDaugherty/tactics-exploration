@@ -8,6 +8,7 @@ pub use tinytactics::Direction;
 use crate::{
     animation::{combat::ATTACK_FRAME_DURATION, tinytactics::Character},
     grid::{GridManagerResource, GridMovement, GridVec},
+    unit::Unit,
 };
 
 #[derive(Component, Debug, Clone)]
@@ -180,29 +181,34 @@ pub mod combat {
 
 pub fn idle_animation_system(
     res: Res<TinytacticsAssets>,
-    mut query: Query<&mut UnitAnimationPlayer>,
+    mut query: Query<(&Unit, &FacingDirection, &mut UnitAnimationPlayer)>,
 ) {
-    // TODO: Would be great to have these resources be separate probably and allow for getting just the inner data vs. the actual sprite offsets.
-    let Some(idle_inner_data) = res.unit_animation_data.animations.get(&UnitAnimationKey {
-        kind: UnitAnimationKind::IdleWalk,
-        direction: Direction::NE,
-    }) else {
-        return;
-    };
+    for (unit, dir, mut anim_player) in &mut query {
+        let anim_kind_to_play = match (unit.downed(), unit.critical_health()) {
+            (true, _) => UnitAnimationKind::IdleDead,
+            (false, true) => UnitAnimationKind::IdleHurt,
+            (false, false) => UnitAnimationKind::IdleWalk,
+        };
 
-    let anim_to_play = AnimToPlay {
-        id: UnitAnimationKind::IdleWalk,
-        frame_duration: idle_inner_data.inner.frame_duration,
-    };
+        let Some(inner) = res.unit_animation_data.animations.get(&UnitAnimationKey {
+            kind: anim_kind_to_play,
+            direction: dir.0.animation_direction(),
+        }) else {
+            return;
+        };
 
-    for mut player in &mut query {
-        match &player.current_animation {
+        let anim_to_play = AnimToPlay {
+            id: anim_kind_to_play,
+            frame_duration: inner.inner.frame_duration,
+        };
+
+        match &anim_player.current_animation {
             Some(anim) => {
                 if anim.id != anim_to_play.id {
-                    player.play(anim_to_play.clone())
+                    anim_player.play(anim_to_play.clone())
                 }
             }
-            None => player.play(anim_to_play.clone()),
+            None => anim_player.play(anim_to_play.clone()),
         }
     }
 }
@@ -211,6 +217,7 @@ pub fn idle_animation_system(
 pub enum UnitAnimationKind {
     IdleWalk,
     IdleHurt,
+    IdleDead,
     Charge,
     Attack,
     TakeDamage,
@@ -227,6 +234,7 @@ impl UnitAnimationKind {
         match self {
             UnitAnimationKind::IdleWalk => AnimationPriority::Idle,
             UnitAnimationKind::IdleHurt => AnimationPriority::Idle,
+            UnitAnimationKind::IdleDead => AnimationPriority::Idle,
             UnitAnimationKind::Charge => AnimationPriority::Combat,
             UnitAnimationKind::Attack => AnimationPriority::Combat,
             UnitAnimationKind::TakeDamage => AnimationPriority::Reaction,
@@ -298,7 +306,7 @@ pub struct UnitAnimations {
 pub fn generate_animations(
     kind: UnitAnimationKind,
     data: UnitAnimationDataInner,
-    direction_to_start: &[(Direction, usize); 4],
+    direction_to_start: &[(Direction, usize); 2],
 ) -> Vec<(UnitAnimationKey, UnitAnimationData)> {
     direction_to_start
         .into_iter()
@@ -324,12 +332,7 @@ pub fn unit_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
         animation_offset_markers: HashMap::new(),
     };
 
-    let idle_start_indices = [
-        (Direction::NE, 0),
-        (Direction::NW, 8),
-        (Direction::SE, 16),
-        (Direction::SW, 24),
-    ];
+    let idle_start_indices = [(Direction::NE, 0), (Direction::SE, 8)];
 
     let attack_data = UnitAnimationDataInner {
         frame_count: 4,
@@ -340,12 +343,7 @@ pub fn unit_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
         ]),
     };
 
-    let attack_start_indices = [
-        (Direction::NE, 32),
-        (Direction::NW, 36),
-        (Direction::SE, 40),
-        (Direction::SW, 44),
-    ];
+    let attack_start_indices = [(Direction::NE, 16), (Direction::SE, 20)];
 
     let attack_anims = generate_animations(
         UnitAnimationKind::Attack,
@@ -353,12 +351,7 @@ pub fn unit_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
         &attack_start_indices,
     );
 
-    let take_damage_indices = [
-        (Direction::NE, 80),
-        (Direction::NW, 84),
-        (Direction::SE, 88),
-        (Direction::SW, 92),
-    ];
+    let take_damage_indices = [(Direction::NE, 40), (Direction::SE, 44)];
 
     let take_damage_anim_data = UnitAnimationDataInner {
         frame_count: 1,
@@ -372,6 +365,34 @@ pub fn unit_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
         &take_damage_indices,
     );
 
+    let hurt_idle_indices = [(Direction::NE, 48), (Direction::SE, 52)];
+
+    let hurt_idle_anim_data = UnitAnimationDataInner {
+        frame_count: 1,
+        frame_duration: 1.0,
+        animation_offset_markers: HashMap::new(),
+    };
+
+    let hurt_idle_anims = generate_animations(
+        UnitAnimationKind::IdleHurt,
+        hurt_idle_anim_data,
+        &hurt_idle_indices,
+    );
+
+    let death_idle_indices = [(Direction::NE, 56), (Direction::SE, 60)];
+
+    let death_idle_anim_data = UnitAnimationDataInner {
+        frame_count: 1,
+        frame_duration: (1.0),
+        animation_offset_markers: HashMap::new(),
+    };
+
+    let death_idle_anims = generate_animations(
+        UnitAnimationKind::IdleDead,
+        death_idle_anim_data,
+        &death_idle_indices,
+    );
+
     let idle_anims =
         generate_animations(UnitAnimationKind::IdleWalk, idle_data, &idle_start_indices);
 
@@ -380,6 +401,8 @@ pub fn unit_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
     all_anims.extend(idle_anims);
     all_anims.extend(attack_anims);
     all_anims.extend(take_damage_anims);
+    all_anims.extend(hurt_idle_anims);
+    all_anims.extend(death_idle_anims);
 
     all_anims.into_iter().collect()
 }
