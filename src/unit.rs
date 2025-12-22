@@ -101,7 +101,7 @@ pub fn spawn_enemy(
         .unit_animation_data
         .animations
         .get(&UnitAnimationKey {
-            direction,
+            direction: direction.animation_direction(),
             kind: UnitAnimationKind::IdleWalk,
         })
         .expect("Must have animation data");
@@ -126,6 +126,7 @@ pub fn spawn_enemy(
                 index: animation_data.start_index,
             }),
             color: Color::linear_rgb(1.0, 1.0, 1.0),
+            flip_x: direction.should_flip_across_y(),
             ..Default::default()
         },
         transform,
@@ -151,7 +152,7 @@ pub fn spawn_unit(
         .unit_animation_data
         .animations
         .get(&UnitAnimationKey {
-            direction,
+            direction: direction.animation_direction(),
             kind: UnitAnimationKind::IdleWalk,
         })
         .expect("Must have animation data");
@@ -176,6 +177,7 @@ pub fn spawn_unit(
                 index: animation_data.start_index,
             }),
             color: Color::linear_rgb(1.0, 1.0, 1.0),
+            flip_x: direction.should_flip_across_y(),
             ..Default::default()
         },
         transform,

@@ -63,7 +63,7 @@ fn main() -> anyhow::Result<()> {
 
             animation_data.push(calculate_animation_data(
                 action,
-                direction.flip_y(),
+                direction.flip_across_y(),
                 height,
                 image,
             ));
