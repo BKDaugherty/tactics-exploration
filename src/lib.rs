@@ -3,6 +3,7 @@ pub mod assets;
 pub mod battle;
 pub mod battle_menu;
 pub mod camera;
+pub mod combat;
 pub mod grid;
 pub mod grid_cursor;
 pub mod main_menu;
