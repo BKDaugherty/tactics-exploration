@@ -25,7 +25,7 @@ use crate::{
     menu::menu_navigation::{handle_menu_cursor_navigation, highlight_menu_option},
     player::{self, Player},
     unit::{
-        PLAYER_TEAM, handle_unit_command, handle_unit_movement,
+        PLAYER_TEAM, damage_system, handle_unit_command, handle_unit_cursor_actions,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_obstacle_unit, spawn_unit,
     },
@@ -80,7 +80,7 @@ pub fn battle_plugin(app: &mut App) {
                 grid_cursor::handle_cursor_movement,
                 // Unit Movement + Overlay UI
                 handle_overlays_events_system,
-                handle_unit_movement,
+                handle_unit_cursor_actions,
                 // Animation
                 animate_sprite,
                 update_sprite_on_animation_change,
@@ -94,6 +94,7 @@ pub fn battle_plugin(app: &mut App) {
                 highlight_menu_option,
                 handle_battle_ui_interactions, // on_asset_event
                 handle_unit_command,
+                damage_system,
             )
                 .run_if(in_state(GameState::Battle)),
         );
