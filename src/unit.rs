@@ -44,6 +44,18 @@ pub struct Unit {
     // equipment?
 }
 
+impl Unit {
+    /// Whether or not the unit is at 0 health
+    pub fn downed(&self) -> bool {
+        return self.stats.health == 0;
+    }
+
+    // Not downed, but less than 30% of max health is "critical"
+    pub fn critical_health(&self) -> bool {
+        return !self.downed() && (self.stats.health as f32 / self.stats.max_health as f32) <= 0.3;
+    }
+}
+
 #[derive(Debug, Reflect, Clone)]
 pub struct Stats {
     pub max_health: u32,
@@ -299,24 +311,24 @@ fn get_valid_moves_for_unit(
             // Assumes that there is only one unit on a tile.
             //
             // TODO: Could cache this if this query is expensivo
-            let obstacle_on_target = grid_manager
+            let unit_on_target = grid_manager
                 .get_by_position(&grid_pos)
                 .cloned()
                 .unwrap_or_default()
                 .iter()
-                .map(|e| unit_query.get(*e).ok().map(|(_, u)| u.obstacle.clone()))
+                .map(|e| unit_query.get(*e).ok())
                 .next()
                 .flatten();
 
-            if let Some(obstacle) = obstacle_on_target {
-                match obstacle {
+            if let Some((_, unit)) = unit_on_target {
+                match &unit.obstacle {
                     // Can't move here, or through here.
                     ObstacleType::Neutral => {
                         continue;
                     }
                     // Can move through here, but can't move here.
                     ObstacleType::Filter(hash_set) => {
-                        if !hash_set.contains(&movement.unit.team) {
+                        if !hash_set.contains(&movement.unit.team) && !unit.downed() {
                             continue;
                         } else {
                             let mut new_path = path.clone();
