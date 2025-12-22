@@ -57,6 +57,7 @@ fn main() -> anyhow::Result<()> {
 
             height += image.height();
 
+            // TODO: Just flipping the whole Vec of images isn't valid for multi-length images
             let flipped = image::imageops::flip_horizontal(image);
             image::imageops::replace(&mut output_img, &flipped, 0, height.into());
 

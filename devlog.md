@@ -48,10 +48,12 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
 - [ ] Handle Gamepad Inputs
 
 - [ ] Animations
-  - [ ] Write an animation controller for switching to the right animation state
-    - [ ] Might scale better if we use a MessageReader / Writer?
+  - [x] Write an animation controller for switching to the right animation state
+    - [x] Might scale better if we use a MessageReader / Writer?
   - [ ] Update derived animation data to populate expected texture atlas indices
   - [ ] Actually use derived animation data instead of hardcoding values
+  - [ ] Fix bug in Spritesheet creation that causes images to be flipped incorrectly
+
 
 - [x] Make the game code easier to share / collaborate on (and clean it up!)
   - [x] remove any assets we aren't using

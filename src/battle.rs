@@ -12,22 +12,29 @@ use bevy_ecs_tiled::{
 use crate::{
     GameState,
     animation::{
-        TinytacticsAssets, animate_sprite, startup_load_tinytactics_assets,
-        tinytactics::AnimationAsset, update_facing_direction, update_sprite_on_animation_change,
+        AnimationMarkerMessage, TinytacticsAssets,
+        combat::{apply_animation_on_attack_phase, update_facing_direction_on_attack},
+        idle_animation_system, startup_load_tinytactics_assets,
+        tinytactics::AnimationAsset,
+        unit_animation_tick_system, update_facing_direction_on_movement,
     },
     assets::{CURSOR_PATH, EXAMPLE_MAP_PATH, OVERLAY_PATH},
     battle_menu::{
         activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions, update_player_ui_info,
     },
     camera::change_zoom,
+    combat::{
+        advance_attack_phase_based_on_attack_animation_markers, attack_execution_despawner,
+        attack_impact_system, attack_intent_system,
+    },
     grid::{self, GridManager, GridPosition},
     grid_cursor,
     menu::menu_navigation::{handle_menu_cursor_navigation, highlight_menu_option},
     player::{self, Player},
     unit::{
-        PLAYER_TEAM, damage_system, handle_unit_command, handle_unit_cursor_actions,
+        ENEMY_TEAM, PLAYER_TEAM, handle_unit_command, handle_unit_cursor_actions,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
-        spawn_obstacle_unit, spawn_unit,
+        spawn_enemy, spawn_obstacle_unit, spawn_unit,
     },
 };
 
@@ -60,6 +67,7 @@ pub fn battle_plugin(app: &mut App) {
     app.add_message::<OverlaysMessage>()
         .add_message::<UnitSelectionMessage>()
         .add_message::<UnitCommandMessage>()
+        .add_message::<AnimationMarkerMessage>()
         .add_plugins(TiledPlugin::default())
         // I wonder if I should put this guy on the top level if I want to
         // have it be used for the UI too
@@ -81,10 +89,10 @@ pub fn battle_plugin(app: &mut App) {
                 // Unit Movement + Overlay UI
                 handle_overlays_events_system,
                 handle_unit_cursor_actions,
-                // Animation
-                animate_sprite,
-                update_sprite_on_animation_change,
-                update_facing_direction,
+                // Combat
+                attack_intent_system,
+                attack_impact_system,
+                attack_execution_despawner,
                 // Battle Camera Zoom
                 change_zoom,
                 // UI
@@ -94,7 +102,20 @@ pub fn battle_plugin(app: &mut App) {
                 highlight_menu_option,
                 handle_battle_ui_interactions, // on_asset_event
                 handle_unit_command,
-                damage_system,
+            )
+                .run_if(in_state(GameState::Battle)),
+        )
+        .add_systems(
+            Update,
+            (
+                // Animation
+                unit_animation_tick_system,
+                update_facing_direction_on_movement,
+                idle_animation_system,
+                // AnimationCombat
+                advance_attack_phase_based_on_attack_animation_markers,
+                apply_animation_on_attack_phase,
+                update_facing_direction_on_attack,
             )
                 .run_if(in_state(GameState::Battle)),
         );
@@ -145,12 +166,13 @@ pub fn load_demo_battle_scene(
 
     let player_1_grid_pos = GridPosition { x: 1, y: 3 };
     let player_2_grid_pos = GridPosition { x: 4, y: 6 };
+    let enemy_grid_pos = GridPosition { x: 5, y: 2 };
 
     load_demo_battle_players(&mut commands);
 
     spawn_unit(
         &mut commands,
-        "Marc".to_string(),
+        "Brond".to_string(),
         &tt_assets,
         player_1_grid_pos,
         tt_assets.fighter_spritesheet.clone(),
@@ -160,13 +182,23 @@ pub fn load_demo_battle_scene(
     );
     spawn_unit(
         &mut commands,
-        "Caroline".to_string(),
+        "Coral".to_string(),
         &tt_assets,
         player_2_grid_pos,
         tt_assets.mage_spritesheet.clone(),
         tt_assets.layout.clone(),
         Player::Two,
         PLAYER_TEAM,
+    );
+
+    spawn_enemy(
+        &mut commands,
+        "Jimothy Timbers".to_string(),
+        &tt_assets,
+        enemy_grid_pos,
+        tt_assets.cleric_spritesheet.clone(),
+        tt_assets.layout.clone(),
+        ENEMY_TEAM,
     );
 
     grid_cursor::spawn_cursor(

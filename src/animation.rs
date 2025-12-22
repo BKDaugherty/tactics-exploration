@@ -6,8 +6,8 @@ use bevy::prelude::*;
 pub use tinytactics::Direction;
 
 use crate::{
-    animation::tinytactics::Character,
-    grid::{GridMovement, GridVec},
+    animation::{combat::ATTACK_FRAME_DURATION, tinytactics::Character},
+    grid::{GridManagerResource, GridMovement, GridVec},
 };
 
 #[derive(Component, Debug, Clone)]
@@ -16,6 +16,274 @@ pub struct FacingDirection(pub Direction);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AnimationType {
     Idle,
+    Attacking,
+}
+
+/// We need some way to decide whether or not we should
+/// play the animation or not
+#[derive(PartialEq, Eq, PartialOrd, Copy, Clone, Hash, Debug)]
+pub enum AnimationPriority {
+    Idle,
+    Reaction,
+    Combat,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AnimationMarker {
+    /// The frame at which the animation "hit" the target.
+    ///
+    /// Our combat system expects this to be emitted in order to advance the "AttackPhase"
+    HitFrame,
+
+    /// The frame at which the animation is "complete"
+    ///
+    /// Typically this is only used when the game "care's" about the animation being complete.
+    /// This wouldn't typically be given for an "Idle" animation (at least for now)
+    Complete,
+}
+
+#[derive(Debug, Message)]
+pub struct AnimationMarkerMessage {
+    pub entity: Entity,
+    pub marker: AnimationMarker,
+}
+
+pub fn unit_animation_tick_system(
+    time: Res<Time>,
+    animation_data: Res<TinytacticsAssets>,
+    mut query: Query<(
+        Entity,
+        &FacingDirection,
+        &mut UnitAnimationPlayer,
+        &mut Sprite,
+    )>,
+    mut marker_events: MessageWriter<AnimationMarkerMessage>,
+) {
+    for (entity, dir, mut player, mut sprite) in &mut query {
+        // Get the current animation, if any
+        let Some(anim) = &mut player.current_animation else {
+            continue;
+        };
+
+        let key = UnitAnimationKey {
+            kind: anim.id,
+            direction: dir.0,
+        };
+
+        let Some(clip_data) = animation_data.unit_animation_data.animations.get(&key) else {
+            warn!("No animation data found for running clip");
+            continue;
+        };
+
+        anim.timer.tick(time.delta());
+        if anim.timer.just_finished() {
+            anim.frame += 1;
+
+            // Send event before bounds checking to allow for using the len(frames) as a "Complete" marker
+            if let Some(marker) = clip_data.inner.animation_offset_markers.get(&anim.frame) {
+                marker_events.write(AnimationMarkerMessage {
+                    entity,
+                    marker: *marker,
+                });
+            }
+
+            if anim.frame >= clip_data.inner.frame_count {
+                player.current_animation = None;
+                continue;
+            }
+        }
+
+        if let Some(texture_atlas) = sprite.texture_atlas.as_mut() {
+            let target_frame = anim.frame + clip_data.start_index;
+            texture_atlas.index = target_frame;
+        }
+    }
+}
+
+/// The set of systems and data associated with Combat Animations
+pub mod combat {
+    use super::*;
+    use crate::combat::{AttackExecution, AttackIntent, AttackPhase, DefenderReaction};
+
+    pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 8.;
+    pub const HURT_BY_ATTACK_FRAME_DURATION: f32 = 1.0 / 4.;
+
+    pub fn apply_animation_on_attack_phase(
+        mut attacks: Query<&mut AttackExecution>,
+        mut anims: Query<&mut UnitAnimationPlayer>,
+    ) {
+        for mut attack in attacks.iter_mut() {
+            match attack.animation_phase {
+                crate::combat::AttackPhase::Windup => {
+                    if let Some(mut attacker) = anims.get_mut(attack.attacker).ok() {
+                        attacker.play(AnimToPlay {
+                            id: UnitAnimationKind::Attack,
+                            frame_duration: ATTACK_FRAME_DURATION,
+                        });
+                    }
+                    attack.animation_phase = crate::combat::AttackPhase::PostWindup;
+                }
+                crate::combat::AttackPhase::Impact => {
+                    let anim = match attack.outcome.defender_reaction {
+                        DefenderReaction::TakeHit => UnitAnimationKind::TakeDamage,
+                        _ => {
+                            warn!("We only have a TakeDamage animation!");
+                            UnitAnimationKind::TakeDamage
+                        }
+                    };
+                    if let Some(mut defender) = anims.get_mut(attack.defender).ok() {
+                        defender.play(AnimToPlay {
+                            frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
+                            id: anim,
+                        });
+                    }
+                    attack.animation_phase = AttackPhase::PostImpact;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// How do I ensure that this runs before I despawn the AttackIntent?
+    pub fn update_facing_direction_on_attack(
+        grid_resource_manager: Res<GridManagerResource>,
+        query: Query<(Entity, &AttackIntent)>,
+        mut facing_query: Query<&mut FacingDirection>,
+    ) {
+        for (_, a) in query.iter() {
+            let grid = &(grid_resource_manager.grid_manager);
+            let a_pos = grid.get_by_id(&a.attacker);
+            let t_pos = grid.get_by_id(&a.defender);
+
+            match (a_pos, t_pos) {
+                (Some(attacker_position), Some(target_position)) => {
+                    let Some(mut facing) = facing_query.get_mut(a.attacker).ok() else {
+                        continue;
+                    };
+
+                    let y = target_position.y as i32 - attacker_position.y as i32;
+                    let x = target_position.x as i32 - attacker_position.x as i32;
+
+                    let x_dir = if x >= 0 { Direction::NE } else { Direction::SW };
+                    let y_dir = if y >= 0 { Direction::SE } else { Direction::NW };
+
+                    *facing = FacingDirection(if x.abs() > y.abs() { x_dir } else { y_dir })
+                }
+                _ => {
+                    continue;
+                }
+            }
+        }
+    }
+}
+
+pub fn idle_animation_system(
+    res: Res<TinytacticsAssets>,
+    mut query: Query<&mut UnitAnimationPlayer>,
+) {
+    // TODO: Would be great to have these resources be separate probably and allow for getting just the inner data vs. the actual sprite offsets.
+    let Some(idle_inner_data) = res.unit_animation_data.animations.get(&UnitAnimationKey {
+        kind: UnitAnimationKind::IdleWalk,
+        direction: Direction::NE,
+    }) else {
+        return;
+    };
+
+    let anim_to_play = AnimToPlay {
+        id: UnitAnimationKind::IdleWalk,
+        frame_duration: idle_inner_data.inner.frame_duration,
+    };
+
+    for mut player in &mut query {
+        match &player.current_animation {
+            Some(anim) => {
+                if anim.id != anim_to_play.id {
+                    player.play(anim_to_play.clone())
+                }
+            }
+            None => player.play(anim_to_play.clone()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UnitAnimationKind {
+    IdleWalk,
+    IdleHurt,
+    Charge,
+    Attack,
+    TakeDamage,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UnitAnimationKey {
+    pub kind: UnitAnimationKind,
+    pub direction: Direction,
+}
+
+impl UnitAnimationKind {
+    fn priority(&self) -> AnimationPriority {
+        match self {
+            UnitAnimationKind::IdleWalk => AnimationPriority::Idle,
+            UnitAnimationKind::IdleHurt => AnimationPriority::Idle,
+            UnitAnimationKind::Charge => AnimationPriority::Combat,
+            UnitAnimationKind::Attack => AnimationPriority::Combat,
+            UnitAnimationKind::TakeDamage => AnimationPriority::Reaction,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PlayingAnimation {
+    id: UnitAnimationKind,
+    frame: usize,
+    timer: Timer,
+}
+
+#[derive(Clone, Debug)]
+pub struct AnimToPlay {
+    id: UnitAnimationKind,
+    frame_duration: f32,
+}
+
+#[derive(Component, Debug)]
+pub struct UnitAnimationPlayer {
+    current_animation: Option<PlayingAnimation>,
+}
+
+impl UnitAnimationPlayer {
+    pub fn new() -> Self {
+        Self {
+            current_animation: None,
+        }
+    }
+
+    pub fn play(&mut self, anim: AnimToPlay) {
+        if self.preempts(&anim) && !self.is_already_running(&anim) {
+            self.current_animation = Some(PlayingAnimation {
+                id: anim.id,
+                frame: 0,
+                timer: Timer::from_seconds(anim.frame_duration, TimerMode::Repeating),
+            })
+        }
+    }
+
+    fn is_already_running(&self, anim: &AnimToPlay) -> bool {
+        self.current_animation
+            .as_ref()
+            .map(|t| t.id == anim.id)
+            .unwrap_or_default()
+    }
+
+    fn preempts(&self, anim: &AnimToPlay) -> bool {
+        self.current_priority()
+            .map(|t| anim.id.priority() >= t)
+            .unwrap_or(true)
+    }
+
+    pub fn current_priority(&self) -> Option<AnimationPriority> {
+        self.current_animation.as_ref().map(|a| a.id.priority())
+    }
 }
 
 #[derive(Component, Debug)]
@@ -23,50 +291,109 @@ pub struct AnimationState(pub AnimationType);
 
 #[derive(Asset, TypePath, Debug)]
 pub struct UnitAnimations {
-    pub idle: HashMap<Direction, UnitAnimationData>,
+    pub animations: HashMap<UnitAnimationKey, UnitAnimationData>,
 }
 
-// TODO: Load from _animation_data.json (maybe just preparse into this format)
-pub const UNIT_IDLE_ANIMATIONS: [(Direction, UnitAnimationData); 4] = [
-    (
-        Direction::NE,
-        UnitAnimationData {
-            start_index: 0,
-            end_index: 7,
-            duration: 1.0,
-        },
-    ),
-    (
-        Direction::NW,
-        UnitAnimationData {
-            start_index: 8,
-            end_index: 15,
-            duration: 1.0,
-        },
-    ),
-    (
-        Direction::SE,
-        UnitAnimationData {
-            start_index: 16,
-            end_index: 23,
-            duration: 1.0,
-        },
-    ),
-    (
-        Direction::SW,
-        UnitAnimationData {
-            start_index: 24,
-            end_index: 31,
-            duration: 1.0,
-        },
-    ),
-];
+pub fn generate_animations(
+    kind: UnitAnimationKind,
+    data: UnitAnimationDataInner,
+    direction_to_start: &[(Direction, usize); 4],
+) -> Vec<(UnitAnimationKey, UnitAnimationData)> {
+    direction_to_start
+        .into_iter()
+        .map(|(k, v)| {
+            (
+                UnitAnimationKey {
+                    kind,
+                    direction: *k,
+                },
+                UnitAnimationData {
+                    start_index: *v,
+                    inner: data.clone(),
+                },
+            )
+        })
+        .collect()
+}
+
+pub fn unit_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
+    let idle_data = UnitAnimationDataInner {
+        frame_count: 8,
+        frame_duration: (1.0 / 8.),
+        animation_offset_markers: HashMap::new(),
+    };
+
+    let idle_start_indices = [
+        (Direction::NE, 0),
+        (Direction::NW, 8),
+        (Direction::SE, 16),
+        (Direction::SW, 24),
+    ];
+
+    let attack_data = UnitAnimationDataInner {
+        frame_count: 4,
+        frame_duration: ATTACK_FRAME_DURATION,
+        animation_offset_markers: HashMap::from([
+            (2, AnimationMarker::HitFrame),
+            (4, AnimationMarker::Complete),
+        ]),
+    };
+
+    let attack_start_indices = [
+        (Direction::NE, 32),
+        (Direction::NW, 36),
+        (Direction::SE, 40),
+        (Direction::SW, 44),
+    ];
+
+    let attack_anims = generate_animations(
+        UnitAnimationKind::Attack,
+        attack_data,
+        &attack_start_indices,
+    );
+
+    let take_damage_indices = [
+        (Direction::NE, 80),
+        (Direction::NW, 84),
+        (Direction::SE, 88),
+        (Direction::SW, 92),
+    ];
+
+    let take_damage_anim_data = UnitAnimationDataInner {
+        frame_count: 1,
+        frame_duration: (1.0 / 4.),
+        animation_offset_markers: HashMap::new(),
+    };
+
+    let take_damage_anims = generate_animations(
+        UnitAnimationKind::TakeDamage,
+        take_damage_anim_data,
+        &take_damage_indices,
+    );
+
+    let idle_anims =
+        generate_animations(UnitAnimationKind::IdleWalk, idle_data, &idle_start_indices);
+
+    let mut all_anims = Vec::new();
+
+    all_anims.extend(idle_anims);
+    all_anims.extend(attack_anims);
+    all_anims.extend(take_damage_anims);
+
+    all_anims.into_iter().collect()
+}
 
 #[derive(Debug)]
 pub struct UnitAnimationData {
     pub start_index: usize,
-    pub end_index: usize,
-    pub duration: f32,
+    pub inner: UnitAnimationDataInner,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnitAnimationDataInner {
+    pub frame_duration: f32,
+    pub frame_count: usize,
+    pub animation_offset_markers: HashMap<usize, AnimationMarker>,
 }
 
 // Create a Texture Atlas from a tinytactics spritesheet
@@ -74,6 +401,7 @@ pub struct UnitAnimationData {
 pub struct TinytacticsAssets {
     pub fighter_spritesheet: Handle<Image>,
     pub mage_spritesheet: Handle<Image>,
+    pub cleric_spritesheet: Handle<Image>,
     /// Probably could do one of these for all characters for now
     pub layout: Handle<TextureAtlasLayout>,
     pub animation_data: Handle<tinytactics::AnimationAsset>,
@@ -87,6 +415,7 @@ pub fn startup_load_tinytactics_assets(
 ) {
     let fighter_spritesheet = asset_server.load(tinytactics::spritesheet_path(Character::Fighter));
     let mage_spritesheet = asset_server.load(tinytactics::spritesheet_path(Character::Mage));
+    let cleric_spritesheet = asset_server.load(tinytactics::spritesheet_path(Character::Cleric));
     let layout = texture_atlas_layouts.add(TextureAtlasLayout::from_grid(
         UVec2::new(tinytactics::FRAME_SIZE_X, tinytactics::FRAME_SIZE_Y),
         4,
@@ -96,16 +425,17 @@ pub fn startup_load_tinytactics_assets(
     ));
 
     let animation_data = asset_server.load(tinytactics::spritesheet_data_path(Character::Fighter));
-    let unit_animations = UnitAnimations {
-        idle: HashMap::from(UNIT_IDLE_ANIMATIONS),
-    };
+    let unit_animations = unit_animations();
 
     commands.insert_resource(TinytacticsAssets {
         fighter_spritesheet,
         mage_spritesheet,
+        cleric_spritesheet,
         layout,
         animation_data,
-        unit_animation_data: unit_animations,
+        unit_animation_data: UnitAnimations {
+            animations: unit_animations,
+        },
     })
 }
 
@@ -113,7 +443,7 @@ pub fn startup_load_tinytactics_assets(
 #[derive(Component, Deref, DerefMut)]
 pub struct AnimationTimer(pub Timer);
 
-pub fn update_facing_direction(
+pub fn update_facing_direction_on_movement(
     mut query: Query<(&GridMovement, &mut FacingDirection), Changed<GridMovement>>,
 ) {
     for (movement, mut facing_direction) in query.iter_mut() {
@@ -137,78 +467,6 @@ pub fn update_facing_direction(
                     facing_direction.0 = new_direction;
                 }
             }
-        }
-    }
-}
-
-pub fn update_sprite_on_animation_change(
-    tinytactics_assets: Res<TinytacticsAssets>,
-    mut query: Query<
-        (
-            &AnimationState,
-            &FacingDirection,
-            &mut AnimationTimer,
-            &mut Sprite,
-        ),
-        Or<(Changed<AnimationState>, Changed<FacingDirection>)>,
-    >,
-) {
-    for (state, facing_direction, mut timer, mut sprite) in &mut query {
-        // Create new timer based on state? timer.0 = Timer::new()
-        let anim_data = match state.0 {
-            AnimationType::Idle => tinytactics_assets
-                .unit_animation_data
-                .idle
-                .get(&facing_direction.0),
-        };
-
-        if let Some(anim_data) = anim_data {
-            if let Some(atlas) = &mut sprite.texture_atlas {
-                atlas.index = anim_data.start_index;
-            }
-
-            // Reset the timer
-            timer.0 = Timer::from_seconds(
-                anim_data.duration / (anim_data.end_index - anim_data.start_index + 1) as f32,
-                TimerMode::Repeating,
-            )
-        }
-    }
-}
-
-pub fn animate_sprite(
-    time: Res<Time>,
-    tinytactics_assets: Res<TinytacticsAssets>,
-    mut query: Query<(
-        &AnimationState,
-        &FacingDirection,
-        &mut AnimationTimer,
-        &mut Sprite,
-    )>,
-) {
-    for (state, facing_direction, mut timer, mut sprite) in &mut query {
-        timer.tick(time.delta());
-
-        let unit_animation_data = match state.0 {
-            AnimationType::Idle => tinytactics_assets
-                .unit_animation_data
-                .idle
-                .get(&facing_direction.0),
-        };
-
-        let Some(unit_animation_data) = unit_animation_data else {
-            warn!("No animation data found for unit");
-            continue;
-        };
-
-        if timer.just_finished()
-            && let Some(atlas) = &mut sprite.texture_atlas
-        {
-            atlas.index = if atlas.index == unit_animation_data.end_index {
-                unit_animation_data.start_index
-            } else {
-                atlas.index + 1
-            };
         }
     }
 }

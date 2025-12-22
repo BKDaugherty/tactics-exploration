@@ -1,11 +1,12 @@
 use bevy::prelude::*;
-use bevy_egui::egui::epaint::text::cursor;
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::animation::{
-    AnimationState, AnimationTimer, AnimationType, Direction, FacingDirection, TinytacticsAssets,
+    Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey, UnitAnimationKind,
+    UnitAnimationPlayer,
 };
 use crate::battle::{UnitCommandMessage, UnitSelectionMessage};
+use crate::combat::AttackIntent;
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
 use crate::grid_cursor::LockedOn;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
@@ -59,8 +60,7 @@ pub struct UnitBundle {
     pub sprite: Sprite,
     pub transform: Transform,
     pub facing_direction: FacingDirection,
-    pub animation_state: AnimationState,
-    pub animation_timer: AnimationTimer,
+    pub animation_player: UnitAnimationPlayer,
 }
 
 pub fn spawn_obstacle_unit(
@@ -85,6 +85,55 @@ pub fn spawn_obstacle_unit(
         .id()
 }
 
+// TODO: I really need to clean up our Unit creation process
+pub fn spawn_enemy(
+    commands: &mut Commands,
+    unit_name: String,
+    tt_assets: &Res<TinytacticsAssets>,
+    grid_position: crate::grid::GridPosition,
+    spritesheet: Handle<Image>,
+    texture_atlas_layout: Handle<TextureAtlasLayout>,
+    team: Team,
+) {
+    let transform = crate::grid::init_grid_to_world_transform(&grid_position);
+    let direction = Direction::SW;
+    let animation_data = tt_assets
+        .unit_animation_data
+        .animations
+        .get(&UnitAnimationKey {
+            direction,
+            kind: UnitAnimationKind::IdleWalk,
+        })
+        .expect("Must have animation data");
+
+    commands.spawn((
+        Unit {
+            stats: Stats {
+                max_health: 10,
+                health: 10,
+                strength: 5,
+                movement: 2,
+            },
+            obstacle: ObstacleType::Filter(HashSet::from([team])),
+            team,
+            name: unit_name,
+        },
+        grid_position,
+        Sprite {
+            image: spritesheet,
+            texture_atlas: Some(TextureAtlas {
+                layout: texture_atlas_layout,
+                index: animation_data.start_index,
+            }),
+            color: Color::linear_rgb(1.0, 1.0, 1.0),
+            ..Default::default()
+        },
+        transform,
+        FacingDirection(crate::animation::Direction::SW),
+        UnitAnimationPlayer::new(),
+    ));
+}
+
 /// Temporary function for spawning a test unit
 pub fn spawn_unit(
     commands: &mut Commands,
@@ -100,9 +149,13 @@ pub fn spawn_unit(
     let direction = Direction::SW;
     let animation_data = tt_assets
         .unit_animation_data
-        .idle
-        .get(&direction)
+        .animations
+        .get(&UnitAnimationKey {
+            direction,
+            kind: UnitAnimationKind::IdleWalk,
+        })
         .expect("Must have animation data");
+
     commands.spawn((UnitBundle {
         unit: Unit {
             stats: Stats {
@@ -128,8 +181,7 @@ pub fn spawn_unit(
         transform,
         player,
         facing_direction: FacingDirection(crate::animation::Direction::SW),
-        animation_state: AnimationState(AnimationType::Idle),
-        animation_timer: AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
+        animation_player: UnitAnimationPlayer::new(),
     },));
 }
 
@@ -461,7 +513,9 @@ pub fn handle_unit_command(
                         },
                     });
                 }
-                crate::battle::UnitCommand::Cancel => {}
+                crate::battle::UnitCommand::Cancel => {
+                    player_state.cursor_state = PlayerCursorState::Idle;
+                }
                 crate::battle::UnitCommand::Wait => {
                     warn!("Uh oh, they want to wait! We haven't built that yet!")
                 }
@@ -471,55 +525,6 @@ pub fn handle_unit_command(
         }
     }
 }
-
-#[derive(Bundle)]
-pub struct AttackBundle {
-    attacker: Attacker,
-    target: Target,
-    damage: Damage,
-}
-
-#[derive(Component)]
-pub struct Attacker(Entity);
-
-#[derive(Component)]
-pub struct Target(Entity);
-
-#[derive(Component)]
-pub struct Damage(u32);
-
-/// You gotta start somewhere you know
-pub fn damage_system(
-    mut commands: Commands,
-    query: Query<(Entity, &Attacker, &Target, &Damage)>,
-    mut unit_query: Query<&mut Unit>,
-) {
-    for (e, _, t, d) in query.iter() {
-        let Some(mut target_unit) = unit_query.get_mut(t.0).ok() else {
-            continue;
-        };
-
-        // TODO: Play Attack Animation on Attacker?
-        // Or should I have a "Attacking" component that then despwans and produces an AttackBundle
-        // TODO: Play Damage Animation on Target?
-        target_unit.stats.health = target_unit.stats.health.saturating_sub(d.0);
-
-        if target_unit.stats.health <= 0 {
-            // TODO: Play death animation if applicable, check for other thingys that might matter
-            // Probably best to spawn some form of Death Component or something that interacts with other things
-            // TODO: Also make sure this updates the GridManager where appropriate
-            commands.entity(t.0).despawn();
-        }
-
-        // After processing, despawn the Attack
-        commands.entity(e).despawn()
-    }
-}
-
-// Click on Guy sends Clicked on Guy event
-// Click on Move, sends Clicked On Move event
-// On Move event spawns overlay and sets PlayerState
-// On selecting tile, character is moved
 
 #[allow(clippy::too_many_arguments)]
 pub fn handle_unit_cursor_actions(
@@ -643,10 +648,9 @@ pub fn handle_unit_cursor_actions(
                         continue;
                     };
 
-                    commands.spawn(AttackBundle {
-                        attacker: Attacker(unit_entity),
-                        target: Target(valid_move.target),
-                        damage: Damage(1),
+                    commands.spawn(AttackIntent {
+                        attacker: unit_entity,
+                        defender: valid_move.target,
                     });
 
                     end_move(&mut overlay_message_writer, player, player_state);
