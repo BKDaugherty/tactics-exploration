@@ -6,7 +6,10 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
-use crate::{grid::GridPosition, unit::ValidMove};
+use crate::{
+    grid::GridPosition,
+    unit::{AttackOption, ValidMove},
+};
 
 #[derive(Component, Reflect, PartialEq, Eq, Hash, Debug, Copy, Clone)]
 pub enum Player {
@@ -81,6 +84,7 @@ pub enum PlayerCursorState {
     Idle,
     /// Moving Entity from source position
     MovingUnit(Entity, GridPosition, HashMap<GridPosition, ValidMove>),
+    LookingForTargetWithAttack(Entity, HashMap<GridPosition, AttackOption>),
 }
 
 #[derive(Debug, Default)]

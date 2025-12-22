@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_egui::egui::epaint::text::cursor;
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::animation::{
@@ -7,7 +8,7 @@ use crate::animation::{
 use crate::battle::{UnitCommandMessage, UnitSelectionMessage};
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
 use crate::grid_cursor::LockedOn;
-use crate::player::{Player, PlayerInputAction, PlayerState};
+use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
 use crate::{grid, grid_cursor, player};
 
@@ -71,9 +72,9 @@ pub fn spawn_obstacle_unit(
             grid_position,
             Unit {
                 stats: Stats {
-                    max_health: 0,
+                    max_health: 3,
                     strength: 0,
-                    health: 0,
+                    health: 3,
                     movement: 0,
                 },
                 obstacle: ObstacleType::Neutral,
@@ -163,6 +164,7 @@ fn spawn_overlays(
     player: Player,
     grid_positions: Vec<GridPosition>,
     grid_manager: &mut GridManager,
+    index: usize,
 ) {
     for grid_pos in grid_positions {
         let e = commands
@@ -171,6 +173,7 @@ fn spawn_overlays(
                 tile_overlay_assets.tile_overlay_image_handle.clone(),
                 tile_overlay_assets.tile_overlay_atlas_layout_handle.clone(),
                 player,
+                index,
             ),))
             .id();
         grid_manager.add_entity(e, grid_pos);
@@ -319,6 +322,12 @@ where
     UnitMovementSelection::NoPlayerUnitOnTile
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AttackOption {
+    target: Entity,
+    grid_position: GridPosition,
+}
+
 pub fn handle_unit_command(
     mut commands: Commands,
     grid_manager_res: Res<grid::GridManagerResource>,
@@ -376,12 +385,81 @@ pub fn handle_unit_command(
                     overlay_message_writer.write(OverlaysMessage {
                         player: *cursor_player,
                         action: overlay::OverlaysAction::Spawn {
+                            spawn_type: overlay::OverlaysType::Move,
                             positions: valid_moves.keys().cloned().collect(),
                         },
                     });
                 }
                 crate::battle::UnitCommand::Attack => {
-                    warn!("Uh oh, they want to attack! We haven't built that yet!")
+                    // Get the Unit who's attacking
+                    let Some((unit_entity, _, unit)) = get_singleton_component_on_grid_by_player(
+                        cursor_grid_pos,
+                        &grid_manager_res.grid_manager,
+                        |e| {
+                            let queried = player_unit_query
+                                .get(*e)
+                                .ok()
+                                .filter(|(_, p, _)| **p == *cursor_player);
+                            queried.map(|(a, b, c)| (a, *b, c.clone()))
+                        },
+                    ) else {
+                        // TODO: Fix this
+                        panic!("Uh oh, somebody moved the unit out from under us!!!");
+                    };
+
+                    let mut options_for_attack = Vec::new();
+                    // Assume all units have the same attack range for now
+                    for dir in DIRECTION_VECS {
+                        let grid::GridPositionChangeResult::Moved(possible_attack_pos) =
+                            grid_manager_res
+                                .grid_manager
+                                .change_position_with_bounds(*cursor_grid_pos, dir)
+                        else {
+                            continue;
+                        };
+
+                        // Is there a unit that can be attacked there?
+                        if let Some((target_entity, target_unit)) = grid_manager_res
+                            .grid_manager
+                            .get_by_position(&possible_attack_pos)
+                            .cloned()
+                            .unwrap_or_default()
+                            .iter()
+                            .filter_map(|e| unit_query.get(*e).ok())
+                            .next()
+                            && unit.team != target_unit.team
+                        {
+                            options_for_attack.push(AttackOption {
+                                target: target_entity,
+                                grid_position: possible_attack_pos,
+                            });
+                        }
+                    }
+
+                    let options_map: HashMap<GridPosition, AttackOption> = options_for_attack
+                        .iter()
+                        .cloned()
+                        .map(|t| (t.grid_position.clone(), t))
+                        .collect();
+
+                    // Change Player State to moving the unit
+                    player_state.cursor_state =
+                        player::PlayerCursorState::LookingForTargetWithAttack(
+                            unit_entity,
+                            options_map,
+                        );
+
+                    overlay_message_writer.write(OverlaysMessage {
+                        player: *cursor_player,
+                        action: overlay::OverlaysAction::Spawn {
+                            spawn_type: overlay::OverlaysType::Attack,
+                            positions: options_for_attack
+                                .iter()
+                                .cloned()
+                                .map(|t| t.grid_position)
+                                .collect(),
+                        },
+                    });
                 }
                 crate::battle::UnitCommand::Cancel => {}
                 crate::battle::UnitCommand::Wait => {
@@ -394,13 +472,57 @@ pub fn handle_unit_command(
     }
 }
 
+#[derive(Bundle)]
+pub struct AttackBundle {
+    attacker: Attacker,
+    target: Target,
+    damage: Damage,
+}
+
+#[derive(Component)]
+pub struct Attacker(Entity);
+
+#[derive(Component)]
+pub struct Target(Entity);
+
+#[derive(Component)]
+pub struct Damage(u32);
+
+/// You gotta start somewhere you know
+pub fn damage_system(
+    mut commands: Commands,
+    query: Query<(Entity, &Attacker, &Target, &Damage)>,
+    mut unit_query: Query<&mut Unit>,
+) {
+    for (e, _, t, d) in query.iter() {
+        let Some(mut target_unit) = unit_query.get_mut(t.0).ok() else {
+            continue;
+        };
+
+        // TODO: Play Attack Animation on Attacker?
+        // Or should I have a "Attacking" component that then despwans and produces an AttackBundle
+        // TODO: Play Damage Animation on Target?
+        target_unit.stats.health = target_unit.stats.health.saturating_sub(d.0);
+
+        if target_unit.stats.health <= 0 {
+            // TODO: Play death animation if applicable, check for other thingys that might matter
+            // Probably best to spawn some form of Death Component or something that interacts with other things
+            // TODO: Also make sure this updates the GridManager where appropriate
+            commands.entity(t.0).despawn();
+        }
+
+        // After processing, despawn the Attack
+        commands.entity(e).despawn()
+    }
+}
+
 // Click on Guy sends Clicked on Guy event
 // Click on Move, sends Clicked On Move event
 // On Move event spawns overlay and sets PlayerState
 // On selecting tile, character is moved
 
 #[allow(clippy::too_many_arguments)]
-pub fn handle_unit_movement(
+pub fn handle_unit_cursor_actions(
     mut commands: Commands,
     grid_manager_res: Res<grid::GridManagerResource>,
     mut player_state: ResMut<player::PlayerGameStates>,
@@ -508,6 +630,45 @@ pub fn handle_unit_movement(
 
                     commands.entity(cursor_entity).insert(LockedOn {});
                 }
+            } else if let PlayerCursorState::LookingForTargetWithAttack(
+                unit_entity,
+                valid_attack_moves,
+            ) = player_state.cursor_state.clone()
+            {
+                if action_state.just_pressed(&PlayerInputAction::Select) {
+                    // TODO: This selection logic is the same. I wonder if I could just have the cursor here handle selection
+                    // based on state, and then have some other system take over?
+                    let Some(valid_move) = valid_attack_moves.get(&cursor_grid_pos) else {
+                        log::warn!("Attempting to attack an invalid position");
+                        continue;
+                    };
+
+                    commands.spawn(AttackBundle {
+                        attacker: Attacker(unit_entity),
+                        target: Target(valid_move.target),
+                        damage: Damage(1),
+                    });
+
+                    end_move(&mut overlay_message_writer, player, player_state);
+                } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
+                    end_move(&mut overlay_message_writer, player, player_state);
+
+                    let Some(unit_pos) = grid_manager_res.grid_manager.get_by_id(&unit_entity)
+                    else {
+                        log::warn!("Oh no somehow our unit disappeared!");
+                        continue;
+                    };
+
+                    // Snap the cursor position back to the origin, and re-open the menu
+                    *cursor_grid_pos = unit_pos;
+
+                    unit_selection_message.write(UnitSelectionMessage {
+                        entity: unit_entity,
+                        player: *player,
+                    });
+
+                    commands.entity(cursor_entity).insert(LockedOn {});
+                }
             }
         }
     }
@@ -538,6 +699,7 @@ pub mod overlay {
             spritesheet: Handle<Image>,
             atlas_layout_handle: Handle<TextureAtlasLayout>,
             player: Player,
+            spritesheet_index: usize,
         ) -> Self {
             Self {
                 grid_position,
@@ -545,10 +707,12 @@ pub mod overlay {
                     image: spritesheet,
                     texture_atlas: Some(TextureAtlas {
                         layout: atlas_layout_handle,
-                        index: 1,
+                        index: spritesheet_index,
                     }),
                     custom_size: None,
-                    color: Color::linear_rgba(1.0, 1.0, 1.0, 0.3),
+                    // TODO: Replace this with just a single image that's White and then use Color to
+                    // change the color?
+                    color: Color::linear_rgba(1.0, 1.0, 1.0, 0.5),
                     ..Default::default()
                 },
                 transform: init_grid_to_world_transform(&grid_position),
@@ -592,8 +756,18 @@ pub mod overlay {
     }
 
     #[derive(Debug)]
+    pub enum OverlaysType {
+        Interact,
+        Move,
+        Attack,
+    }
+
+    #[derive(Debug)]
     pub enum OverlaysAction {
-        Spawn { positions: Vec<GridPosition> },
+        Spawn {
+            spawn_type: OverlaysType,
+            positions: Vec<GridPosition>,
+        },
         Despawn,
     }
 
@@ -606,13 +780,25 @@ pub mod overlay {
         mut events: MessageReader<OverlaysMessage>,
     ) {
         for event in events.read() {
-            if let OverlaysAction::Spawn { positions } = &event.action {
+            if let OverlaysAction::Spawn {
+                spawn_type,
+                positions,
+            } = &event.action
+            {
+                // TODO: Stop using indices for iso_color and replace with white image
+                // that can be overriden via Color of sprite.
+                let index = match spawn_type {
+                    OverlaysType::Interact => 2,
+                    OverlaysType::Move => 1,
+                    OverlaysType::Attack => 3,
+                };
                 spawn_overlays(
                     &mut commands,
                     &tile_overlay_assets,
                     event.player,
                     positions.clone(),
                     &mut grid_manager_res.grid_manager,
+                    index,
                 );
             } else if let OverlaysAction::Despawn = &event.action {
                 for (entity, overlay_player) in overlay_query.iter() {
@@ -639,7 +825,7 @@ mod tests {
         grid_cursor,
         player::{self, Player, PlayerGameStates, PlayerInputAction, PlayerState},
         unit::{
-            PLAYER_TEAM, Stats, Unit, handle_unit_command, handle_unit_movement,
+            PLAYER_TEAM, Stats, Unit, handle_unit_command, handle_unit_cursor_actions,
             overlay::OverlaysMessage,
         },
     };
@@ -723,7 +909,7 @@ mod tests {
 
         // Run the movement system (simulate one frame)
         app.world_mut()
-            .run_system_once(handle_unit_movement)
+            .run_system_once(handle_unit_cursor_actions)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         // Handle Unit Movement should incur a message to the UI to say that the given unit was selected.
@@ -755,7 +941,7 @@ mod tests {
 
         // UnitMovement should spawn some GridMovement, let's let that resolve and validate that our entity is moved to the correct space.
         app.world_mut()
-            .run_system_once(handle_unit_movement)
+            .run_system_once(handle_unit_cursor_actions)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         assert!(app.world().get::<GridMovement>(unit_entity).is_some());
