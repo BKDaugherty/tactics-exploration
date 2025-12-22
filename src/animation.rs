@@ -67,7 +67,7 @@ pub fn unit_animation_tick_system(
 
         let key = UnitAnimationKey {
             kind: anim.id,
-            direction: dir.0,
+            direction: dir.0.animation_direction(),
         };
 
         let Some(clip_data) = animation_data.unit_animation_data.animations.get(&key) else {
@@ -96,6 +96,7 @@ pub fn unit_animation_tick_system(
         if let Some(texture_atlas) = sprite.texture_atlas.as_mut() {
             let target_frame = anim.frame + clip_data.start_index;
             texture_atlas.index = target_frame;
+            sprite.flip_x = dir.0.should_flip_across_y();
         }
     }
 }
@@ -597,6 +598,7 @@ pub mod tinytactics {
         serde::Serialize,
         serde::Deserialize,
     )]
+
     pub enum Direction {
         NE,
         NW,
@@ -605,12 +607,32 @@ pub mod tinytactics {
     }
 
     impl Direction {
-        pub fn flip_y(&self) -> Direction {
+        pub fn flip_across_y(&self) -> Direction {
             match self {
                 Direction::NE => Direction::NW,
                 Direction::NW => Direction::NE,
                 Direction::SE => Direction::SW,
                 Direction::SW => Direction::SE,
+            }
+        }
+
+        // TODO: Should I add a different type here to
+        // better constrain the Domain?
+        pub fn animation_direction(&self) -> Direction {
+            match self {
+                Direction::NE => Direction::NE,
+                Direction::NW => Direction::NE,
+                Direction::SE => Direction::SE,
+                Direction::SW => Direction::SE,
+            }
+        }
+
+        pub fn should_flip_across_y(&self) -> bool {
+            match self {
+                Direction::NE => false,
+                Direction::SE => false,
+                Direction::SW => true,
+                Direction::NW => true,
             }
         }
     }
