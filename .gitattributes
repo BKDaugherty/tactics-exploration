@@ -59,3 +59,10 @@ assets/map_assets/example-map/iso-64x64-building.png filter=lfs diff=lfs merge=l
 assets/unit_assets/spritesheets/cleric_spritesheet.png filter=lfs diff=lfs merge=lfs -text
 assets/unit_assets/spritesheets/fighter_spritesheet.png filter=lfs diff=lfs merge=lfs -text
 assets/unit_assets/spritesheets/mage_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/IronSword_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/Scepter_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/WoodenStaff_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/WoodenSword_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/Hatchet_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/unit_assets/spritesheets/IronAxe_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/map_assets/example-map/iso-64x64-outside.png filter=lfs diff=lfs merge=lfs -text

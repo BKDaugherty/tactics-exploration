@@ -26,7 +26,10 @@ pub fn spawn_cursor(
     player: player::Player,
     initial_grid_pos: grid::GridPosition,
 ) {
-    let initial_transform = grid::init_grid_to_world_transform(&initial_grid_pos);
+    let mut initial_transform = grid::init_grid_to_world_transform(&initial_grid_pos);
+
+    // Put cursor behind players
+    initial_transform.translation.z -= 50.;
     commands.spawn((CursorBundle {
         grid_position: initial_grid_pos,
         transform: initial_transform,

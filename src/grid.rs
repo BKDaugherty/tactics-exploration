@@ -175,9 +175,6 @@ pub fn sync_grid_positions_to_manager(
     }
 }
 
-// Add this constant for your tile size
-pub const TILE_SIZE: f32 = 16.0; // Adjust to your actual tile size
-
 /// System to sync GridPosition to world Transform
 ///
 /// Not so sure about this just yet.

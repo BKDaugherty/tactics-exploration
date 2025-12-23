@@ -6,7 +6,10 @@ use bevy::prelude::*;
 pub use tinytactics::Direction;
 
 use crate::{
-    animation::{combat::ATTACK_FRAME_DURATION, tinytactics::Character},
+    animation::{
+        combat::ATTACK_FRAME_DURATION,
+        tinytactics::{Character, WeaponType},
+    },
     grid::{GridManagerResource, GridMovement, GridVec},
     unit::Unit,
 };
@@ -49,15 +52,27 @@ pub struct AnimationMarkerMessage {
     pub marker: AnimationMarker,
 }
 
+#[derive(Component)]
+pub struct AnimationFollower {
+    pub leader: Entity,
+}
+
 pub fn unit_animation_tick_system(
     time: Res<Time>,
     animation_data: Res<TinytacticsAssets>,
-    mut query: Query<(
-        Entity,
-        &FacingDirection,
-        &mut UnitAnimationPlayer,
-        &mut Sprite,
-    )>,
+    mut query: Query<
+        (
+            Entity,
+            &FacingDirection,
+            &mut UnitAnimationPlayer,
+            &mut Sprite,
+        ),
+        Without<AnimationFollower>,
+    >,
+    mut follower_query: Query<
+        (&AnimationFollower, &mut Sprite, &mut Visibility),
+        With<AnimationFollower>,
+    >,
     mut marker_events: MessageWriter<AnimationMarkerMessage>,
 ) {
     for (entity, dir, mut player, mut sprite) in &mut query {
@@ -71,7 +86,7 @@ pub fn unit_animation_tick_system(
             direction: dir.0.animation_direction(),
         };
 
-        let Some(clip_data) = animation_data.unit_animation_data.animations.get(&key) else {
+        let Some(clip_data) = animation_data.unit_animation_data.unit_animations.get(&key) else {
             warn!("No animation data found for running clip");
             continue;
         };
@@ -100,6 +115,40 @@ pub fn unit_animation_tick_system(
             sprite.flip_x = dir.0.should_flip_across_y();
         }
     }
+
+    // TODO: This system feels really hyperspecific for overlays based on Attack
+    // I'd love to make these a littel better
+    for (follower, mut sprite, mut vis) in follower_query.iter_mut() {
+        if let Some((_, facing_direction, player, _)) = query.get(follower.leader).ok() {
+            let Some(anim) = &player.current_animation else {
+                *vis = Visibility::Hidden;
+                continue;
+            };
+
+            let Some(weapon_animation) =
+                animation_data
+                    .unit_animation_data
+                    .weapon_animations
+                    .get(&UnitAnimationKey {
+                        kind: anim.id,
+                        direction: facing_direction.0.animation_direction(),
+                    })
+            else {
+                *vis = Visibility::Hidden;
+                continue;
+            };
+
+            let Some(texture_atlas) = sprite.texture_atlas.as_mut() else {
+                warn!("No texture atlas for Weapon Sprite Follower");
+                continue;
+            };
+
+            texture_atlas.index = anim.frame + weapon_animation.start_index;
+            sprite.flip_x = facing_direction.0.should_flip_across_y();
+
+            *vis = Visibility::Visible;
+        }
+    }
 }
 
 /// The set of systems and data associated with Combat Animations
@@ -107,8 +156,8 @@ pub mod combat {
     use super::*;
     use crate::combat::{AttackExecution, AttackIntent, AttackPhase, DefenderReaction};
 
-    pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 8.;
-    pub const HURT_BY_ATTACK_FRAME_DURATION: f32 = 1.0 / 4.;
+    pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 12.;
+    pub const HURT_BY_ATTACK_FRAME_DURATION: f32 = ATTACK_FRAME_DURATION * 2.;
 
     pub fn apply_animation_on_attack_phase(
         mut attacks: Query<&mut AttackExecution>,
@@ -190,10 +239,14 @@ pub fn idle_animation_system(
             (false, false) => UnitAnimationKind::IdleWalk,
         };
 
-        let Some(inner) = res.unit_animation_data.animations.get(&UnitAnimationKey {
-            kind: anim_kind_to_play,
-            direction: dir.0.animation_direction(),
-        }) else {
+        let Some(inner) = res
+            .unit_animation_data
+            .unit_animations
+            .get(&UnitAnimationKey {
+                kind: anim_kind_to_play,
+                direction: dir.0.animation_direction(),
+            })
+        else {
             return;
         };
 
@@ -300,7 +353,8 @@ pub struct AnimationState(pub AnimationType);
 
 #[derive(Asset, TypePath, Debug)]
 pub struct UnitAnimations {
-    pub animations: HashMap<UnitAnimationKey, UnitAnimationData>,
+    pub unit_animations: HashMap<UnitAnimationKey, UnitAnimationData>,
+    pub weapon_animations: HashMap<UnitAnimationKey, UnitAnimationData>,
 }
 
 pub fn generate_animations(
@@ -323,6 +377,21 @@ pub fn generate_animations(
             )
         })
         .collect()
+}
+
+pub fn weapon_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
+    let attack_data = UnitAnimationDataInner {
+        frame_count: 4,
+        frame_duration: ATTACK_FRAME_DURATION,
+        animation_offset_markers: HashMap::new(),
+    };
+    let attack_start_indices = [(Direction::NE, 0), (Direction::SE, 4)];
+    let attack_anims = generate_animations(
+        UnitAnimationKind::Attack,
+        attack_data,
+        &attack_start_indices,
+    );
+    attack_anims.into_iter().collect()
 }
 
 pub fn unit_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
@@ -426,8 +495,11 @@ pub struct TinytacticsAssets {
     pub fighter_spritesheet: Handle<Image>,
     pub mage_spritesheet: Handle<Image>,
     pub cleric_spritesheet: Handle<Image>,
+    pub iron_axe_spritesheet: Handle<Image>,
+    pub scepter_spritesheet: Handle<Image>,
     /// Probably could do one of these for all characters for now
-    pub layout: Handle<TextureAtlasLayout>,
+    pub unit_layout: Handle<TextureAtlasLayout>,
+    pub weapon_layout: Handle<TextureAtlasLayout>,
     pub animation_data: Handle<tinytactics::AnimationAsset>,
     pub unit_animation_data: UnitAnimations,
 }
@@ -440,26 +512,45 @@ pub fn startup_load_tinytactics_assets(
     let fighter_spritesheet = asset_server.load(tinytactics::spritesheet_path(Character::Fighter));
     let mage_spritesheet = asset_server.load(tinytactics::spritesheet_path(Character::Mage));
     let cleric_spritesheet = asset_server.load(tinytactics::spritesheet_path(Character::Cleric));
+    let iron_axe_spritesheet =
+        asset_server.load(tinytactics::weapon_spritesheet_path(WeaponType::IronAxe));
+    let scepter_spritesheet =
+        asset_server.load(tinytactics::weapon_spritesheet_path(WeaponType::Scepter));
+    let weapon_layout = texture_atlas_layouts.add(TextureAtlasLayout::from_grid(
+        UVec2::new(
+            tinytactics::FRAME_SIZE_X + 16,
+            tinytactics::FRAME_SIZE_Y + 16,
+        ),
+        4,
+        2,
+        None,
+        None,
+    ));
     let layout = texture_atlas_layouts.add(TextureAtlasLayout::from_grid(
         UVec2::new(tinytactics::FRAME_SIZE_X, tinytactics::FRAME_SIZE_Y),
         4,
-        32,
+        16,
         None,
         None,
     ));
 
     let animation_data = asset_server.load(tinytactics::spritesheet_data_path(Character::Fighter));
     let unit_animations = unit_animations();
+    let weapon_animations = weapon_animations();
 
     commands.insert_resource(TinytacticsAssets {
         fighter_spritesheet,
         mage_spritesheet,
         cleric_spritesheet,
-        layout,
+        unit_layout: layout,
         animation_data,
+        scepter_spritesheet,
         unit_animation_data: UnitAnimations {
-            animations: unit_animations,
+            unit_animations,
+            weapon_animations,
         },
+        iron_axe_spritesheet,
+        weapon_layout,
     })
 }
 
@@ -672,11 +763,12 @@ pub mod tinytactics {
     }
 
     pub const FILE_PREFIX: &str = "assets/unit_assets/tinytactics_battlekiti_v1_0/";
-    pub const DATE_MADE: &str = "20240427";
+    pub const UNIT_DATE_MADE: &str = "20240427";
+    pub const WEAPON_DATE_MADE: &str = "20240429";
 
     pub fn sprite_filename(character: Character, action: Action, dir: Direction) -> PathBuf {
         PathBuf::from_str(&format!(
-            "{FILE_PREFIX}{DATE_MADE}{}-{}{}.png",
+            "{FILE_PREFIX}{UNIT_DATE_MADE}{}-{}{}.png",
             character.to_string(),
             action.to_string(),
             dir.to_string()
@@ -723,5 +815,69 @@ pub mod tinytactics {
             frame_count: hort_index_count * vert_index_count,
             frame_indices,
         }
+    }
+
+    #[derive(
+        Debug,
+        Clone,
+        Copy,
+        Hash,
+        PartialEq,
+        Eq,
+        Ord,
+        PartialOrd,
+        serde::Serialize,
+        serde::Deserialize,
+    )]
+    pub enum WeaponType {
+        Hatchet,
+        IronAxe,
+        IronSword,
+        Scepter,
+        WoodenStaff,
+        WoodenSword,
+    }
+
+    impl WeaponType {
+        pub fn variants() -> Vec<WeaponType> {
+            vec![
+                WeaponType::Hatchet,
+                WeaponType::IronAxe,
+                WeaponType::IronSword,
+                WeaponType::Scepter,
+                WeaponType::WoodenStaff,
+                WeaponType::WoodenSword,
+            ]
+        }
+    }
+
+    impl std::fmt::Display for WeaponType {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                WeaponType::Hatchet => write!(f, "Hatchet"),
+                WeaponType::IronAxe => write!(f, "IronAxe"),
+                WeaponType::IronSword => write!(f, "IronSword"),
+                WeaponType::Scepter => write!(f, "Scepter"),
+                WeaponType::WoodenStaff => write!(f, "WoodenStaff"),
+                WeaponType::WoodenSword => write!(f, "WoodenSword"),
+            }
+        }
+    }
+
+    pub fn weapon_attack_sprite_filename(weapon: WeaponType, dir: Direction) -> PathBuf {
+        PathBuf::from_str(&format!(
+            "{FILE_PREFIX}{WEAPON_DATE_MADE}weapons-{}attack{}.png",
+            weapon.to_string(),
+            dir.to_string()
+        ))
+        .expect("Should be valid path")
+    }
+
+    pub fn weapon_spritesheet_path(weapon: WeaponType) -> PathBuf {
+        PathBuf::from_str(&format!(
+            "unit_assets/spritesheets/{}_spritesheet.png",
+            weapon
+        ))
+        .expect("Should be valid path")
     }
 }
