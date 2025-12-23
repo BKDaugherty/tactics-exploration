@@ -18,7 +18,7 @@ use crate::{
         tinytactics::AnimationAsset,
         unit_animation_tick_system, update_facing_direction_on_movement,
     },
-    assets::{CURSOR_PATH, EXAMPLE_MAP_PATH, OVERLAY_PATH},
+    assets::{CURSOR_PATH, EXAMPLE_MAP_2_PATH, EXAMPLE_MAP_PATH, OVERLAY_PATH},
     battle_menu::{
         activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions, update_player_ui_info,
     },
@@ -122,6 +122,7 @@ pub fn battle_plugin(app: &mut App) {
 }
 
 const DEMO_SQUARE_GRID_BOUNDS: u32 = 8;
+const DEMO_2_GRID_BOUNDS: u32 = 12;
 
 pub fn load_battle_asset_resources(
     mut commands: Commands,
@@ -142,6 +143,77 @@ pub fn load_battle_asset_resources(
     });
 
     startup_load_tinytactics_assets(&mut commands, &asset_server, &mut texture_atlas_layouts);
+}
+
+pub fn load_demo_battle_scene_2(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    tt_assets: Res<TinytacticsAssets>,
+) {
+    let map_handle: Handle<TiledMapAsset> = asset_server.load(EXAMPLE_MAP_2_PATH);
+    commands.spawn(TiledMap(map_handle));
+
+    commands.insert_resource(grid::GridManagerResource {
+        grid_manager: GridManager::new(DEMO_2_GRID_BOUNDS, DEMO_2_GRID_BOUNDS),
+    });
+
+    // Spawn players and player cursors
+    let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
+
+    let player_1_grid_pos = GridPosition { x: 1, y: 3 };
+    let player_2_grid_pos = GridPosition { x: 4, y: 6 };
+    let enemy_grid_pos = GridPosition { x: 5, y: 2 };
+
+    load_demo_battle_players(&mut commands);
+
+    spawn_unit(
+        &mut commands,
+        "Brond".to_string(),
+        &tt_assets,
+        player_1_grid_pos,
+        tt_assets.fighter_spritesheet.clone(),
+        tt_assets.iron_axe_spritesheet.clone(),
+        tt_assets.unit_layout.clone(),
+        tt_assets.weapon_layout.clone(),
+        Player::One,
+        PLAYER_TEAM,
+    );
+    spawn_unit(
+        &mut commands,
+        "Coral".to_string(),
+        &tt_assets,
+        player_2_grid_pos,
+        tt_assets.mage_spritesheet.clone(),
+        tt_assets.scepter_spritesheet.clone(),
+        tt_assets.unit_layout.clone(),
+        tt_assets.weapon_layout.clone(),
+        Player::Two,
+        PLAYER_TEAM,
+    );
+
+    spawn_enemy(
+        &mut commands,
+        "Jimothy Timbers".to_string(),
+        &tt_assets,
+        enemy_grid_pos,
+        tt_assets.cleric_spritesheet.clone(),
+        tt_assets.unit_layout.clone(),
+        ENEMY_TEAM,
+    );
+
+    grid_cursor::spawn_cursor(
+        &mut commands,
+        cursor_image.clone(),
+        player::Player::One,
+        player_1_grid_pos,
+    );
+
+    grid_cursor::spawn_cursor(
+        &mut commands,
+        cursor_image.clone(),
+        player::Player::Two,
+        player_2_grid_pos,
+    );
 }
 
 /// Loads necessary assets and resources to
@@ -176,7 +248,9 @@ pub fn load_demo_battle_scene(
         &tt_assets,
         player_1_grid_pos,
         tt_assets.fighter_spritesheet.clone(),
-        tt_assets.layout.clone(),
+        tt_assets.iron_axe_spritesheet.clone(),
+        tt_assets.unit_layout.clone(),
+        tt_assets.weapon_layout.clone(),
         Player::One,
         PLAYER_TEAM,
     );
@@ -186,7 +260,9 @@ pub fn load_demo_battle_scene(
         &tt_assets,
         player_2_grid_pos,
         tt_assets.mage_spritesheet.clone(),
-        tt_assets.layout.clone(),
+        tt_assets.scepter_spritesheet.clone(),
+        tt_assets.unit_layout.clone(),
+        tt_assets.weapon_layout.clone(),
         Player::Two,
         PLAYER_TEAM,
     );
@@ -197,7 +273,7 @@ pub fn load_demo_battle_scene(
         &tt_assets,
         enemy_grid_pos,
         tt_assets.cleric_spritesheet.clone(),
-        tt_assets.layout.clone(),
+        tt_assets.unit_layout.clone(),
         ENEMY_TEAM,
     );
 

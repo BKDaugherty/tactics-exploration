@@ -66,7 +66,7 @@ pub fn attack_intent_system(mut commands: Commands, intent_query: Query<(Entity,
             animation_phase: AttackPhase::Windup,
             outcome: AttackOutcome {
                 defender_reaction: DefenderReaction::TakeHit,
-                damage: 1,
+                damage: 4,
             },
         });
     }

@@ -1,9 +1,10 @@
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::animation::{
-    Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey, UnitAnimationKind,
-    UnitAnimationPlayer,
+    AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey,
+    UnitAnimationKind, UnitAnimationPlayer,
 };
 use crate::battle::{UnitCommandMessage, UnitSelectionMessage};
 use crate::combat::AttackIntent;
@@ -40,8 +41,6 @@ pub struct Unit {
     pub stats: Stats,
     pub obstacle: ObstacleType,
     pub team: Team,
-    // effect_modifiers: ()
-    // equipment?
 }
 
 impl Unit {
@@ -73,6 +72,7 @@ pub struct UnitBundle {
     pub transform: Transform,
     pub facing_direction: FacingDirection,
     pub animation_player: UnitAnimationPlayer,
+    pub anchor: Anchor,
 }
 
 pub fn spawn_obstacle_unit(
@@ -111,7 +111,7 @@ pub fn spawn_enemy(
     let direction = Direction::SW;
     let animation_data = tt_assets
         .unit_animation_data
-        .animations
+        .unit_animations
         .get(&UnitAnimationKey {
             direction: direction.animation_direction(),
             kind: UnitAnimationKind::IdleWalk,
@@ -144,8 +144,11 @@ pub fn spawn_enemy(
         transform,
         FacingDirection(crate::animation::Direction::SW),
         UnitAnimationPlayer::new(),
+        TINY_TACTICS_ANCHOR,
     ));
 }
+
+pub const TINY_TACTICS_ANCHOR: Anchor = Anchor(Vec2::new(0., -0.25));
 
 /// Temporary function for spawning a test unit
 pub fn spawn_unit(
@@ -154,7 +157,9 @@ pub fn spawn_unit(
     tt_assets: &Res<TinytacticsAssets>,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
+    weapon_spritesheet: Handle<Image>,
     texture_atlas_layout: Handle<TextureAtlasLayout>,
+    weapon_atlas_layout: Handle<TextureAtlasLayout>,
     player: crate::player::Player,
     team: Team,
 ) {
@@ -162,41 +167,63 @@ pub fn spawn_unit(
     let direction = Direction::SW;
     let animation_data = tt_assets
         .unit_animation_data
-        .animations
+        .unit_animations
         .get(&UnitAnimationKey {
             direction: direction.animation_direction(),
             kind: UnitAnimationKind::IdleWalk,
         })
         .expect("Must have animation data");
 
-    commands.spawn((UnitBundle {
-        unit: Unit {
-            stats: Stats {
-                max_health: 10,
-                health: 10,
-                strength: 5,
-                movement: 2,
+    let unit = commands
+        .spawn((UnitBundle {
+            unit: Unit {
+                stats: Stats {
+                    max_health: 10,
+                    health: 10,
+                    strength: 5,
+                    movement: 2,
+                },
+                obstacle: ObstacleType::Filter(HashSet::from([team])),
+                team,
+                name: unit_name,
             },
-            obstacle: ObstacleType::Filter(HashSet::from([team])),
-            team,
-            name: unit_name,
-        },
-        grid_position,
-        sprite: Sprite {
-            image: spritesheet,
-            texture_atlas: Some(TextureAtlas {
-                layout: texture_atlas_layout,
-                index: animation_data.start_index,
-            }),
-            color: Color::linear_rgb(1.0, 1.0, 1.0),
-            flip_x: direction.should_flip_across_y(),
-            ..Default::default()
-        },
-        transform,
-        player,
-        facing_direction: FacingDirection(crate::animation::Direction::SW),
-        animation_player: UnitAnimationPlayer::new(),
-    },));
+            grid_position,
+            sprite: Sprite {
+                image: spritesheet,
+                texture_atlas: Some(TextureAtlas {
+                    layout: texture_atlas_layout,
+                    index: animation_data.start_index,
+                }),
+                color: Color::linear_rgb(1.0, 1.0, 1.0),
+                flip_x: direction.should_flip_across_y(),
+                ..Default::default()
+            },
+            transform,
+            player,
+            facing_direction: FacingDirection(crate::animation::Direction::SW),
+            animation_player: UnitAnimationPlayer::new(),
+            anchor: TINY_TACTICS_ANCHOR,
+        },))
+        .id();
+
+    let weapon = commands
+        .spawn((
+            Sprite {
+                image: weapon_spritesheet,
+                texture_atlas: Some(TextureAtlas {
+                    layout: weapon_atlas_layout,
+                    index: 0,
+                }),
+                flip_x: direction.should_flip_across_y(),
+                ..Default::default()
+            },
+            AnimationFollower { leader: unit },
+            Visibility::Hidden,
+            TINY_TACTICS_ANCHOR,
+        ))
+        .id();
+
+    commands.entity(unit).add_child(weapon);
 }
 
 fn end_move(
@@ -719,6 +746,8 @@ pub mod overlay {
             player: Player,
             spritesheet_index: usize,
         ) -> Self {
+            let mut initial_transform = init_grid_to_world_transform(&grid_position);
+            initial_transform.translation.z -= 50.;
             Self {
                 grid_position,
                 sprite: Sprite {
@@ -733,7 +762,7 @@ pub mod overlay {
                     color: Color::linear_rgba(1.0, 1.0, 1.0, 0.5),
                     ..Default::default()
                 },
-                transform: init_grid_to_world_transform(&grid_position),
+                transform: initial_transform,
                 tile_overlay: TileOverlay {},
                 player,
             }
