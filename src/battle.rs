@@ -4,10 +4,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use bevy_common_assets::json::JsonAssetPlugin;
-use bevy_ecs_tiled::{
-    prelude::{TiledMap, TiledMapAsset},
-    tiled::TiledPlugin,
-};
+use bevy_ecs_tiled::prelude::{TiledMap, TiledMapAsset};
 
 use crate::{
     GameState,
@@ -18,10 +15,14 @@ use crate::{
         tinytactics::AnimationAsset,
         unit_animation_tick_system, update_facing_direction_on_movement,
     },
-    assets::{CURSOR_PATH, EXAMPLE_MAP_2_PATH, EXAMPLE_MAP_PATH, OVERLAY_PATH},
+    assets::{
+        CURSOR_PATH, EXAMPLE_MAP_2_PATH, EXAMPLE_MAP_PATH, GRADIENT_PATH,
+        OVERLAY_PATH,
+    },
     battle_menu::{
         activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions, update_player_ui_info,
     },
+    bevy_ecs_tilemap_example,
     camera::change_zoom,
     combat::{
         advance_attack_phase_based_on_attack_animation_markers, attack_execution_despawner,
@@ -68,14 +69,19 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<UnitSelectionMessage>()
         .add_message::<UnitCommandMessage>()
         .add_message::<AnimationMarkerMessage>()
-        .add_plugins(TiledPlugin::default())
+        // .add_plugins(TiledPlugin::default())
+        // .add_plugins(TiledDebugPluginGroup)
+        .add_plugins((
+            TilemapPlugin,
+            bevy_ecs_tilemap_example::tiled::TiledMapPlugin,
+        ))
         // I wonder if I should put this guy on the top level if I want to
         // have it be used for the UI too
         .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
         .add_systems(OnEnter(GameState::Battle), load_battle_asset_resources)
         .add_systems(
             OnEnter(GameState::Battle),
-            load_demo_battle_scene.after(load_battle_asset_resources),
+            load_demo_battle_scene_2.after(load_battle_asset_resources),
         )
         .add_systems(OnEnter(GameState::Battle), battle_ui_setup)
         .add_systems(
@@ -122,7 +128,8 @@ pub fn battle_plugin(app: &mut App) {
 }
 
 const DEMO_SQUARE_GRID_BOUNDS: u32 = 8;
-const DEMO_2_GRID_BOUNDS: u32 = 12;
+const DEMO_2_GRID_BOUNDS_X: u32 = 12;
+const DEMO_2_GRID_BOUNDS_Y: u32 = 7;
 
 pub fn load_battle_asset_resources(
     mut commands: Commands,
@@ -136,7 +143,13 @@ pub fn load_battle_asset_resources(
     commands.insert_resource(TileOverlayAssets {
         tile_overlay_image_handle: debug_color_spritesheet.clone(),
         tile_overlay_atlas_layout_handle: {
-            let layout = TextureAtlasLayout::from_grid(UVec2::new(64, 32), 6, 1, None, None);
+            let layout = TextureAtlasLayout::from_grid(
+                UVec2::new(grid::TILE_X_SIZE as u32, grid::TILE_Y_SIZE as u32),
+                6,
+                1,
+                None,
+                None,
+            );
             texture_atlas_layouts.add(layout)
         },
         cursor_image: cursor_image.clone(),
@@ -145,24 +158,51 @@ pub fn load_battle_asset_resources(
     startup_load_tinytactics_assets(&mut commands, &asset_server, &mut texture_atlas_layouts);
 }
 
+use bevy_ecs_tilemap::prelude::*;
+
 pub fn load_demo_battle_scene_2(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     tt_assets: Res<TinytacticsAssets>,
 ) {
-    let map_handle: Handle<TiledMapAsset> = asset_server.load(EXAMPLE_MAP_2_PATH);
-    commands.spawn(TiledMap(map_handle));
+    let map_handle =
+        bevy_ecs_tilemap_example::tiled::TiledMapHandle(asset_server.load(EXAMPLE_MAP_2_PATH));
+
+    // Spawn "Background Sprite"
+    let background_image = asset_server.load(GRADIENT_PATH);
+    commands.spawn((
+        Sprite {
+            image: background_image,
+            texture_atlas: None,
+            color: Color::linear_rgb(1.0, 1.0, 1.0),
+            ..Default::default()
+        },
+        Transform::from_translation(Vec3::new(0.0, 0.0, -10.0)),
+    ));
+
+    commands.spawn(bevy_ecs_tilemap_example::tiled::TiledMapBundle {
+        tiled_map: map_handle,
+        render_settings: TilemapRenderSettings {
+            // Map size is 12x12 so we'll have render chunks that are:
+            // 12 tiles wide and 1 tile tall.
+            render_chunk_size: UVec2::new(3, 1),
+            y_sort: true,
+        },
+        ..Default::default()
+    });
 
     commands.insert_resource(grid::GridManagerResource {
-        grid_manager: GridManager::new(DEMO_2_GRID_BOUNDS, DEMO_2_GRID_BOUNDS),
+        grid_manager: GridManager::new(DEMO_2_GRID_BOUNDS_X, DEMO_2_GRID_BOUNDS_Y),
     });
 
     // Spawn players and player cursors
     let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
-    let player_1_grid_pos = GridPosition { x: 1, y: 3 };
-    let player_2_grid_pos = GridPosition { x: 4, y: 6 };
-    let enemy_grid_pos = GridPosition { x: 5, y: 2 };
+    let player_1_grid_pos = GridPosition { x: 0, y: 1 };
+    let player_2_grid_pos = GridPosition { x: 0, y: 5 };
+    let enemy_1_grid_pos = GridPosition { x: 7, y: 3 };
+    let enemy_2_grid_pos = GridPosition { x: 4, y: 2 };
+    let enemy_3_grid_pos = GridPosition { x: 4, y: 4 };
 
     load_demo_battle_players(&mut commands);
 
@@ -195,7 +235,27 @@ pub fn load_demo_battle_scene_2(
         &mut commands,
         "Jimothy Timbers".to_string(),
         &tt_assets,
-        enemy_grid_pos,
+        enemy_1_grid_pos,
+        tt_assets.cleric_spritesheet.clone(),
+        tt_assets.unit_layout.clone(),
+        ENEMY_TEAM,
+    );
+
+    spawn_enemy(
+        &mut commands,
+        "Chaumwer".to_string(),
+        &tt_assets,
+        enemy_2_grid_pos,
+        tt_assets.cleric_spritesheet.clone(),
+        tt_assets.unit_layout.clone(),
+        ENEMY_TEAM,
+    );
+
+    spawn_enemy(
+        &mut commands,
+        "Deege".to_string(),
+        &tt_assets,
+        enemy_3_grid_pos,
         tt_assets.cleric_spritesheet.clone(),
         tt_assets.unit_layout.clone(),
         ENEMY_TEAM,
@@ -214,6 +274,25 @@ pub fn load_demo_battle_scene_2(
         player::Player::Two,
         player_2_grid_pos,
     );
+
+    // Spawn Obstacles
+    let obstacle_locations = [
+        GridPosition { x: 2, y: 0 },
+        GridPosition { x: 2, y: 6 },
+        GridPosition { x: 5, y: 1 },
+        GridPosition { x: 7, y: 2 },
+        GridPosition { x: 6, y: 5 },
+        GridPosition { x: 10, y: 1 },
+    ];
+
+    let mut obstacle_entities = Vec::new();
+    for obstacle_location in obstacle_locations {
+        let e = spawn_obstacle_unit(&mut commands, obstacle_location);
+        obstacle_entities.push(e);
+    }
+
+    let mut static_obstacles = commands.spawn(Name::new("Static Demo Map Obstacles"));
+    static_obstacles.add_children(&obstacle_entities);
 }
 
 /// Loads necessary assets and resources to

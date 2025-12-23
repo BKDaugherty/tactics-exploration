@@ -35,7 +35,7 @@ pub fn spawn_cursor(
         transform: initial_transform,
         sprite: Sprite {
             image,
-            color: Color::linear_rgb(0.5, 0.0, 0.5),
+            color: Color::linear_rgb(1.0, 0.0, 1.0),
             ..Default::default()
         },
         cursor: Cursor {},

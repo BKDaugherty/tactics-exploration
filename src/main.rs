@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use leafwing_input_manager::plugin::InputManagerPlugin;
 use tactics_exploration::GameState;
 use tactics_exploration::battle::battle_plugin;
@@ -14,7 +13,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         // TODO: Dev Mode
         .add_plugins(EguiPlugin::default())
-        .add_plugins(WorldInspectorPlugin::new())
+        // .add_plugins(WorldInspectorPlugin::new())
         // Add the bevy_ecs_tiled plugin
         // bevy_ecs_tilemap::TilemapPlugin will be added automatically if needed
         // .add_plugins(TiledDebugPluginGroup)

@@ -904,7 +904,7 @@ dependencies = [
  "log",
  "regex",
  "thiserror 2.0.17",
- "tiled",
+ "tiled 0.15.0",
 ]
 
 [[package]]
@@ -5600,6 +5600,8 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "thiserror 2.0.17",
+ "tiled 0.14.0",
 ]
 
 [[package]]
@@ -5684,6 +5686,17 @@ dependencies = [
  "quick-error",
  "weezl",
  "zune-jpeg 0.4.21",
+]
+
+[[package]]
+name = "tiled"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "963ef63fa3552ead705617d9f42de2b076c48a15f780e4d1c95dd52e9362a700"
+dependencies = [
+ "base64",
+ "flate2",
+ "xml-rs",
 ]
 
 [[package]]

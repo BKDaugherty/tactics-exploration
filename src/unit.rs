@@ -164,7 +164,7 @@ pub fn spawn_unit(
     team: Team,
 ) {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
-    let direction = Direction::SW;
+    let direction = Direction::NE;
     let animation_data = tt_assets
         .unit_animation_data
         .unit_animations
@@ -200,7 +200,7 @@ pub fn spawn_unit(
             },
             transform,
             player,
-            facing_direction: FacingDirection(crate::animation::Direction::SW),
+            facing_direction: FacingDirection(direction),
             animation_player: UnitAnimationPlayer::new(),
             anchor: TINY_TACTICS_ANCHOR,
         },))
@@ -759,7 +759,7 @@ pub mod overlay {
                     custom_size: None,
                     // TODO: Replace this with just a single image that's White and then use Color to
                     // change the color?
-                    color: Color::linear_rgba(1.0, 1.0, 1.0, 0.5),
+                    color: Color::linear_rgba(1.0, 1.0, 1.0, 0.7),
                     ..Default::default()
                 },
                 transform: initial_transform,

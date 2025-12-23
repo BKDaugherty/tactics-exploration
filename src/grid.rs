@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 /// Size of a single tile in world units
-const TILE_X_SIZE: f32 = 64.0;
-const TILE_Y_SIZE: f32 = 32.0;
+pub const TILE_X_SIZE: f32 = 32.0;
+pub const TILE_Y_SIZE: f32 = 16.0;
 
 #[derive(Debug)]
 pub struct GridManager {
@@ -234,8 +234,11 @@ impl GridMovement {
 
 /// Diamond isometric grid conversion
 pub fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32) -> Vec2 {
-    let world_x = (grid_pos.x as f32 + grid_pos.y as f32) * (tile_width / 2.0);
-    let world_y = (grid_pos.x as f32 - grid_pos.y as f32) * (tile_height / 2.0);
+    let offset_x = grid_pos.x as f32 - 5.;
+    let offset_y = grid_pos.y as f32 - 4.;
+
+    let world_x = (offset_x + offset_y as f32) * (tile_width / 2.0);
+    let world_y = (offset_x - offset_y) * (tile_height / 2.0);
     Vec2::new(world_x, world_y)
 }
 

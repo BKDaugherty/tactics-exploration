@@ -156,7 +156,7 @@ pub mod combat {
     use super::*;
     use crate::combat::{AttackExecution, AttackIntent, AttackPhase, DefenderReaction};
 
-    pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 12.;
+    pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 8.;
     pub const HURT_BY_ATTACK_FRAME_DURATION: f32 = ATTACK_FRAME_DURATION * 2.;
 
     pub fn apply_animation_on_attack_phase(

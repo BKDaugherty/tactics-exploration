@@ -14,10 +14,10 @@ pub struct CameraSettings {
 
 pub fn setup_camera(mut commands: Commands) {
     // Spawn a 2D camera
-    let mut t = init_grid_to_world_transform(&GridPosition { x: 3, y: 3 });
+    let mut t = init_grid_to_world_transform(&GridPosition { x: 5, y: 3 });
     t.translation.z = 0.;
 
-    let camera_settings = CameraSettings { zoom_value: 0.5 };
+    let camera_settings = CameraSettings { zoom_value: 0.4 };
 
     commands.spawn((
         Name::new("Main Camera"),

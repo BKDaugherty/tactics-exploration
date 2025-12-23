@@ -126,7 +126,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
         height: percent(100),
         width: percent(65),
         flex_direction: FlexDirection::Column,
-        justify_content: JustifyContent::SpaceBetween,
+        justify_content: JustifyContent::SpaceEvenly,
         align_items: AlignItems::Center,
         ..Default::default()
     };
@@ -134,6 +134,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
     let move_button = commands
         .spawn((
             BorderColor::all(NORMAL_MENU_BUTTON_COLOR),
+            BorderRadius::all(percent(25)),
             Button,
             player_ui_button_style(),
             player,
@@ -150,6 +151,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
     let attack_button = commands
         .spawn((
             BorderColor::all(NORMAL_MENU_BUTTON_COLOR),
+            BorderRadius::all(percent(25)),
             Button,
             player_ui_button_style(),
             player,
@@ -166,6 +168,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
     let wait_button = commands
         .spawn((
             BorderColor::all(NORMAL_MENU_BUTTON_COLOR),
+            BorderRadius::all(percent(25)),
             Button,
             player_ui_button_style(),
             player,
@@ -192,9 +195,10 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
                 players: HashSet::from([player]),
             },
             menu,
-            BackgroundColor(Color::linear_rgb(0.0, 0.0, 1.0)),
+            BackgroundColor(Color::linear_rgba(0.2, 0.2, 0.2, 0.7)),
             BattlePlayerUI {},
             Visibility::Hidden,
+            BorderRadius::right(percent(25)),
             player,
         ))
         .id();
@@ -222,8 +226,9 @@ fn build_player_ui(commands: &mut Commands, player: Player) -> Entity {
     let player_ui_node = commands
         .spawn((
             Name::new(format!("Player {:?} UI", player)),
-            BackgroundColor(Color::linear_rgb(1.0, 0.0, 0.0)),
+            BackgroundColor(Color::linear_rgba(0.2, 0.2, 0.2, 0.7)),
             player_ui_node.clone(),
+            BorderRadius::all(percent(25)),
         ))
         .id();
 

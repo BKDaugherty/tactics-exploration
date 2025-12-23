@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use bevy::{color::palettes::css::CRIMSON, input_focus::InputDispatchPlugin, prelude::*};
+use bevy::{input_focus::InputDispatchPlugin, prelude::*};
 
 use crate::{
     GameState,
@@ -53,6 +53,7 @@ fn main_menu_setup(mut commands: Commands) {
     let play_button = commands
         .spawn((
             Button,
+            BorderRadius::all(percent(20)),
             button_node.clone(),
             BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
             MainMenuButtonAction::PlayDemo,
@@ -68,6 +69,7 @@ fn main_menu_setup(mut commands: Commands) {
         .spawn((
             Button,
             button_node.clone(),
+            BorderRadius::all(percent(20)),
             BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
             MainMenuButtonAction::Quit,
             children![(
@@ -84,7 +86,8 @@ fn main_menu_setup(mut commands: Commands) {
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(CRIMSON.into()),
+        BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2).into()),
+        BorderRadius::all(percent(20)),
         children![
             // Display the game name
             (

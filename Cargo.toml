@@ -21,6 +21,8 @@ leafwing-input-manager = "0.19.0"
 log = "0.4.29"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+tiled = { version = "0.14.0", default-features = false }
+thiserror = { version = "2.0" }
 
 # Bevy docs optimizations
 # https://bevy.org/learn/quick-start/getting-started/setup/

@@ -66,3 +66,9 @@ assets/unit_assets/spritesheets/WoodenSword_spritesheet.png filter=lfs diff=lfs 
 assets/unit_assets/spritesheets/Hatchet_spritesheet.png filter=lfs diff=lfs merge=lfs -text
 assets/unit_assets/spritesheets/IronAxe_spritesheet.png filter=lfs diff=lfs merge=lfs -text
 assets/map_assets/example-map/iso-64x64-outside.png filter=lfs diff=lfs merge=lfs -text
+assets/utility_assets filter=lfs diff=lfs merge=lfs -text
+assets/utility_assets/cursor-16.png filter=lfs diff=lfs merge=lfs -text
+assets/utility_assets/gradient.png filter=lfs diff=lfs merge=lfs -text
+assets/utility_assets/iso_color-16.png filter=lfs diff=lfs merge=lfs -text
+assets/map_assets/tinytactics-32-map/20240420tinyTacticsTileset00.png filter=lfs diff=lfs merge=lfs -text
+assets/map_assets/example-map/iso-64x64-outside.tsx filter=lfs diff=lfs merge=lfs -text

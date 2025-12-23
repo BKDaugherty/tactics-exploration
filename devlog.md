@@ -46,6 +46,7 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
   - [ ] Create a goal for someone to move to (like in a tutorial!)
 
 - [ ] Handle Gamepad Inputs
+  - [ ] Create some form of screen for joining game etc
 
 - [ ] Animations
   - [x] Write an animation controller for switching to the right animation state
