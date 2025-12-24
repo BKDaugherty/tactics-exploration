@@ -6,6 +6,7 @@ pub mod battle_phase;
 mod bevy_ecs_tilemap_example;
 pub mod camera;
 pub mod combat;
+pub mod enemy;
 pub mod grid;
 pub mod grid_cursor;
 pub mod main_menu;

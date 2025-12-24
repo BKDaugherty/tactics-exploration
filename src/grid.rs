@@ -310,15 +310,9 @@ pub fn resolve_grid_movement(
                 );
             };
 
-            let prev = unit_resources.movement_points_left_in_phase;
             unit_resources.movement_points_left_in_phase = unit_resources
                 .movement_points_left_in_phase
                 .saturating_sub(1);
-
-            info!(
-                "Reducing unit_resources.movement_points_left_in_phase: {:?}, {:?}",
-                prev, unit_resources.movement_points_left_in_phase
-            );
         }
     }
 }

@@ -5,7 +5,11 @@
 
 use bevy::prelude::*;
 
-use crate::{battle::Enemy, player::Player, unit::Unit};
+use crate::{
+    battle::Enemy,
+    player::Player,
+    unit::{Unit, UnitAction},
+};
 
 /// The Phase Manager keeps track of the current phase globally for the battle.
 #[derive(Resource)]
@@ -38,13 +42,27 @@ impl PlayerEnemyPhase {
     }
 }
 
+pub fn is_running_player_phase(pm: Option<Res<PhaseManager>>) -> bool {
+    pm.map(|pm| {
+        pm.current_phase == PlayerEnemyPhase::Player && pm.phase_state == PhaseState::Running
+    })
+    .unwrap_or_default()
+}
+
+pub fn is_running_enemy_phase(pm: Option<Res<PhaseManager>>) -> bool {
+    pm.map(|pm| {
+        pm.current_phase == PlayerEnemyPhase::Enemy && pm.phase_state == PhaseState::Running
+    })
+    .unwrap_or_default()
+}
+
 #[derive(Clone)]
 pub enum PhaseMessageType {
     PhaseBegin(PlayerEnemyPhase),
 }
 
 #[derive(Message)]
-pub struct PhaseMessage(PhaseMessageType);
+pub struct PhaseMessage(pub PhaseMessageType);
 
 #[derive(Component, Debug, Reflect, Default)]
 pub struct UnitPhaseResources {
@@ -97,7 +115,7 @@ pub fn init_phase_system(
 pub fn check_should_advance_phase<T: PhaseSystem<PlayerEnemyPhase>>(
     mut phase_manager: ResMut<PhaseManager>,
     mut message_writer: MessageWriter<PhaseMessage>,
-    query: Query<&UnitPhaseResources, With<T::Marker>>,
+    query: Query<(&UnitPhaseResources, &Unit), With<T::Marker>>,
 ) {
     if phase_manager.current_phase != T::OWNED_PHASE
         || phase_manager.phase_state != PhaseState::Running
@@ -105,7 +123,10 @@ pub fn check_should_advance_phase<T: PhaseSystem<PlayerEnemyPhase>>(
         return;
     }
 
-    if query.iter().all(|t| !t.can_act()) {
+    if query
+        .iter()
+        .all(|(resources, unit)| !resources.can_act() || unit.downed())
+    {
         let next_phase = T::OWNED_PHASE.next();
         phase_manager.current_phase = next_phase;
         info!("Advancing To Next Phase: {:?}", next_phase);
