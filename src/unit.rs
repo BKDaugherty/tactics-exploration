@@ -30,8 +30,16 @@ pub enum ObstacleType {
 #[derive(PartialEq, Eq, Hash, Debug, Reflect, Clone, Copy)]
 pub struct Team(u32);
 
+impl Team {
+    pub fn against_me(&self, team: &Team) -> bool {
+        team != self && *team != NEUTRAL_TEAM
+    }
+}
+
 pub const PLAYER_TEAM: Team = Team(1);
 pub const ENEMY_TEAM: Team = Team(2);
+/// Meant for obstacles? This abstraction is a bit silly atm.
+pub const NEUTRAL_TEAM: Team = Team(0);
 
 /// A unit! Units can't share spaces (for now I guess)
 ///
