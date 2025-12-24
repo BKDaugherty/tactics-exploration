@@ -456,6 +456,7 @@ pub fn handle_unit_command(
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
     mut controlled_unit_query: Query<(Entity, &Unit, &mut UnitPhaseResources, &GridPosition)>,
     unit_query: Query<(Entity, &Unit)>,
+    mut command_completed_writer: MessageWriter<UnitActionCompletedMessage>,
 ) {
     for message in unit_command_message.read() {
         let Some(player_state) = player_state.player_state.get_mut(&message.player) else {
@@ -554,6 +555,11 @@ pub fn handle_unit_command(
             }
             crate::battle::UnitCommand::Wait => {
                 unit_resources.waited = true;
+                player_state.cursor_state = player::PlayerCursorState::Idle;
+                command_completed_writer.write(UnitActionCompletedMessage {
+                    unit: message.unit,
+                    action: UnitAction::Wait,
+                });
             }
         }
     }
@@ -709,6 +715,19 @@ pub fn handle_unit_cursor_actions(
             }
         }
     }
+}
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub enum UnitAction {
+    Move,
+    Attack,
+    Wait,
+}
+
+#[derive(Message)]
+pub struct UnitActionCompletedMessage {
+    pub unit: Entity,
+    pub action: UnitAction,
 }
 
 pub mod overlay {

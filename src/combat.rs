@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     animation::{AnimationMarker, AnimationMarkerMessage},
+    battle_phase::UnitPhaseResources,
     unit::Unit,
 };
 
@@ -20,6 +21,8 @@ pub enum AttackPhase {
 }
 
 pub struct AttackOutcome {
+    /// The amount of AP that the Attack costed.
+    pub ap_cost: u32,
     // Whether or not the defender was hit
     pub defender_reaction: DefenderReaction,
     // TODO: Unify this with DefenderReaction probably
@@ -58,13 +61,14 @@ pub fn attack_intent_system(mut commands: Commands, intent_query: Query<(Entity,
         let mut tracker = commands.entity(e);
         tracker.remove::<AttackIntent>();
 
-        // TODO: For now we just assume everything hits and does 1 "damage"
+        // TODO: For now we just assume everything hits and does 1 "damage", and costs 1 ap.
         tracker.insert(AttackExecution {
             attacker: intent.attacker,
             defender: intent.defender,
             phase: AttackPhase::Windup,
             animation_phase: AttackPhase::Windup,
             outcome: AttackOutcome {
+                ap_cost: 1,
                 defender_reaction: DefenderReaction::TakeHit,
                 damage: 4,
             },
@@ -105,12 +109,12 @@ pub fn advance_attack_phase_based_on_attack_animation_markers(
 /// effects necessary for the Attack.
 pub fn attack_impact_system(
     mut attacks: Query<&mut AttackExecution>,
-    mut unit_query: Query<&mut Unit>,
+    mut unit_query: Query<(&mut Unit, &mut UnitPhaseResources)>,
 ) {
     for mut attack in &mut attacks {
         if attack.phase == AttackPhase::Impact {
             if attack.outcome.defender_reaction == DefenderReaction::TakeHit {
-                if let Some(mut defending_unit) = unit_query.get_mut(attack.defender).ok() {
+                if let Some((mut defending_unit, _)) = unit_query.get_mut(attack.defender).ok() {
                     defending_unit.stats.health = defending_unit
                         .stats
                         .health
@@ -118,6 +122,13 @@ pub fn attack_impact_system(
                 };
 
                 attack.phase = AttackPhase::PostImpact;
+            }
+
+            if let Some((_, mut attacking_unit_resources)) =
+                unit_query.get_mut(attack.attacker).ok()
+            {
+                // Eh, don't love this, but it's okay for now.
+                attacking_unit_resources.action_points_left_in_phase -= attack.outcome.ap_cost;
             }
         }
     }

@@ -20,8 +20,8 @@ use crate::{
         activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions, update_player_ui_info,
     },
     battle_phase::{
-        PhaseMessage, check_should_advance_phase, init_phase_system,
-        refresh_units_at_beginning_of_phase,
+        PhaseMessage, check_should_advance_phase, init_phase_system, is_running_enemy_phase,
+        is_running_player_phase, refresh_units_at_beginning_of_phase,
     },
     bevy_ecs_tilemap_example,
     camera::change_zoom,
@@ -29,12 +29,17 @@ use crate::{
         advance_attack_phase_based_on_attack_animation_markers, attack_execution_despawner,
         attack_impact_system, attack_intent_system,
     },
+    enemy::{
+        begin_enemy_phase, init_enemy_ai_system, plan_enemy_action, resolve_enemy_action,
+        select_next_enemy,
+    },
     grid::{self, GridManager, GridPosition},
     grid_cursor,
     menu::menu_navigation::{handle_menu_cursor_navigation, highlight_menu_option},
     player::{self, Player},
     unit::{
-        ENEMY_TEAM, PLAYER_TEAM, handle_unit_command, handle_unit_cursor_actions,
+        ENEMY_TEAM, PLAYER_TEAM, UnitActionCompletedMessage, handle_unit_command,
+        handle_unit_cursor_actions,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_command,
     },
@@ -78,6 +83,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<UnitCommandMessage>()
         .add_message::<AnimationMarkerMessage>()
         .add_message::<PhaseMessage>()
+        .add_message::<UnitActionCompletedMessage>()
         // .add_plugins(TiledPlugin::default())
         // .add_plugins(TiledDebugPluginGroup)
         .add_plugins((
@@ -88,10 +94,13 @@ pub fn battle_plugin(app: &mut App) {
         .add_systems(OnEnter(GameState::Battle), load_battle_asset_resources)
         .add_systems(
             OnEnter(GameState::Battle),
-            load_demo_battle_scene_2.after(load_battle_asset_resources),
+            (
+                load_demo_battle_scene_2.after(load_battle_asset_resources),
+                init_phase_system,
+                init_enemy_ai_system,
+                battle_ui_setup,
+            ),
         )
-        .add_systems(OnEnter(GameState::Battle), init_phase_system)
-        .add_systems(OnEnter(GameState::Battle), battle_ui_setup)
         .add_systems(
             Update,
             (
@@ -114,9 +123,15 @@ pub fn battle_plugin(app: &mut App) {
                 grid_cursor::handle_cursor_movement,
                 // Unit Movement + Overlay UI
                 handle_overlays_events_system,
-                handle_unit_cursor_actions,
                 handle_unit_command,
                 unlock_cursor_after_unit_command.after(handle_unit_command),
+                // Player UI System
+                handle_unit_cursor_actions.run_if(is_running_player_phase),
+                activate_battle_ui.run_if(is_running_player_phase),
+                handle_battle_ui_interactions.run_if(is_running_player_phase),
+                // Menu UI
+                highlight_menu_option,
+                handle_menu_cursor_navigation,
                 // Combat
                 attack_intent_system,
                 attack_impact_system,
@@ -125,10 +140,6 @@ pub fn battle_plugin(app: &mut App) {
                 change_zoom,
                 // UI
                 update_player_ui_info,
-                activate_battle_ui,
-                handle_menu_cursor_navigation,
-                highlight_menu_option,
-                handle_battle_ui_interactions, // on_asset_event
             )
                 .run_if(in_state(GameState::Battle)),
         )
@@ -145,6 +156,19 @@ pub fn battle_plugin(app: &mut App) {
                 update_facing_direction_on_attack,
             )
                 .run_if(in_state(GameState::Battle)),
+        )
+        .add_systems(
+            Update,
+            (
+                begin_enemy_phase,
+                select_next_enemy,
+                plan_enemy_action,
+                resolve_enemy_action,
+            )
+                .chain()
+                .after(refresh_units_at_beginning_of_phase::<Enemy>)
+                .run_if(in_state(GameState::Battle))
+                .run_if(is_running_enemy_phase),
         );
 }
 
