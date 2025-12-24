@@ -230,13 +230,19 @@ pub mod combat {
 
 pub fn idle_animation_system(
     res: Res<TinytacticsAssets>,
-    mut query: Query<(&Unit, &FacingDirection, &mut UnitAnimationPlayer)>,
+    mut query: Query<(
+        &Unit,
+        &FacingDirection,
+        &mut UnitAnimationPlayer,
+        Option<&GridMovement>,
+    )>,
 ) {
-    for (unit, dir, mut anim_player) in &mut query {
-        let anim_kind_to_play = match (unit.downed(), unit.critical_health()) {
-            (true, _) => UnitAnimationKind::IdleDead,
-            (false, true) => UnitAnimationKind::IdleHurt,
-            (false, false) => UnitAnimationKind::IdleWalk,
+    for (unit, dir, mut anim_player, moving) in &mut query {
+        let anim_kind_to_play = match (unit.downed(), unit.critical_health(), moving) {
+            (true, _, _) => UnitAnimationKind::IdleDead,
+            (false, true, None) => UnitAnimationKind::IdleHurt,
+            (false, true, Some(..)) => UnitAnimationKind::IdleWalk,
+            (false, false, _) => UnitAnimationKind::IdleWalk,
         };
 
         let Some(inner) = res

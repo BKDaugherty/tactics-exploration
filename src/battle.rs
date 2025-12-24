@@ -30,16 +30,16 @@ use crate::{
         attack_impact_system, attack_intent_system,
     },
     enemy::{
-        begin_enemy_phase, init_enemy_ai_system, plan_enemy_action, resolve_enemy_action,
-        select_next_enemy,
+        begin_enemy_phase, execute_enemy_action, init_enemy_ai_system, plan_enemy_action,
+        resolve_enemy_action, select_next_enemy,
     },
     grid::{self, GridManager, GridPosition},
     grid_cursor,
     menu::menu_navigation::{handle_menu_cursor_navigation, highlight_menu_option},
     player::{self, Player},
     unit::{
-        ENEMY_TEAM, PLAYER_TEAM, UnitActionCompletedMessage, handle_unit_command,
-        handle_unit_cursor_actions,
+        ENEMY_TEAM, PLAYER_TEAM, UnitActionCompletedMessage, UnitExecuteActionMessage,
+        execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_command,
     },
@@ -58,8 +58,8 @@ pub struct UnitSelectionMessage {
     pub player: Player,
 }
 
-#[derive(Message, Debug)]
-pub struct UnitCommandMessage {
+#[derive(Message, Debug, Clone)]
+pub struct UnitUiCommandMessage {
     /// Player that sent command
     pub player: Player,
     /// The Command itself
@@ -68,7 +68,7 @@ pub struct UnitCommandMessage {
     pub unit: Entity,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum UnitCommand {
     Move,
     Attack,
@@ -80,10 +80,11 @@ pub enum UnitCommand {
 pub fn battle_plugin(app: &mut App) {
     app.add_message::<OverlaysMessage>()
         .add_message::<UnitSelectionMessage>()
-        .add_message::<UnitCommandMessage>()
+        .add_message::<UnitUiCommandMessage>()
         .add_message::<AnimationMarkerMessage>()
         .add_message::<PhaseMessage>()
         .add_message::<UnitActionCompletedMessage>()
+        .add_message::<UnitExecuteActionMessage>()
         // .add_plugins(TiledPlugin::default())
         // .add_plugins(TiledDebugPluginGroup)
         .add_plugins((
@@ -123,10 +124,11 @@ pub fn battle_plugin(app: &mut App) {
                 grid_cursor::handle_cursor_movement,
                 // Unit Movement + Overlay UI
                 handle_overlays_events_system,
-                handle_unit_command,
-                unlock_cursor_after_unit_command.after(handle_unit_command),
+                handle_unit_ui_command,
+                unlock_cursor_after_unit_command.after(handle_unit_ui_command),
                 // Player UI System
                 handle_unit_cursor_actions.run_if(is_running_player_phase),
+                execute_unit_actions,
                 activate_battle_ui.run_if(is_running_player_phase),
                 handle_battle_ui_interactions.run_if(is_running_player_phase),
                 // Menu UI
@@ -163,6 +165,7 @@ pub fn battle_plugin(app: &mut App) {
                 begin_enemy_phase,
                 select_next_enemy,
                 plan_enemy_action,
+                execute_enemy_action,
                 resolve_enemy_action,
             )
                 .chain()

@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::{
-    battle::{UnitCommand, UnitCommandMessage, UnitSelectionMessage},
+    battle::{UnitCommand, UnitUiCommandMessage, UnitSelectionMessage},
     battle_phase::UnitPhaseResources,
     grid::{self, GridManagerResource},
     grid_cursor::Cursor,
@@ -413,7 +413,7 @@ pub fn handle_battle_ui_interactions(
         With<ActiveMenu>,
     >,
     unit_menu_query: Query<&UnitMenuAction>,
-    mut battle_command_writer: MessageWriter<UnitCommandMessage>,
+    mut battle_command_writer: MessageWriter<UnitUiCommandMessage>,
 ) {
     for (player, input_actions) in player_input_query.iter() {
         for (battle_menu_e, battle_menu, menu, controller, mut visibility) in
@@ -436,7 +436,7 @@ pub fn handle_battle_ui_interactions(
                     continue;
                 };
 
-                battle_command_writer.write(UnitCommandMessage {
+                battle_command_writer.write(UnitUiCommandMessage {
                     player: *player,
                     command: match menu_option {
                         UnitMenuAction::Move => UnitCommand::Move,
@@ -450,7 +450,7 @@ pub fn handle_battle_ui_interactions(
                 commands.entity(battle_menu_e).remove::<ActiveMenu>();
             } else if input_actions.just_pressed(&PlayerInputAction::Deselect) {
                 // Turn off the Battle Menu, unlock cursor
-                battle_command_writer.write(UnitCommandMessage {
+                battle_command_writer.write(UnitUiCommandMessage {
                     player: *player,
                     command: UnitCommand::Cancel,
                     unit: battle_menu.selected_unit,

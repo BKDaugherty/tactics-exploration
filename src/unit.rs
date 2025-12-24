@@ -6,14 +6,15 @@ use crate::animation::{
     AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey,
     UnitAnimationKind, UnitAnimationPlayer,
 };
-use crate::battle::{Enemy, UnitCommandMessage, UnitSelectionMessage};
+use crate::battle::{Enemy, UnitSelectionMessage, UnitUiCommandMessage};
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
+use crate::enemy::behaviors::EnemyAiBehavior;
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
 use crate::grid_cursor::LockedOn;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
-use crate::{grid, grid_cursor, player};
+use crate::{enemy, grid, grid_cursor, player};
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -149,6 +150,9 @@ pub fn spawn_enemy(
         TINY_TACTICS_ANCHOR,
         UnitPhaseResources::default(),
         Enemy {},
+        EnemyAiBehavior {
+            behavior: enemy::behaviors::Behavior::Wanderer,
+        },
     ));
 }
 
@@ -246,9 +250,9 @@ fn end_move(
 
 #[derive(Clone, Debug)]
 pub struct MovementRequest {
-    origin: GridPosition,
-    unit: Unit,
-    movement_points_available: u32,
+    pub origin: GridPosition,
+    pub unit: Unit,
+    pub movement_points_available: u32,
 }
 
 #[derive(Debug)]
@@ -294,7 +298,7 @@ pub struct ValidMove {
 }
 
 /// Search for valid moves, exploring the grid until we are out of movement stat using bfs
-fn get_valid_moves_for_unit(
+pub fn get_valid_moves_for_unit(
     grid_manager: &GridManager,
     movement: MovementRequest,
     unit_query: Query<(Entity, &Unit)>,
@@ -430,7 +434,7 @@ pub struct AttackOption {
 // Needs to run after "handle_unit_command"
 pub fn unlock_cursor_after_unit_command(
     mut commands: Commands,
-    mut unit_command_message: MessageReader<UnitCommandMessage>,
+    mut unit_command_message: MessageReader<UnitUiCommandMessage>,
     cursor_query: Query<(Entity, &Player), With<LockedOn>>,
 ) {
     for message in unit_command_message.read() {
@@ -444,19 +448,64 @@ pub fn unlock_cursor_after_unit_command(
     }
 }
 
+#[derive(Message)]
+pub struct UnitExecuteActionMessage {
+    pub entity: Entity,
+    pub action: UnitExecuteAction,
+}
+
+#[derive(Clone, Debug)]
+pub enum UnitExecuteAction {
+    Move(ValidMove),
+    Attack(AttackIntent),
+    Wait,
+}
+
+pub fn execute_unit_actions(
+    mut commands: Commands,
+    mut reader: MessageReader<UnitExecuteActionMessage>,
+    mut command_completed_writer: MessageWriter<UnitActionCompletedMessage>,
+    // I don't love that I do this here since I do the other things out of band, but I don't
+    // really need to wait for anything else to wait so :shrug:
+    mut unit_phase_resources: Query<&mut UnitPhaseResources>,
+) {
+    for message in reader.read() {
+        match &message.action {
+            UnitExecuteAction::Move(valid_move) => {
+                commands
+                    .entity(message.entity)
+                    .insert(GridMovement::new(valid_move.path.clone(), 0.4));
+            }
+            UnitExecuteAction::Attack(attack_intent) => {
+                commands.spawn(attack_intent.clone());
+            }
+            UnitExecuteAction::Wait => {
+                if let Some(mut resources) = unit_phase_resources.get_mut(message.entity).ok() {
+                    resources.waited = true;
+                }
+
+                command_completed_writer.write(UnitActionCompletedMessage {
+                    unit: message.entity,
+                    action: UnitAction::Wait,
+                });
+            }
+        }
+    }
+}
+
 // TODO: Don't make this dependent on PlayerGameStates
 // We need to drive the interaction between the cursor
 // in a better way. (Which will enable us to use this for AIs too!)
 //
 // PlayerGameStates probably could just be an Event we pass.
-pub fn handle_unit_command(
+pub fn handle_unit_ui_command(
     grid_manager_res: Res<grid::GridManagerResource>,
     mut player_state: ResMut<player::PlayerGameStates>,
-    mut unit_command_message: MessageReader<UnitCommandMessage>,
+    mut unit_command_message: MessageReader<UnitUiCommandMessage>,
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
     mut controlled_unit_query: Query<(Entity, &Unit, &mut UnitPhaseResources, &GridPosition)>,
     unit_query: Query<(Entity, &Unit)>,
-    mut command_completed_writer: MessageWriter<UnitActionCompletedMessage>,
+    mut execute_action_writer: MessageWriter<UnitExecuteActionMessage>,
 ) {
     for message in unit_command_message.read() {
         let Some(player_state) = player_state.player_state.get_mut(&message.player) else {
@@ -503,6 +552,12 @@ pub fn handle_unit_command(
             }
             crate::battle::UnitCommand::Attack => {
                 let mut options_for_attack = Vec::new();
+
+                if unit_resources.action_points_left_in_phase == 0 {
+                    warn!("Unit is attempting to attack with no AP!");
+                    continue;
+                }
+
                 // Assume all units have the same attack range for now
                 for dir in DIRECTION_VECS {
                     let grid::GridPositionChangeResult::Moved(possible_attack_pos) =
@@ -554,12 +609,12 @@ pub fn handle_unit_command(
                 });
             }
             crate::battle::UnitCommand::Wait => {
-                unit_resources.waited = true;
-                player_state.cursor_state = player::PlayerCursorState::Idle;
-                command_completed_writer.write(UnitActionCompletedMessage {
-                    unit: message.unit,
-                    action: UnitAction::Wait,
+                execute_action_writer.write(UnitExecuteActionMessage {
+                    entity: message.unit,
+                    action: UnitExecuteAction::Wait,
                 });
+
+                player_state.cursor_state = player::PlayerCursorState::Idle;
             }
         }
     }
@@ -578,6 +633,7 @@ pub fn handle_unit_cursor_actions(
     player_unit_query: Query<(Entity, &player::Player, &Unit)>,
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
     mut unit_selection_message: MessageWriter<UnitSelectionMessage>,
+    mut execute_action_writer: MessageWriter<UnitExecuteActionMessage>,
 ) {
     for (player, action_state) in player_query.iter() {
         for (cursor_entity, cursor_player, mut cursor_grid_pos) in cursor_query.iter_mut() {
@@ -626,12 +682,12 @@ pub fn handle_unit_cursor_actions(
             else if let player::PlayerCursorState::MovingUnit(
                 unit_entity,
                 original_position,
-                valid_moves,
+                mut valid_moves,
             ) = player_state.cursor_state.clone()
             {
                 if action_state.just_pressed(&PlayerInputAction::Select) {
                     // TODO: What to do if this changes between start and end of movement?
-                    let Some(valid_move) = valid_moves.get(&cursor_grid_pos) else {
+                    let Some(valid_move) = valid_moves.remove(&cursor_grid_pos) else {
                         log::warn!("Attempting to move to invalid position");
                         continue;
                     };
@@ -656,9 +712,12 @@ pub fn handle_unit_cursor_actions(
                         continue;
                     }
 
-                    commands
-                        .entity(unit_entity)
-                        .insert(GridMovement::new(valid_move.path.clone(), 0.4));
+                    execute_action_writer.write(UnitExecuteActionMessage {
+                        entity: unit_entity,
+                        action: UnitExecuteAction::Move(valid_move),
+                    });
+
+                    // TODO: Event for driving movement
 
                     end_move(&mut overlay_message_writer, player, player_state);
                 } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
@@ -676,20 +735,23 @@ pub fn handle_unit_cursor_actions(
                 }
             } else if let PlayerCursorState::LookingForTargetWithAttack(
                 unit_entity,
-                valid_attack_moves,
+                mut valid_attack_moves,
             ) = player_state.cursor_state.clone()
             {
                 if action_state.just_pressed(&PlayerInputAction::Select) {
                     // TODO: This selection logic is the same. I wonder if I could just have the cursor here handle selection
                     // based on state, and then have some other system take over?
-                    let Some(valid_move) = valid_attack_moves.get(&cursor_grid_pos) else {
+                    let Some(valid_move) = valid_attack_moves.remove(&cursor_grid_pos) else {
                         log::warn!("Attempting to attack an invalid position");
                         continue;
                     };
 
-                    commands.spawn(AttackIntent {
-                        attacker: unit_entity,
-                        defender: valid_move.target,
+                    execute_action_writer.write(UnitExecuteActionMessage {
+                        entity: unit_entity,
+                        action: UnitExecuteAction::Attack(AttackIntent {
+                            attacker: unit_entity,
+                            defender: valid_move.target,
+                        }),
                     });
 
                     end_move(&mut overlay_message_writer, player, player_state);
@@ -875,7 +937,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use crate::{
-        battle::{UnitCommand, UnitCommandMessage, UnitSelectionMessage},
+        battle::{UnitCommand, UnitSelectionMessage, UnitUiCommandMessage},
         grid::{
             self, GridManager, GridManagerResource, GridMovement, GridPosition,
             sync_grid_positions_to_manager,
@@ -883,7 +945,7 @@ mod tests {
         grid_cursor,
         player::{self, Player, PlayerGameStates, PlayerInputAction, PlayerState},
         unit::{
-            PLAYER_TEAM, Stats, Unit, handle_unit_command, handle_unit_cursor_actions,
+            PLAYER_TEAM, Stats, Unit, handle_unit_cursor_actions, handle_unit_ui_command,
             overlay::OverlaysMessage,
         },
     };
@@ -900,7 +962,7 @@ mod tests {
         let mut app = App::new();
         app.add_message::<OverlaysMessage>();
         app.add_message::<UnitSelectionMessage>();
-        app.add_message::<UnitCommandMessage>();
+        app.add_message::<UnitUiCommandMessage>();
         app.insert_resource(GridManagerResource {
             grid_manager: GridManager::new(6, 6),
         });
@@ -973,13 +1035,13 @@ mod tests {
         // Handle Unit Movement should incur a message to the UI to say that the given unit was selected.
         // It then expects to be told what the player wants to do with the unit. Let's assume they want to
         // move.
-        app.world_mut().write_message(UnitCommandMessage {
+        app.world_mut().write_message(UnitUiCommandMessage {
             player: Player::One,
             command: UnitCommand::Move,
         });
 
         app.world_mut()
-            .run_system_once(handle_unit_command)
+            .run_system_once(handle_unit_ui_command)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         // Let's also simulate a move of the cursor to a valid destination, and
