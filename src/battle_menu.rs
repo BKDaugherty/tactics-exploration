@@ -7,6 +7,7 @@ use leafwing_input_manager::prelude::ActionState;
 
 use crate::{
     battle::{UnitCommand, UnitCommandMessage, UnitSelectionMessage},
+    battle_phase::UnitPhaseResources,
     grid::{self, GridManagerResource},
     grid_cursor::Cursor,
     menu::{
@@ -35,6 +36,8 @@ pub enum UnitMenuAction {
     Attack,
     Wait,
 }
+
+pub fn top_ui(mut commands: Commands) {}
 
 pub fn battle_ui_setup(mut commands: Commands) {
     let ui_bottom_space = commands
@@ -72,7 +75,11 @@ fn player_ui_info_style() -> Node {
         width: percent(35),
         flex_direction: FlexDirection::Column,
         justify_content: JustifyContent::Center,
-        align_items: AlignItems::Center,
+        align_items: AlignItems::FlexStart,
+        padding: UiRect {
+            left: percent(5),
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -87,17 +94,20 @@ fn build_player_ui_info(commands: &mut Commands, player: Player) -> Entity {
         ))
         .id();
 
-    let player_1_health_text = commands
-        .spawn((Text::new("Health"), PlayerUiHealthText {}, player.clone()))
+    let health_text = commands
+        .spawn((Text::new("Health"), PlayerUiHealthText {}))
         .id();
-
-    let player_1_name_text = commands
-        .spawn((Text::new("Unit Name"), PlayerUiNameText {}, player.clone()))
+    let name_text = commands
+        .spawn((Text::new("Unit Name"), PlayerUiNameText {}))
+        .id();
+    let ap_text = commands.spawn((Text::new("AP"), PlayerUiApText {})).id();
+    let move_text = commands
+        .spawn((Text::new("Move"), PlayerUiMoveText {}))
         .id();
 
     commands
         .entity(player_ui_info)
-        .add_children(&[player_1_name_text, player_1_health_text]);
+        .add_children(&[name_text, health_text, ap_text, move_text]);
 
     player_ui_info
 }
@@ -242,19 +252,76 @@ fn build_player_ui(commands: &mut Commands, player: Player) -> Entity {
     player_ui_node
 }
 
-// TODO: Only run when changed (Unit or GridPosition)?
+pub trait TextFromUnit: Component {
+    fn derive_text(unit: &Unit) -> String;
+
+    fn update(unit: &Unit, to_update: &mut Text) {
+        to_update.0 = Self::derive_text(unit);
+    }
+}
+
+impl TextFromUnit for PlayerUiHealthText {
+    fn derive_text(unit: &Unit) -> String {
+        format!("HP: {}/{}", unit.stats.health, unit.stats.max_health)
+    }
+}
+
+impl TextFromUnit for PlayerUiNameText {
+    fn derive_text(unit: &Unit) -> String {
+        unit.name.clone()
+    }
+}
+
+#[derive(Component)]
+pub struct PlayerUiApText {}
+
+#[derive(Component)]
+pub struct PlayerUiMoveText {}
+
+// TODO: Can I do Changed<GridPosition> or Changed<Unit> in two diff queries?
 pub fn update_player_ui_info(
     grid_manager: Res<grid::GridManagerResource>,
     cursor_query: Query<(&player::Player, &grid::GridPosition), With<Cursor>>,
-    unit_query: Query<&Unit>,
-    mut player_ui_unit_visible: Query<(&player::Player, &mut Visibility), With<PlayerUiInfo>>,
+    unit_query: Query<(&Unit, &UnitPhaseResources)>,
+    // TODO: This is terrible. I could make this one Text box, or
+    // could do Option<Component> and have one query and then
+    // do some match / runtime stuff? Def a little silly.
+    mut player_unit_ui: Query<(&player::Player, &mut Visibility, &Children), With<PlayerUiInfo>>,
     mut player_ui_health_text: Query<
-        (&player::Player, &mut Text),
-        (With<PlayerUiHealthText>, Without<PlayerUiNameText>),
+        &mut Text,
+        (
+            With<PlayerUiHealthText>,
+            Without<PlayerUiNameText>,
+            Without<PlayerUiApText>,
+            Without<PlayerUiMoveText>,
+        ),
     >,
     mut player_ui_name_text: Query<
-        (&player::Player, &mut Text),
-        (With<PlayerUiNameText>, Without<PlayerUiHealthText>),
+        &mut Text,
+        (
+            With<PlayerUiNameText>,
+            Without<PlayerUiHealthText>,
+            Without<PlayerUiApText>,
+            Without<PlayerUiMoveText>,
+        ),
+    >,
+    mut player_ui_move_text: Query<
+        &mut Text,
+        (
+            With<PlayerUiApText>,
+            Without<PlayerUiHealthText>,
+            Without<PlayerUiMoveText>,
+            Without<PlayerUiNameText>,
+        ),
+    >,
+    mut player_ui_ap_text: Query<
+        &mut Text,
+        (
+            With<PlayerUiMoveText>,
+            Without<PlayerUiHealthText>,
+            Without<PlayerUiApText>,
+            Without<PlayerUiNameText>,
+        ),
     >,
 ) {
     for (cursor_player, grid_pos) in cursor_query.iter() {
@@ -267,7 +334,7 @@ pub fn update_player_ui_info(
             .filter_map(|t| unit_query.get(*t).ok())
             .next();
 
-        for (ui_player, mut unit_ui_repr) in player_ui_unit_visible.iter_mut() {
+        for (ui_player, mut unit_ui_repr, children) in player_unit_ui.iter_mut() {
             if cursor_player != ui_player {
                 continue;
             }
@@ -276,29 +343,30 @@ pub fn update_player_ui_info(
                 Some(..) => *unit_ui_repr = Visibility::Visible,
                 None => *unit_ui_repr = Visibility::Hidden,
             };
-        }
 
-        // If there is a unit, we need to update the now visible UI
-        let Some(unit) = unit else {
-            continue;
-        };
-
-        for (ui_player, mut text) in player_ui_health_text.iter_mut() {
-            if cursor_player != ui_player {
+            // If there is a unit, we need to update the now visible UI
+            let Some((unit, phase_resources)) = unit else {
                 continue;
+            };
+
+            for child in children {
+                if let Some(mut text) = player_ui_health_text.get_mut(*child).ok() {
+                    text.0 = PlayerUiHealthText::derive_text(&unit);
+                } else if let Some(mut text) = player_ui_name_text.get_mut(*child).ok() {
+                    text.0 = PlayerUiNameText::derive_text(&unit);
+                } else if let Some(mut text) = player_ui_move_text.get_mut(*child).ok() {
+                    text.0 = format!("Move: {}", phase_resources.movement_points_left_in_phase);
+                } else if let Some(mut text) = player_ui_ap_text.get_mut(*child).ok() {
+                    text.0 = format!("AP: {}", phase_resources.action_points_left_in_phase);
+                }
             }
-
-            text.0 = format!("{} / {} Health", unit.stats.health, unit.stats.max_health);
-        }
-
-        for (ui_player, mut text) in player_ui_name_text.iter_mut() {
-            if cursor_player != ui_player {
-                continue;
-            }
-
-            text.0 = unit.name.clone();
         }
     }
+}
+
+#[derive(Component)]
+pub struct ActiveBattleMenu {
+    selected_unit: Entity,
 }
 
 /// Likely will want to have this spawn the set of options based
@@ -319,7 +387,12 @@ pub fn activate_battle_ui(
             }
 
             menu.reset_menu_option();
-            commands.entity(player_grid_menu).insert(ActiveMenu {});
+            commands.entity(player_grid_menu).insert((
+                ActiveMenu {},
+                ActiveBattleMenu {
+                    selected_unit: message.entity,
+                },
+            ));
             *vis = Visibility::Visible;
         }
     }
@@ -332,6 +405,7 @@ pub fn handle_battle_ui_interactions(
     mut player_battle_menu: Query<
         (
             Entity,
+            &ActiveBattleMenu,
             &mut GameMenuGrid,
             &GameMenuController,
             &mut Visibility,
@@ -342,7 +416,9 @@ pub fn handle_battle_ui_interactions(
     mut battle_command_writer: MessageWriter<UnitCommandMessage>,
 ) {
     for (player, input_actions) in player_input_query.iter() {
-        for (battle_menu_e, menu, controller, mut visibility) in player_battle_menu.iter_mut() {
+        for (battle_menu_e, battle_menu, menu, controller, mut visibility) in
+            player_battle_menu.iter_mut()
+        {
             if !controller.players.contains(player) {
                 continue;
             }
@@ -367,6 +443,7 @@ pub fn handle_battle_ui_interactions(
                         UnitMenuAction::Attack => UnitCommand::Attack,
                         UnitMenuAction::Wait => UnitCommand::Wait,
                     },
+                    unit: battle_menu.selected_unit,
                 });
 
                 *visibility = Visibility::Hidden;
@@ -376,11 +453,82 @@ pub fn handle_battle_ui_interactions(
                 battle_command_writer.write(UnitCommandMessage {
                     player: *player,
                     command: UnitCommand::Cancel,
+                    unit: battle_menu.selected_unit,
                 });
 
                 *visibility = Visibility::Hidden;
 
                 commands.entity(battle_menu_e).remove::<ActiveMenu>();
+            }
+        }
+    }
+}
+
+mod unused_experiments {
+    use super::*;
+
+    pub fn update_text_from_unit_under_cursor<T: TextFromUnit>(
+        grid_manager: Res<grid::GridManagerResource>,
+        cursor_query: Query<
+            (&player::Player, &grid::GridPosition),
+            (With<Cursor>, Changed<grid::GridPosition>),
+        >,
+        unit_query: Query<&Unit>,
+        mut text_query: Query<(&player::Player, &mut Text), With<T>>,
+    ) {
+        for (cursor_player, grid_pos) in cursor_query.iter() {
+            let Some(entities) = grid_manager.grid_manager.get_by_position(grid_pos) else {
+                continue;
+            };
+
+            let unit = entities
+                .iter()
+                .filter_map(|t| unit_query.get(*t).ok())
+                .next();
+
+            // If there is a unit, we need to update the now visible UI
+            let Some(unit) = unit else {
+                continue;
+            };
+
+            for (ui_player, mut text) in text_query.iter_mut() {
+                if cursor_player != ui_player {
+                    continue;
+                }
+
+                text.0 = T::derive_text(unit);
+            }
+        }
+    }
+
+    pub fn update_player_ui_visibility(
+        grid_manager: Res<grid::GridManagerResource>,
+        cursor_query: Query<
+            (&player::Player, &grid::GridPosition),
+            (With<Cursor>, Changed<grid::GridPosition>),
+        >,
+        unit_query: Query<&Unit>,
+        mut player_ui_unit_visible: Query<(&player::Player, &mut Visibility), With<PlayerUiInfo>>,
+    ) {
+        for (cursor_player, grid_pos) in cursor_query.iter() {
+            let Some(entities) = grid_manager.grid_manager.get_by_position(grid_pos) else {
+                continue;
+            };
+
+            let unit = entities
+                .iter()
+                .filter_map(|t| unit_query.get(*t).ok())
+                .next();
+
+            for (ui_player, mut unit_ui_repr) in player_ui_unit_visible.iter_mut() {
+                if cursor_player != ui_player {
+                    continue;
+                }
+
+                match unit {
+                    Some(..) => *unit_ui_repr = Visibility::Visible,
+                    None => *unit_ui_repr = Visibility::Hidden,
+                };
             }
         }
     }

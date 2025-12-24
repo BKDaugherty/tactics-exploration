@@ -6,7 +6,8 @@ use crate::animation::{
     AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey,
     UnitAnimationKind, UnitAnimationPlayer,
 };
-use crate::battle::{UnitCommandMessage, UnitSelectionMessage};
+use crate::battle::{Enemy, UnitCommandMessage, UnitSelectionMessage};
+use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
 use crate::grid_cursor::LockedOn;
@@ -73,6 +74,7 @@ pub struct UnitBundle {
     pub facing_direction: FacingDirection,
     pub animation_player: UnitAnimationPlayer,
     pub anchor: Anchor,
+    pub phase_resources: UnitPhaseResources,
 }
 
 pub fn spawn_obstacle_unit(
@@ -124,7 +126,7 @@ pub fn spawn_enemy(
                 max_health: 10,
                 health: 10,
                 strength: 5,
-                movement: 2,
+                movement: 3,
             },
             obstacle: ObstacleType::Filter(HashSet::from([team])),
             team,
@@ -145,6 +147,8 @@ pub fn spawn_enemy(
         FacingDirection(crate::animation::Direction::SW),
         UnitAnimationPlayer::new(),
         TINY_TACTICS_ANCHOR,
+        UnitPhaseResources::default(),
+        Enemy {},
     ));
 }
 
@@ -181,7 +185,7 @@ pub fn spawn_unit(
                     max_health: 10,
                     health: 10,
                     strength: 5,
-                    movement: 2,
+                    movement: 3,
                 },
                 obstacle: ObstacleType::Filter(HashSet::from([team])),
                 team,
@@ -203,6 +207,7 @@ pub fn spawn_unit(
             facing_direction: FacingDirection(direction),
             animation_player: UnitAnimationPlayer::new(),
             anchor: TINY_TACTICS_ANCHOR,
+            phase_resources: UnitPhaseResources::default(),
         },))
         .id();
 
@@ -240,9 +245,10 @@ fn end_move(
 }
 
 #[derive(Clone, Debug)]
-pub struct Movement {
+pub struct MovementRequest {
     origin: GridPosition,
     unit: Unit,
+    movement_points_available: u32,
 }
 
 #[derive(Debug)]
@@ -290,10 +296,10 @@ pub struct ValidMove {
 /// Search for valid moves, exploring the grid until we are out of movement stat using bfs
 fn get_valid_moves_for_unit(
     grid_manager: &GridManager,
-    movement: Movement,
+    movement: MovementRequest,
     unit_query: Query<(Entity, &Unit)>,
 ) -> HashMap<GridPosition, ValidMove> {
-    let movement_left = movement.unit.stats.movement;
+    let movement_left = movement.movement_points_available;
 
     let mut spaces_explored = HashSet::new();
     let mut queue = VecDeque::new();
@@ -421,148 +427,134 @@ pub struct AttackOption {
     grid_position: GridPosition,
 }
 
-pub fn handle_unit_command(
+// Needs to run after "handle_unit_command"
+pub fn unlock_cursor_after_unit_command(
     mut commands: Commands,
-    grid_manager_res: Res<grid::GridManagerResource>,
-    mut player_state: ResMut<player::PlayerGameStates>,
     mut unit_command_message: MessageReader<UnitCommandMessage>,
-    mut overlay_message_writer: MessageWriter<OverlaysMessage>,
-    cursor_query: Query<(Entity, &Player, &GridPosition), With<LockedOn>>,
-    player_unit_query: Query<(Entity, &player::Player, &Unit)>,
-    unit_query: Query<(Entity, &Unit)>,
+    cursor_query: Query<(Entity, &Player), With<LockedOn>>,
 ) {
     for message in unit_command_message.read() {
-        for (e, cursor_player, cursor_grid_pos) in cursor_query.iter() {
+        for (e, cursor_player) in cursor_query.iter() {
             if *cursor_player != message.player {
                 continue;
             }
 
-            let Some(player_state) = player_state.player_state.get_mut(cursor_player) else {
-                log::error!("No player state found for player {:?}", cursor_player);
-                continue;
-            };
-
-            match message.command {
-                crate::battle::UnitCommand::Move => {
-                    let Some((unit_entity, _, unit)) = get_singleton_component_on_grid_by_player(
-                        cursor_grid_pos,
-                        &grid_manager_res.grid_manager,
-                        |e| {
-                            let queried = player_unit_query
-                                .get(*e)
-                                .ok()
-                                .filter(|(_, p, _)| **p == *cursor_player);
-                            queried.map(|(a, b, c)| (a, *b, c.clone()))
-                        },
-                    ) else {
-                        // TODO: Fix this
-                        panic!("Uh oh, somebody moved the unit out from under us!!!");
-                    };
-
-                    let valid_moves = get_valid_moves_for_unit(
-                        &grid_manager_res.grid_manager,
-                        Movement {
-                            origin: *cursor_grid_pos,
-                            unit,
-                        },
-                        unit_query,
-                    );
-
-                    // Change Player State to moving the unit (Only do this when )
-                    player_state.cursor_state = player::PlayerCursorState::MovingUnit(
-                        unit_entity,
-                        *cursor_grid_pos,
-                        valid_moves.clone(),
-                    );
-
-                    overlay_message_writer.write(OverlaysMessage {
-                        player: *cursor_player,
-                        action: overlay::OverlaysAction::Spawn {
-                            spawn_type: overlay::OverlaysType::Move,
-                            positions: valid_moves.keys().cloned().collect(),
-                        },
-                    });
-                }
-                crate::battle::UnitCommand::Attack => {
-                    // Get the Unit who's attacking
-                    let Some((unit_entity, _, unit)) = get_singleton_component_on_grid_by_player(
-                        cursor_grid_pos,
-                        &grid_manager_res.grid_manager,
-                        |e| {
-                            let queried = player_unit_query
-                                .get(*e)
-                                .ok()
-                                .filter(|(_, p, _)| **p == *cursor_player);
-                            queried.map(|(a, b, c)| (a, *b, c.clone()))
-                        },
-                    ) else {
-                        // TODO: Fix this
-                        panic!("Uh oh, somebody moved the unit out from under us!!!");
-                    };
-
-                    let mut options_for_attack = Vec::new();
-                    // Assume all units have the same attack range for now
-                    for dir in DIRECTION_VECS {
-                        let grid::GridPositionChangeResult::Moved(possible_attack_pos) =
-                            grid_manager_res
-                                .grid_manager
-                                .change_position_with_bounds(*cursor_grid_pos, dir)
-                        else {
-                            continue;
-                        };
-
-                        // Is there a unit that can be attacked there?
-                        if let Some((target_entity, target_unit)) = grid_manager_res
-                            .grid_manager
-                            .get_by_position(&possible_attack_pos)
-                            .cloned()
-                            .unwrap_or_default()
-                            .iter()
-                            .filter_map(|e| unit_query.get(*e).ok())
-                            .next()
-                            && unit.team != target_unit.team
-                        {
-                            options_for_attack.push(AttackOption {
-                                target: target_entity,
-                                grid_position: possible_attack_pos,
-                            });
-                        }
-                    }
-
-                    let options_map: HashMap<GridPosition, AttackOption> = options_for_attack
-                        .iter()
-                        .cloned()
-                        .map(|t| (t.grid_position.clone(), t))
-                        .collect();
-
-                    // Change Player State to moving the unit
-                    player_state.cursor_state =
-                        player::PlayerCursorState::LookingForTargetWithAttack(
-                            unit_entity,
-                            options_map,
-                        );
-
-                    overlay_message_writer.write(OverlaysMessage {
-                        player: *cursor_player,
-                        action: overlay::OverlaysAction::Spawn {
-                            spawn_type: overlay::OverlaysType::Attack,
-                            positions: options_for_attack
-                                .iter()
-                                .cloned()
-                                .map(|t| t.grid_position)
-                                .collect(),
-                        },
-                    });
-                }
-                crate::battle::UnitCommand::Cancel => {
-                    player_state.cursor_state = PlayerCursorState::Idle;
-                }
-                crate::battle::UnitCommand::Wait => {
-                    warn!("Uh oh, they want to wait! We haven't built that yet!")
-                }
-            }
-
             commands.entity(e).remove::<LockedOn>();
+        }
+    }
+}
+
+// TODO: Don't make this dependent on PlayerGameStates
+// We need to drive the interaction between the cursor
+// in a better way. (Which will enable us to use this for AIs too!)
+//
+// PlayerGameStates probably could just be an Event we pass.
+pub fn handle_unit_command(
+    grid_manager_res: Res<grid::GridManagerResource>,
+    mut player_state: ResMut<player::PlayerGameStates>,
+    mut unit_command_message: MessageReader<UnitCommandMessage>,
+    mut overlay_message_writer: MessageWriter<OverlaysMessage>,
+    mut controlled_unit_query: Query<(Entity, &Unit, &mut UnitPhaseResources, &GridPosition)>,
+    unit_query: Query<(Entity, &Unit)>,
+) {
+    for message in unit_command_message.read() {
+        let Some(player_state) = player_state.player_state.get_mut(&message.player) else {
+            log::error!("No player state found for player {:?}", message.player);
+            continue;
+        };
+
+        let Some((unit_entity, unit, mut unit_resources, position)) =
+            controlled_unit_query.get_mut(message.unit).ok()
+        else {
+            log::error!("No Unit found for Command message: {:?}", message);
+            continue;
+        };
+
+        match message.command {
+            crate::battle::UnitCommand::Cancel => {
+                player_state.cursor_state = player::PlayerCursorState::Idle;
+            }
+            crate::battle::UnitCommand::Move => {
+                let valid_moves = get_valid_moves_for_unit(
+                    &grid_manager_res.grid_manager,
+                    MovementRequest {
+                        origin: *position,
+                        unit: unit.clone(),
+                        movement_points_available: unit_resources.movement_points_left_in_phase,
+                    },
+                    unit_query,
+                );
+
+                // Change Player State to moving the unit (Only do this when )
+                player_state.cursor_state = player::PlayerCursorState::MovingUnit(
+                    unit_entity,
+                    *position,
+                    valid_moves.clone(),
+                );
+
+                overlay_message_writer.write(OverlaysMessage {
+                    player: message.player,
+                    action: overlay::OverlaysAction::Spawn {
+                        spawn_type: overlay::OverlaysType::Move,
+                        positions: valid_moves.keys().cloned().collect(),
+                    },
+                });
+            }
+            crate::battle::UnitCommand::Attack => {
+                let mut options_for_attack = Vec::new();
+                // Assume all units have the same attack range for now
+                for dir in DIRECTION_VECS {
+                    let grid::GridPositionChangeResult::Moved(possible_attack_pos) =
+                        grid_manager_res
+                            .grid_manager
+                            .change_position_with_bounds(*position, dir)
+                    else {
+                        continue;
+                    };
+
+                    // Is there a unit that can be attacked there?
+                    if let Some((target_entity, target_unit)) = grid_manager_res
+                        .grid_manager
+                        .get_by_position(&possible_attack_pos)
+                        .cloned()
+                        .unwrap_or_default()
+                        .iter()
+                        .filter_map(|e| unit_query.get(*e).ok())
+                        .next()
+                        && unit.team != target_unit.team
+                    {
+                        options_for_attack.push(AttackOption {
+                            target: target_entity,
+                            grid_position: possible_attack_pos,
+                        });
+                    }
+                }
+
+                let options_map: HashMap<GridPosition, AttackOption> = options_for_attack
+                    .iter()
+                    .cloned()
+                    .map(|t| (t.grid_position.clone(), t))
+                    .collect();
+
+                // Change Player State to moving the unit
+                player_state.cursor_state =
+                    player::PlayerCursorState::LookingForTargetWithAttack(unit_entity, options_map);
+
+                overlay_message_writer.write(OverlaysMessage {
+                    player: message.player,
+                    action: overlay::OverlaysAction::Spawn {
+                        spawn_type: overlay::OverlaysType::Attack,
+                        positions: options_for_attack
+                            .iter()
+                            .cloned()
+                            .map(|t| t.grid_position)
+                            .collect(),
+                    },
+                });
+            }
+            crate::battle::UnitCommand::Wait => {
+                unit_resources.waited = true;
+            }
         }
     }
 }
@@ -1001,7 +993,7 @@ mod tests {
             }
             log::debug!("Running sync_grid_movement to transform");
             app.world_mut()
-                .run_system_once(grid::sync_grid_movement_to_transform)
+                .run_system_once(grid::resolve_grid_movement)
                 .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
         }
 

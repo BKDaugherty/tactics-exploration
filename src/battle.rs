@@ -15,12 +15,13 @@ use crate::{
         tinytactics::AnimationAsset,
         unit_animation_tick_system, update_facing_direction_on_movement,
     },
-    assets::{
-        CURSOR_PATH, EXAMPLE_MAP_2_PATH, EXAMPLE_MAP_PATH, GRADIENT_PATH,
-        OVERLAY_PATH,
-    },
+    assets::{CURSOR_PATH, EXAMPLE_MAP_2_PATH, EXAMPLE_MAP_PATH, GRADIENT_PATH, OVERLAY_PATH},
     battle_menu::{
         activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions, update_player_ui_info,
+    },
+    battle_phase::{
+        PhaseMessage, check_should_advance_phase, init_phase_system,
+        refresh_units_at_beginning_of_phase,
     },
     bevy_ecs_tilemap_example,
     camera::change_zoom,
@@ -35,9 +36,14 @@ use crate::{
     unit::{
         ENEMY_TEAM, PLAYER_TEAM, handle_unit_command, handle_unit_cursor_actions,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
-        spawn_enemy, spawn_obstacle_unit, spawn_unit,
+        spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_command,
     },
 };
+
+// TODO: Need to decide how we want to
+// represent enemy's vs. teams.
+#[derive(Component)]
+pub struct Enemy {}
 
 #[derive(Message, Debug)]
 pub struct UnitSelectionMessage {
@@ -47,20 +53,22 @@ pub struct UnitSelectionMessage {
     pub player: Player,
 }
 
-#[derive(Message)]
+#[derive(Message, Debug)]
 pub struct UnitCommandMessage {
     /// Player that sent command
     pub player: Player,
     /// The Command itself
     pub command: UnitCommand,
+    /// The Entity for the Unit the command is about
+    pub unit: Entity,
 }
 
 #[derive(Debug)]
 pub enum UnitCommand {
     Move,
     Attack,
-    Cancel,
     Wait,
+    Cancel,
 }
 
 /// All logic necessary during a battle
@@ -69,32 +77,46 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<UnitSelectionMessage>()
         .add_message::<UnitCommandMessage>()
         .add_message::<AnimationMarkerMessage>()
+        .add_message::<PhaseMessage>()
         // .add_plugins(TiledPlugin::default())
         // .add_plugins(TiledDebugPluginGroup)
         .add_plugins((
             TilemapPlugin,
             bevy_ecs_tilemap_example::tiled::TiledMapPlugin,
         ))
-        // I wonder if I should put this guy on the top level if I want to
-        // have it be used for the UI too
         .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
         .add_systems(OnEnter(GameState::Battle), load_battle_asset_resources)
         .add_systems(
             OnEnter(GameState::Battle),
             load_demo_battle_scene_2.after(load_battle_asset_resources),
         )
+        .add_systems(OnEnter(GameState::Battle), init_phase_system)
         .add_systems(OnEnter(GameState::Battle), battle_ui_setup)
         .add_systems(
             Update,
             (
+                check_should_advance_phase::<Player>,
+                refresh_units_at_beginning_of_phase::<Player>
+                    .after(check_should_advance_phase::<Player>),
+                check_should_advance_phase::<Enemy>,
+                refresh_units_at_beginning_of_phase::<Enemy>
+                    .after(check_should_advance_phase::<Enemy>),
+            )
+                .run_if(in_state(GameState::Battle)),
+        )
+        .add_systems(
+            Update,
+            (
                 // Grid Movement + Transform
-                grid::sync_grid_movement_to_transform,
+                grid::resolve_grid_movement,
                 grid::sync_grid_position_to_transform,
                 grid::sync_grid_positions_to_manager,
                 grid_cursor::handle_cursor_movement,
                 // Unit Movement + Overlay UI
                 handle_overlays_events_system,
                 handle_unit_cursor_actions,
+                handle_unit_command,
+                unlock_cursor_after_unit_command.after(handle_unit_command),
                 // Combat
                 attack_intent_system,
                 attack_impact_system,
@@ -107,7 +129,6 @@ pub fn battle_plugin(app: &mut App) {
                 handle_menu_cursor_navigation,
                 highlight_menu_option,
                 handle_battle_ui_interactions, // on_asset_event
-                handle_unit_command,
             )
                 .run_if(in_state(GameState::Battle)),
         )

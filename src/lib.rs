@@ -2,6 +2,7 @@ pub mod animation;
 pub mod assets;
 pub mod battle;
 pub mod battle_menu;
+pub mod battle_phase;
 mod bevy_ecs_tilemap_example;
 pub mod camera;
 pub mod combat;

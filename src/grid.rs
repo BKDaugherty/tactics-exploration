@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::battle_phase::UnitPhaseResources;
+
 /// Size of a single tile in world units
 pub const TILE_X_SIZE: f32 = 32.0;
 pub const TILE_Y_SIZE: f32 = 16.0;
@@ -249,17 +251,23 @@ pub fn init_grid_to_world_transform(grid_pos: &GridPosition) -> Transform {
     Transform::from_translation(Vec3::new(world.x, world.y, 600.0))
 }
 
-/// System to sync GridMovement components to Transform components
-pub fn sync_grid_movement_to_transform(
+/// System to resolve GridMovement GridMovement components to Transform components
+pub fn resolve_grid_movement(
     mut commands: Commands,
     mut grid_manager_res: ResMut<GridManagerResource>,
-    mut query: Query<(Entity, &mut GridMovement, &mut Transform, &mut GridPosition)>,
+    mut query: Query<(
+        Entity,
+        &mut GridMovement,
+        &mut Transform,
+        &mut GridPosition,
+        &mut UnitPhaseResources,
+    )>,
     time: Res<Time>,
 ) {
-    for (entity, mut movement, mut transform, mut grid_pos) in query.iter_mut() {
+    for (entity, mut movement, mut transform, mut grid_pos, mut unit_resources) in query.iter_mut()
+    {
         if movement.is_finished() {
             commands.entity(entity).remove::<GridMovement>();
-            log::debug!("Finished movement for entity {:?}", entity);
             continue;
         }
 
@@ -301,6 +309,16 @@ pub fn sync_grid_movement_to_transform(
                     grid_pos
                 );
             };
+
+            let prev = unit_resources.movement_points_left_in_phase;
+            unit_resources.movement_points_left_in_phase = unit_resources
+                .movement_points_left_in_phase
+                .saturating_sub(1);
+
+            info!(
+                "Reducing unit_resources.movement_points_left_in_phase: {:?}, {:?}",
+                prev, unit_resources.movement_points_left_in_phase
+            );
         }
     }
 }
