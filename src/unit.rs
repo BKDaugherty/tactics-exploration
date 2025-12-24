@@ -513,7 +513,7 @@ pub fn handle_unit_ui_command(
             continue;
         };
 
-        let Some((unit_entity, unit, mut unit_resources, position)) =
+        let Some((unit_entity, unit, unit_resources, position)) =
             controlled_unit_query.get_mut(message.unit).ok()
         else {
             log::error!("No Unit found for Command message: {:?}", message);

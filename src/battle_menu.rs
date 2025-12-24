@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::{
-    battle::{UnitCommand, UnitUiCommandMessage, UnitSelectionMessage},
+    battle::{UnitCommand, UnitSelectionMessage, UnitUiCommandMessage},
     battle_phase::UnitPhaseResources,
     grid::{self, GridManagerResource},
     grid_cursor::Cursor,
@@ -37,7 +37,7 @@ pub enum UnitMenuAction {
     Wait,
 }
 
-pub fn top_ui(mut commands: Commands) {}
+pub fn top_ui(commands: Commands) {}
 
 pub fn battle_ui_setup(mut commands: Commands) {
     let ui_bottom_space = commands
