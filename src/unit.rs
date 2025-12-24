@@ -546,15 +546,13 @@ pub fn handle_unit_ui_command(
                 player_state.cursor_state = player::PlayerCursorState::Idle;
             }
             crate::battle::UnitCommand::Move => {
-                let valid_moves = get_valid_moves_for_unit(
-                    &grid_manager_res.grid_manager,
-                    MovementRequest {
-                        origin: *position,
-                        unit: unit.clone(),
-                        movement_points_available: unit_resources.movement_points_left_in_phase,
-                    },
-                    unit_query,
-                );
+                let req = MovementRequest {
+                    origin: *position,
+                    unit: unit.clone(),
+                    movement_points_available: unit_resources.movement_points_left_in_phase,
+                };
+                let valid_moves =
+                    get_valid_moves_for_unit(&grid_manager_res.grid_manager, req, unit_query);
 
                 // Change Player State to moving the unit (Only do this when )
                 player_state.cursor_state = player::PlayerCursorState::MovingUnit(
@@ -737,8 +735,6 @@ pub fn handle_unit_cursor_actions(
                         entity: unit_entity,
                         action: UnitExecuteAction::Move(valid_move),
                     });
-
-                    // TODO: Event for driving movement
 
                     end_move(&mut overlay_message_writer, player, player_state);
                 } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
@@ -959,6 +955,10 @@ mod tests {
 
     use crate::{
         battle::{UnitCommand, UnitSelectionMessage, UnitUiCommandMessage},
+        battle_phase::{
+            PhaseMessage, UnitPhaseResources, check_should_advance_phase, init_phase_system,
+            refresh_units_at_beginning_of_phase,
+        },
         grid::{
             self, GridManager, GridManagerResource, GridMovement, GridPosition,
             sync_grid_positions_to_manager,
@@ -966,12 +966,16 @@ mod tests {
         grid_cursor,
         player::{self, Player, PlayerGameStates, PlayerInputAction, PlayerState},
         unit::{
-            PLAYER_TEAM, Stats, Unit, handle_unit_cursor_actions, handle_unit_ui_command,
-            overlay::OverlaysMessage,
+            PLAYER_TEAM, Stats, Unit, UnitActionCompletedMessage, UnitExecuteActionMessage,
+            execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
+            overlay::OverlaysMessage, unlock_cursor_after_unit_command,
         },
     };
     use bevy::{
-        app::App, ecs::system::RunSystemOnce, time::Time, transform::components::Transform,
+        app::{App, Update},
+        ecs::{schedule::IntoScheduleConfigs, system::RunSystemOnce},
+        time::Time,
+        transform::components::Transform,
     };
     use leafwing_input_manager::{plugin::InputManagerPlugin, prelude::ActionState};
 
@@ -984,6 +988,9 @@ mod tests {
         app.add_message::<OverlaysMessage>();
         app.add_message::<UnitSelectionMessage>();
         app.add_message::<UnitUiCommandMessage>();
+        app.add_message::<UnitExecuteActionMessage>();
+        app.add_message::<UnitActionCompletedMessage>();
+        app.add_message::<PhaseMessage>();
         app.insert_resource(GridManagerResource {
             grid_manager: GridManager::new(6, 6),
         });
@@ -1023,6 +1030,7 @@ mod tests {
                 Player::One,
                 GridPosition { x: 2, y: 2 },
                 Transform::default(),
+                UnitPhaseResources::default(),
             ))
             .id();
 
@@ -1035,6 +1043,18 @@ mod tests {
                 GridPosition { x: 2, y: 2 },
             ))
             .id();
+
+        // Setup the phase system
+        app.world_mut()
+            .run_system_once(init_phase_system)
+            .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
+
+        app.world_mut()
+            .run_system_once(check_should_advance_phase::<Player>)
+            .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
+        app.world_mut()
+            .run_system_once(refresh_units_at_beginning_of_phase::<Player>)
+            .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         app.world_mut()
             .run_system_once(sync_grid_positions_to_manager)
@@ -1057,12 +1077,17 @@ mod tests {
         // It then expects to be told what the player wants to do with the unit. Let's assume they want to
         // move.
         app.world_mut().write_message(UnitUiCommandMessage {
+            unit: unit_entity,
             player: Player::One,
             command: UnitCommand::Move,
         });
 
         app.world_mut()
             .run_system_once(handle_unit_ui_command)
+            .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
+
+        app.world_mut()
+            .run_system_once(unlock_cursor_after_unit_command)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         // Let's also simulate a move of the cursor to a valid destination, and
@@ -1083,6 +1108,10 @@ mod tests {
         // UnitMovement should spawn some GridMovement, let's let that resolve and validate that our entity is moved to the correct space.
         app.world_mut()
             .run_system_once(handle_unit_cursor_actions)
+            .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
+
+        app.world_mut()
+            .run_system_once(execute_unit_actions)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         assert!(app.world().get::<GridMovement>(unit_entity).is_some());
