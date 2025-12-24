@@ -121,39 +121,60 @@ pub fn spawn_enemy(
         })
         .expect("Must have animation data");
 
-    commands.spawn((
-        Unit {
-            stats: Stats {
-                max_health: 10,
-                health: 10,
-                strength: 5,
-                movement: 3,
+    let unit_e = commands
+        .spawn((
+            Unit {
+                stats: Stats {
+                    max_health: 10,
+                    health: 10,
+                    strength: 5,
+                    movement: 3,
+                },
+                obstacle: ObstacleType::Filter(HashSet::from([team])),
+                team,
+                name: unit_name,
             },
-            obstacle: ObstacleType::Filter(HashSet::from([team])),
-            team,
-            name: unit_name,
-        },
-        grid_position,
-        Sprite {
-            image: spritesheet,
-            texture_atlas: Some(TextureAtlas {
-                layout: texture_atlas_layout,
-                index: animation_data.start_index,
-            }),
-            color: Color::linear_rgb(1.0, 1.0, 1.0),
-            flip_x: direction.should_flip_across_y(),
-            ..Default::default()
-        },
-        transform,
-        FacingDirection(crate::animation::Direction::SW),
-        UnitAnimationPlayer::new(),
-        TINY_TACTICS_ANCHOR,
-        UnitPhaseResources::default(),
-        Enemy {},
-        EnemyAiBehavior {
-            behavior: enemy::behaviors::Behavior::Wanderer,
-        },
-    ));
+            grid_position,
+            Sprite {
+                image: spritesheet,
+                texture_atlas: Some(TextureAtlas {
+                    layout: texture_atlas_layout,
+                    index: animation_data.start_index,
+                }),
+                color: Color::linear_rgb(1.0, 1.0, 1.0),
+                flip_x: direction.should_flip_across_y(),
+                ..Default::default()
+            },
+            transform,
+            FacingDirection(crate::animation::Direction::SW),
+            UnitAnimationPlayer::new(),
+            TINY_TACTICS_ANCHOR,
+            UnitPhaseResources::default(),
+            Enemy {},
+            EnemyAiBehavior {
+                behavior: enemy::behaviors::Behavior::Trapper,
+            },
+        ))
+        .id();
+
+    let weapon = commands
+        .spawn((
+            Sprite {
+                image: tt_assets.scepter_spritesheet.clone(),
+                texture_atlas: Some(TextureAtlas {
+                    layout: tt_assets.weapon_layout.clone(),
+                    index: 0,
+                }),
+                flip_x: direction.should_flip_across_y(),
+                ..Default::default()
+            },
+            AnimationFollower { leader: unit_e },
+            Visibility::Hidden,
+            TINY_TACTICS_ANCHOR,
+        ))
+        .id();
+
+    commands.entity(unit_e).add_child(weapon);
 }
 
 pub const TINY_TACTICS_ANCHOR: Anchor = Anchor(Vec2::new(0., -0.25));
