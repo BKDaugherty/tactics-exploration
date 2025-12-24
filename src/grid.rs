@@ -206,6 +206,10 @@ pub struct GridVec {
     pub y: i32,
 }
 
+pub fn manhattan_distance(a: &GridPosition, b: &GridPosition) -> u32 {
+    ((a.x as i32 - b.x as i32).abs() + (a.y as i32 - b.y as i32).abs()) as u32
+}
+
 #[derive(Component)]
 pub struct GridMovement {
     pub waypoints: Vec<GridPosition>,

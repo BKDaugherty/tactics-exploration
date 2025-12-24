@@ -5,16 +5,13 @@ use std::collections::VecDeque;
 use bevy::prelude::*;
 
 use crate::{
-    battle::{Enemy, UnitCommand, UnitUiCommandMessage},
-    battle_phase::{
-        PhaseManager, PhaseMessage, PhaseMessageType, PhaseState, PlayerEnemyPhase,
-        UnitPhaseResources,
-    },
+    battle::Enemy,
+    battle_phase::{PhaseMessage, PhaseMessageType, PlayerEnemyPhase, UnitPhaseResources},
+    combat::AttackIntent,
     enemy::behaviors::EnemyAiBehavior,
-    grid::{GridManagerResource, GridPosition, get_movement_options},
-    player::Player,
+    grid::{GridManagerResource, GridPosition, GridPositionChangeResult, manhattan_distance},
     unit::{
-        MovementRequest, Unit, UnitAction, UnitActionCompletedMessage, UnitExecuteAction,
+        DIRECTION_VECS, MovementRequest, Unit, UnitActionCompletedMessage, UnitExecuteAction,
         UnitExecuteActionMessage, get_valid_moves_for_unit,
     },
 };
@@ -105,8 +102,10 @@ pub fn plan_enemy_action(
         ),
         (With<ActiveEnemy>, Without<PlannedEnemyAction>),
     >,
-    // Used for obstruction checks
+    // Used for obstruction checks among other things
     unit_query: Query<(Entity, &Unit)>,
+    // Used for finding a good target for an attack
+    unit_query_with_position: Query<(Entity, &Unit, &GridPosition)>,
 ) {
     // There should only be at most one ActiveEnemy but :shrug:
     for (enemy, enemy_unit, resources, behavior, enemy_pos) in query {
@@ -142,6 +141,72 @@ pub fn plan_enemy_action(
                 PlannedEnemyAction {
                     action_queue: actions,
                 }
+            }
+            behaviors::Behavior::Trapper => {
+                let mut action_queue = VecDeque::new();
+                let valid_moves = get_valid_moves_for_unit(
+                    &grid_manager.grid_manager,
+                    MovementRequest {
+                        origin: *enemy_pos,
+                        unit: enemy_unit.clone(),
+                        movement_points_available: resources.movement_points_left_in_phase,
+                    },
+                    unit_query,
+                );
+
+                let mut possible_targets = Vec::new();
+                // Some of this could probably be re-used for other behaviors
+                for (e, unit, unit_pos) in unit_query_with_position {
+                    // We don't want trappers just randomly attacking walls (or maybe we do?)
+                    // so we use "against_me" here.
+                    if !enemy_unit.team.against_me(&unit.team) || unit.downed() {
+                        continue;
+                    }
+
+                    let distance = manhattan_distance(unit_pos, enemy_pos);
+                    possible_targets.push((e, unit, unit_pos, distance));
+                }
+
+                // Find the closest unit (assume we can get to them for now!)
+                if let Some((target_entity, _, target_pos, _)) = possible_targets
+                    .into_iter()
+                    .min_by(|(_, _, _, dist), (_, _, _, dist2)| dist.cmp(dist2))
+                {
+                    // TODO: Try to optimize being behind the target by using FacingDirection
+                    //
+                    // Assumes an Enemy Range of 1
+                    for delta in DIRECTION_VECS {
+                        let GridPositionChangeResult::Moved(possible_move) = grid_manager
+                            .grid_manager
+                            .change_position_with_bounds(*target_pos, delta)
+                        else {
+                            continue;
+                        };
+
+                        // I can move here and attack the unit. Let's do it!
+                        if let Some(valid_move) = valid_moves.get(&possible_move) {
+                            action_queue.extend([
+                                PlannedAction {
+                                    action: UnitExecuteAction::Move(valid_move.clone()),
+                                },
+                                PlannedAction {
+                                    action: UnitExecuteAction::Attack(AttackIntent {
+                                        attacker: enemy,
+                                        defender: target_entity,
+                                    }),
+                                },
+                            ]);
+                            break;
+                        }
+                    }
+                }
+
+                // Wait even if we didn't find a target.
+                action_queue.push_back(PlannedAction {
+                    action: UnitExecuteAction::Wait,
+                });
+
+                PlannedEnemyAction { action_queue }
             }
             otherwise => {
                 warn!(
