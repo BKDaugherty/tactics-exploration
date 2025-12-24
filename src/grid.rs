@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::battle_phase::UnitPhaseResources;
+use crate::{
+    battle_phase::UnitPhaseResources,
+    unit::{UnitAction, UnitActionCompletedMessage},
+};
 
 /// Size of a single tile in world units
 pub const TILE_X_SIZE: f32 = 32.0;
@@ -263,11 +266,16 @@ pub fn resolve_grid_movement(
         &mut UnitPhaseResources,
     )>,
     time: Res<Time>,
+    mut action_completed_writer: MessageWriter<UnitActionCompletedMessage>,
 ) {
     for (entity, mut movement, mut transform, mut grid_pos, mut unit_resources) in query.iter_mut()
     {
         if movement.is_finished() {
             commands.entity(entity).remove::<GridMovement>();
+            action_completed_writer.write(UnitActionCompletedMessage {
+                unit: entity,
+                action: UnitAction::Move,
+            });
             continue;
         }
 

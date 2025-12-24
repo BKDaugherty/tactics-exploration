@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     animation::{AnimationMarker, AnimationMarkerMessage},
     battle_phase::UnitPhaseResources,
-    unit::Unit,
+    unit::{Unit, UnitAction, UnitActionCompletedMessage},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -44,7 +44,7 @@ pub struct AttackExecution {
     pub outcome: AttackOutcome,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Debug)]
 pub struct AttackIntent {
     pub attacker: Entity,
     pub defender: Entity,
@@ -128,7 +128,9 @@ pub fn attack_impact_system(
                 unit_query.get_mut(attack.attacker).ok()
             {
                 // Eh, don't love this, but it's okay for now.
-                attacking_unit_resources.action_points_left_in_phase -= attack.outcome.ap_cost;
+                attacking_unit_resources.action_points_left_in_phase = attacking_unit_resources
+                    .action_points_left_in_phase
+                    .saturating_sub(attack.outcome.ap_cost);
             }
         }
     }
@@ -138,9 +140,14 @@ pub fn attack_impact_system(
 pub fn attack_execution_despawner(
     mut commands: Commands,
     attacks: Query<(Entity, &AttackExecution)>,
+    mut action_completed_message: MessageWriter<UnitActionCompletedMessage>,
 ) {
     for (e, attack) in attacks {
         if attack.phase == AttackPhase::Done {
+            action_completed_message.write(UnitActionCompletedMessage {
+                unit: attack.attacker,
+                action: UnitAction::Attack,
+            });
             commands.entity(e).despawn();
         }
     }
