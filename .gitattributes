@@ -72,3 +72,11 @@ assets/utility_assets/gradient.png filter=lfs diff=lfs merge=lfs -text
 assets/utility_assets/iso_color-16.png filter=lfs diff=lfs merge=lfs -text
 assets/map_assets/tinytactics-32-map/20240420tinyTacticsTileset00.png filter=lfs diff=lfs merge=lfs -text
 assets/map_assets/example-map/iso-64x64-outside.tsx filter=lfs diff=lfs merge=lfs -text
+assets/font_assets/tinyRPGFontKit01_v1_2/20240412badgeFont.png filter=lfs diff=lfs merge=lfs -text
+assets/font_assets/tinyRPGFontKit01_v1_2/20240412brilliantStrengthFont.png filter=lfs diff=lfs merge=lfs -text
+assets/font_assets/tinyRPGFontKit01_v1_2/20240412fineFantasyStrategiesFont.png filter=lfs diff=lfs merge=lfs -text
+assets/font_assets/tinyRPGFontKit01_v1_2/20240412fineFantasyStrategiesItalicNumbersFont.png filter=lfs diff=lfs merge=lfs -text
+assets/font_assets/tinyRPGFontKit01_v1_2/TinyRPG-BadgeFont.ttf filter=lfs diff=lfs merge=lfs -text
+assets/font_assets/tinyRPGFontKit01_v1_2/TinyRPG-BrilliantStrength.ttf filter=lfs diff=lfs merge=lfs -text
+assets/font_assets/tinyRPGFontKit01_v1_2/TinyRPG-FineFantasyStrategies.ttf filter=lfs diff=lfs merge=lfs -text
+assets/font_assets/tinyRPGFontKit01_v1_2/TinyRPG-FineFantasyStrategiesItalicNumbers.ttf filter=lfs diff=lfs merge=lfs -text
