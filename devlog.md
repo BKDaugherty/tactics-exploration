@@ -1,8 +1,61 @@
 # Devlog
 
-I like keep tracking of what I think I need to do in a flat list. For now, this tracks it!
+I like keep tracking of what I think I need to do in a list. For now, this tracks it!
 
 ## The TODO List
+
+### Projectier Things
+- [ ] Finish "Gameifying" the Demo
+  - [ ] Victory or Defeat Calculations
+  - [ ] Advance out of BattleState
+    - [ ] Maybe with a "Play Again?" button?
+
+- [ ] Handle Z Index Correctly
+  - [ ] Do some maths to specify what the Z index of everything should be
+  - [ ] Spawn objects from map direclty probably instead of reading from tiled
+
+- [ ] Handle Gamepad Inputs
+  - [ ] Create some form of screen for joining game etc
+
+- [ ] Animation Data
+  - [ ] Update derived animation data to populate expected texture atlas indices
+  - [ ] Actually use derived animation data instead of hardcoding values
+
+- [ ] Map Data / Battle Scene Data
+  - [ ] The "load_demo_battle_scene" and "spawn_unit" fns are getting a lil out of control. 
+  - [ ] Maps / Battles as Data?
+    - [ ] Procedurally Generated Levels?
+
+- [ ] Expand on the Combat System
+  - [ ] Ranged Attacks?
+  - [ ] Damage / AP Calculations?
+  - [ ] Multiple Types of Moves?
+  - [ ] Allow the unit to pick a FacedDirection on Wait
+  - [ ] UI Support for more complex choices of "actions"?
+
+- [ ] Outside of Battle...
+
+- [ ] Items and Interactables?
+
+- [ ] The Progression?
+
+- [ ] The Meta Progression?
+
+- [ ] Save Games?
+  - [ ] Load Games??
+  
+- [ ] Add the idea of Height to the Grid??!
+
+- [ ] Camera Management?
+  - [ ] If the levels stay small this might not be a big deal honestly
+
+- [ ] Make the UI not look like shit
+
+### Smaller, Bug kind of focus
+- [ ] Ensure assets are loaded before moving to new scene
+
+
+## Archive
 
 - [x] A GridManager for tracking all of the "entities" I want
   - [x] I'll need a bevy_system for tracking entities
@@ -10,15 +63,13 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
   - [x] I'd like to create a few integration tests here to help me get a feel for that too.
 
 - [x] A way of going from a GridPosition to a WorldPosition for rendering
-  - [ ] Need to figure out how to deal with Z values w.r.t bevy_ecs_tiled
 
-- [ ] These iso_color things are great! Let's use them for showing attack and movement options
+- [x] These iso_color things are great! Let's use them for showing attack and movement options
   - [x] Figure out how to adjust opacity of stuff
-  - [ ] Would be fun to make the squares a little smaller than the tiles they sit above.
 
 - [x] Use leafwing to support multiple players and abstract input
 
-- [ ] Build a simple demo of moving a few characters around!
+- [x] Build a simple demo of moving a few characters around!
   - [x] Create a pixel image for a cursor
   - [x] Create a movement system for the cursor (Use the leafwing_input library)
   - [x] Make the "spawn overlay" tie to the cursor!
@@ -42,18 +93,13 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
   - [x] Use the Movement system and tune the lerping constants
   - [x] Center the camera on the map
     - [x] I could naively just put it on the center but it'd be nice if we make bigger maps to have it move around.
-  - [ ] Get a background image
-  - [ ] Create a goal for someone to move to (like in a tutorial!)
+  - [x] Get a background image
+  - [x] Create a goal for someone to move to (like in a tutorial!)
 
-- [ ] Handle Gamepad Inputs
-  - [ ] Create some form of screen for joining game etc
-
-- [ ] Animations
+- [x] Animations
   - [x] Write an animation controller for switching to the right animation state
     - [x] Might scale better if we use a MessageReader / Writer?
-  - [ ] Update derived animation data to populate expected texture atlas indices
-  - [ ] Actually use derived animation data instead of hardcoding values
-  - [ ] Fix bug in Spritesheet creation that causes images to be flipped incorrectly
+  - [x] Fix bug in Spritesheet creation that causes images to be flipped incorrectly
 
 
 - [x] Make the game code easier to share / collaborate on (and clean it up!)
@@ -70,49 +116,18 @@ I like keep tracking of what I think I need to do in a flat list. For now, this 
 
 - [x] Do some UI Research into how to build bevy_uis for selecting characters / viewing stats
   - [x] Build a smol UI for looking at Units on the battlefield based on the current cursor position?
-  - [ ] Figure out a simple communication system between UI and movement code
-    - [ ] Ensure that cursor locks only when we choose a valid Unit
-    - [ ] Ensure that we only perform a move action when the player clicks Move
-  - [ ] Build a smol UI for attacking
-  - [ ] Build a smol UI for waiting
+  - [x] Figure out a simple communication system between UI and movement code
+    - [x] Ensure that cursor locks only when we choose a valid Unit
+    - [x] Ensure that we only perform a move action when the player clicks Move
+  - [x] Build a smol UI for attacking
+  - [x] Build a smol UI for waiting
 
-- [ ] Create a Phased (for now) turn system
-  - [ ] Track Action Points
-  - [ ] Movement Points
-  - [ ] Create a component to manage a "Phase"
-  - [ ] Create a system to renew the phase
+- [x] Create a Phased (for now) turn system
+  - [x] Track Action Points
+  - [x] Movement Points
+  - [x] Create a component to manage a "Phase"
+  - [x] Create a system to renew the phase
 
-- [ ] Allow the user to pick a FacedDirection on Wait
-
-- [ ] Have a think through the Unit types and what should be on them
-  - [ ] Create a combat system
-  - [ ] Create a skill system
-  - [ ] Create an inventory system
-
-- [ ] Do some further research into Resource / Game State Tracking
-  - [ ] Ensure assets are loaded before moving to scene
-    - [ ] Learn basic Bevy UIs
-
-- [ ] Create some silly game music, and play it in the different states
-  - [ ] Create some silly music to play in different things
-
-- [ ] Get the demo running on the Steam Deck
-
-- [ ] Code organization
-  - [x] Create plugins for systems that are associated with eachother?
-  - [ ] Pull all of the Battle stuff into it's own module?
-
-- [ ] Pathfinding and Unit Movement in Multiplayer
-  - [ ] If two units are moving at the same time, how do I ensure they can't move to the same spot? When should I do the movement calculation? How can I refresh / lock?
-
-
-
-- [ ] Create a camera manager that balances where to focus based on player movement
-
-- [ ] Another demo!
-
-- [ ] "Map" Data structures
-  - [ ] At the moment, map data is pretty hardcoded. It'd be great to have a data representation for this.
-  - [ ] Experiment with using Tiled as a way of pushing data into the maps themselves? Or just add some JSON / RON alongside some maps maybe for an equivalent without needing to learn too much.
-
-- [ ] How would savegames work? What data does one save? 
+- [x] Platforms
+  - [x] Get the demo running on the Steam Deck
+  - [x] Get the demo running on the Web!
