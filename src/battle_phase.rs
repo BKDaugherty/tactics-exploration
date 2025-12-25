@@ -5,7 +5,12 @@
 
 use bevy::prelude::*;
 
-use crate::{battle::Enemy, player::Player, unit::Unit};
+use crate::{
+    battle::Enemy,
+    battle_phase::phase_ui::{BattlePhaseMessageComplete, ShowBattleBannerMessage},
+    player::Player,
+    unit::Unit,
+};
 
 /// The Phase Manager keeps track of the current phase globally for the battle.
 #[derive(Resource)]
@@ -52,12 +57,17 @@ pub fn is_running_enemy_phase(pm: Option<Res<PhaseManager>>) -> bool {
     .unwrap_or_default()
 }
 
-#[derive(Clone)]
+pub fn is_enemy_phase(pm: Option<Res<PhaseManager>>) -> bool {
+    pm.map(|pm| pm.current_phase == PlayerEnemyPhase::Enemy)
+        .unwrap_or_default()
+}
+
+#[derive(Clone, Debug)]
 pub enum PhaseMessageType {
     PhaseBegin(PlayerEnemyPhase),
 }
 
-#[derive(Message)]
+#[derive(Message, Debug)]
 pub struct PhaseMessage(pub PhaseMessageType);
 
 #[derive(Component, Debug, Reflect, Default)]
@@ -131,10 +141,12 @@ pub fn check_should_advance_phase<T: PhaseSystem<PlayerEnemyPhase>>(
     }
 }
 
-pub fn refresh_units_at_beginning_of_phase<T: PhaseSystem<PlayerEnemyPhase>>(
-    mut phase_manager: ResMut<PhaseManager>,
+/// Prepares for Phase
+pub fn prepare_for_phase<T: PhaseSystem<PlayerEnemyPhase>>(
+    phase_manager: ResMut<PhaseManager>,
     mut message_reader: MessageReader<PhaseMessage>,
     mut query: Query<(&Unit, &mut UnitPhaseResources), With<T::Marker>>,
+    mut battle_phase_change_writer: MessageWriter<ShowBattleBannerMessage>,
 ) {
     for message in message_reader.read() {
         let PhaseMessageType::PhaseBegin(phase) = message.0;
@@ -146,8 +158,158 @@ pub fn refresh_units_at_beginning_of_phase<T: PhaseSystem<PlayerEnemyPhase>>(
                 phase_resources.waited = false;
             }
 
-            // TODO: Should this actually be where the "PhaseBegin" event is emitted for external systems?
+            battle_phase_change_writer.write(ShowBattleBannerMessage {
+                message: phase_ui::BattleBannerMessage::PhaseBegin(T::OWNED_PHASE),
+            });
+        }
+    }
+}
+
+/// Advances the phase after the BattleBanner has been displayed
+pub fn start_phase(
+    mut phase_manager: ResMut<PhaseManager>,
+    mut message_reader: MessageReader<BattlePhaseMessageComplete>,
+) {
+    for _message in message_reader.read() {
+        if phase_manager.phase_state == PhaseState::Initializing {
             phase_manager.phase_state = PhaseState::Running;
+        }
+    }
+}
+
+pub mod phase_ui {
+    use bevy::{ecs::relationship::Relationship, prelude::*};
+
+    use crate::battle_phase::PlayerEnemyPhase;
+
+    #[derive(Debug)]
+    pub enum BattleEndCondition {
+        Victory,
+        Defeat,
+    }
+
+    #[derive(Debug)]
+    pub enum BattleBannerMessage {
+        PhaseBegin(PlayerEnemyPhase),
+        BattleEndCondition(BattleEndCondition),
+    }
+
+    #[derive(Message, Debug)]
+    pub struct ShowBattleBannerMessage {
+        pub message: BattleBannerMessage,
+    }
+
+    #[derive(Message)]
+    pub struct BattlePhaseMessageComplete {}
+
+    #[derive(Component)]
+    pub struct BattleBanner;
+
+    #[derive(Component)]
+    pub struct BannerAnimation {
+        timer: Timer,
+        state: BannerAnimState,
+    }
+
+    enum BannerAnimState {
+        Entering,
+        Holding,
+        Exiting,
+    }
+
+    fn spawn_phase_ui(commands: &mut Commands, event: &ShowBattleBannerMessage) {
+        let container = commands
+            .spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::NONE),
+                BattleBanner,
+                BannerAnimation {
+                    timer: Timer::from_seconds(0.4, TimerMode::Once),
+                    state: BannerAnimState::Entering,
+                },
+            ))
+            .id();
+
+        let blue = Color::linear_rgba(0.2, 0.2, 0.95, 1.0);
+        let red = Color::linear_rgba(0.9, 0.35, 0.4, 1.0);
+
+        let (color, text) = match &event.message {
+            BattleBannerMessage::PhaseBegin(phase) => match phase {
+                PlayerEnemyPhase::Player => (blue.clone(), "Player Phase"),
+                PlayerEnemyPhase::Enemy => (red.clone(), "Enemy Phase"),
+            },
+            BattleBannerMessage::BattleEndCondition(battle_end_condition) => {
+                match battle_end_condition {
+                    BattleEndCondition::Victory => (blue.clone(), "Victory"),
+                    BattleEndCondition::Defeat => (red.clone(), "Defeat"),
+                }
+            }
+        };
+
+        let banner = commands
+            .spawn((
+                Node {
+                    width: percent(80),
+                    height: percent(20),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..Default::default()
+                },
+                BorderRadius::all(percent(20)),
+                BackgroundColor(Color::linear_rgba(0.4, 0.4, 0.4, 0.8)),
+                children![(
+                    TextColor(color),
+                    Text::new(text),
+                    TextFont {
+                        font_size: 60.,
+                        ..Default::default()
+                    },
+                )],
+            ))
+            .id();
+
+        commands.entity(container).add_child(banner);
+    }
+
+    pub fn spawn_banner_system(
+        mut commands: Commands,
+        mut events: MessageReader<ShowBattleBannerMessage>,
+    ) {
+        for event in events.read() {
+            spawn_phase_ui(&mut commands, event);
+        }
+    }
+
+    pub fn banner_animation_system(
+        time: Res<Time>,
+        mut commands: Commands,
+        mut query: Query<(Entity, &mut BannerAnimation), With<BattleBanner>>,
+        mut writer: MessageWriter<BattlePhaseMessageComplete>,
+    ) {
+        for (entity, mut anim) in &mut query {
+            anim.timer.tick(time.delta());
+            if anim.timer.just_finished() {
+                match anim.state {
+                    BannerAnimState::Entering => {
+                        anim.state = BannerAnimState::Holding;
+                        anim.timer = Timer::from_seconds(0.6, TimerMode::Once);
+                    }
+                    BannerAnimState::Holding => {
+                        anim.state = BannerAnimState::Exiting;
+                        anim.timer = Timer::from_seconds(0.4, TimerMode::Once);
+                    }
+                    BannerAnimState::Exiting => {
+                        commands.entity(entity).despawn();
+                        writer.write(BattlePhaseMessageComplete {});
+                    }
+                }
+            }
         }
     }
 }
