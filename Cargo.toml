@@ -6,9 +6,7 @@ default-run = "tactics-exploration"
 
 [dependencies]
 anyhow = "1.0.100"
-# Using dynamic_linking as described here
-# https://bevy.org/learn/quick-start/getting-started/setup/#enable-fast-compiles-optional
-bevy = { version = "0.17.3", features = ["dynamic_linking"] }
+bevy = { version = "0.17.3" }
 bevy-inspector-egui = "0.35.0"
 bevy_common_assets = { version = "0.14.0", features = ["json"] }
 bevy_ecs_tiled = { version = "0.10.0", features = ["debug"] }
@@ -21,8 +19,12 @@ leafwing-input-manager = "0.19.0"
 log = "0.4.29"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-tiled = { version = "0.14.0", default-features = false }
+tiled = { version = "0.15.0", default-features = false }
 thiserror = { version = "2.0" }
+
+[features]
+wasm = ["tiled/wasm", "bevy_ecs_tiled/wasm"]
+
 
 # Bevy docs optimizations
 # https://bevy.org/learn/quick-start/getting-started/setup/
@@ -37,3 +39,10 @@ opt-level = 3
 
 [dev-dependencies]
 env_logger = "0.11.8"
+
+# https://bevy-cheatbook.github.io/platforms/wasm/size-opt.html
+[profile.release-wasm]
+inherits = "release"
+opt-level = 'z'
+lto = "thin"
+

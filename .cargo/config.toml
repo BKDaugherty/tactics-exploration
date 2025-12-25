@@ -1,0 +1,14 @@
+# Using dynamic_linking when clickly iterating as described here
+# https://bevy.org/learn/quick-start/getting-started/setup/#enable-fast-compiles-optional
+#
+# Note that you can't seem to conditionally apply features to a dependency based on
+# your cargo profile :( 
+
+[alias]
+b = "build --features bevy/dynamic_linking"
+r = "run --features bevy/dynamic_linking"
+w = "run --target wasm32-unknown-unknown --features wasm"
+
+[target.wasm32-unknown-unknown]
+runner = "wasm-server-runner"
+

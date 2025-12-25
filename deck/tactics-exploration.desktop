@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Tactics Exploration
+Exec=/home/deck/tactics-exploration/tactics-exploration
+Terminal=false
+Categories=Utility;
