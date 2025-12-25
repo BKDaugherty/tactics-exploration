@@ -125,12 +125,12 @@ pub fn battle_plugin(app: &mut App) {
                 // Unit Movement + Overlay UI
                 handle_overlays_events_system,
                 handle_unit_ui_command,
+                activate_battle_ui.run_if(is_running_player_phase),
+                handle_battle_ui_interactions.run_if(is_running_player_phase),
                 unlock_cursor_after_unit_command.after(handle_unit_ui_command),
                 // Player UI System
                 handle_unit_cursor_actions.run_if(is_running_player_phase),
                 execute_unit_actions,
-                activate_battle_ui.run_if(is_running_player_phase),
-                handle_battle_ui_interactions.run_if(is_running_player_phase),
                 // Menu UI
                 highlight_menu_option,
                 handle_menu_cursor_navigation,
