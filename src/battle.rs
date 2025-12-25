@@ -20,8 +20,13 @@ use crate::{
         activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions, update_player_ui_info,
     },
     battle_phase::{
-        PhaseMessage, check_should_advance_phase, init_phase_system, is_running_enemy_phase,
-        is_running_player_phase, refresh_units_at_beginning_of_phase,
+        PhaseMessage, check_should_advance_phase, init_phase_system, is_enemy_phase,
+        is_running_enemy_phase, is_running_player_phase,
+        phase_ui::{
+            BattlePhaseMessageComplete, ShowBattleBannerMessage, banner_animation_system,
+            spawn_banner_system,
+        },
+        prepare_for_phase, start_phase,
     },
     bevy_ecs_tilemap_example,
     camera::change_zoom,
@@ -85,6 +90,8 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<PhaseMessage>()
         .add_message::<UnitActionCompletedMessage>()
         .add_message::<UnitExecuteActionMessage>()
+        .add_message::<ShowBattleBannerMessage>()
+        .add_message::<BattlePhaseMessageComplete>()
         // .add_plugins(TiledPlugin::default())
         // .add_plugins(TiledDebugPluginGroup)
         .add_plugins((
@@ -106,12 +113,19 @@ pub fn battle_plugin(app: &mut App) {
             Update,
             (
                 check_should_advance_phase::<Player>,
-                refresh_units_at_beginning_of_phase::<Player>
-                    .after(check_should_advance_phase::<Player>),
                 check_should_advance_phase::<Enemy>,
-                refresh_units_at_beginning_of_phase::<Enemy>
-                    .after(check_should_advance_phase::<Enemy>),
+                prepare_for_phase::<Player>.after(check_should_advance_phase::<Player>),
+                prepare_for_phase::<Enemy>.after(check_should_advance_phase::<Enemy>),
+                spawn_banner_system,
+                banner_animation_system,
+                start_phase,
             )
+                .run_if(in_state(GameState::Battle)),
+        )
+        .add_systems(
+            Update,
+            (begin_enemy_phase)
+                .run_if(is_enemy_phase)
                 .run_if(in_state(GameState::Battle)),
         )
         .add_systems(
@@ -162,14 +176,13 @@ pub fn battle_plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                begin_enemy_phase,
                 select_next_enemy,
                 plan_enemy_action,
                 execute_enemy_action,
                 resolve_enemy_action,
             )
                 .chain()
-                .after(refresh_units_at_beginning_of_phase::<Enemy>)
+                .after(prepare_for_phase::<Enemy>)
                 .run_if(in_state(GameState::Battle))
                 .run_if(is_running_enemy_phase),
         );
