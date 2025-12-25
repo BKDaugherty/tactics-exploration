@@ -6,7 +6,8 @@ use bevy::prelude::*;
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::{
-    battle::{UnitCommand, UnitSelectionMessage, UnitUiCommandMessage},
+    assets::FontResource,
+    battle::{BattleEntity, UnitCommand, UnitSelectionMessage, UnitUiCommandMessage},
     battle_phase::UnitPhaseResources,
     grid::{self, GridManagerResource},
     grid_cursor::Cursor,
@@ -17,6 +18,8 @@ use crate::{
     player::{self, Player, PlayerInputAction},
     unit::Unit,
 };
+
+pub const UI_BACKGROUND: Color = Color::linear_rgba(0.2, 0.2, 0.2, 0.7);
 
 #[derive(Component)]
 pub struct BattlePlayerUI {}
@@ -37,10 +40,56 @@ pub enum UnitMenuAction {
     Wait,
 }
 
-pub fn top_ui(commands: Commands) {}
+#[derive(Component)]
+pub struct ObjectiveUi {}
+#[derive(Component)]
+pub struct ObjectiveText {}
 
-pub fn battle_ui_setup(mut commands: Commands) {
-    let ui_bottom_space = commands
+pub fn build_top_ui(commands: &mut Commands, fonts: &FontResource) {
+    let ui_top_space = commands
+        .spawn((
+            Node {
+                align_self: AlignSelf::FlexStart,
+                height: percent(15),
+                width: percent(100),
+                align_items: AlignItems::FlexEnd,
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::top(percent(5)).with_right(percent(5)),
+                ..Default::default()
+            },
+            BattleEntity {},
+        ))
+        .id();
+
+    let objective_ui = commands
+        .spawn((
+            Node {
+                height: percent(100),
+                width: percent(15),
+                align_content: AlignContent::Center,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..Default::default()
+            },
+            BackgroundColor(UI_BACKGROUND),
+            ObjectiveUi {},
+            BorderRadius::all(percent(20)),
+            children![(
+                Text("Objective Text".to_string()),
+                ObjectiveText {},
+                TextFont {
+                    font: fonts.fine_fantasy.clone(),
+                    ..Default::default()
+                }
+            )],
+        ))
+        .id();
+
+    commands.entity(ui_top_space).add_child(objective_ui);
+}
+
+pub fn battle_ui_setup(mut commands: Commands, fonts: Res<FontResource>) {
+    let bottom_ui = commands
         .spawn((Node {
             align_self: AlignSelf::FlexEnd,
             height: percent(20),
@@ -51,22 +100,26 @@ pub fn battle_ui_setup(mut commands: Commands) {
         },))
         .id();
 
-    let player_ui_1 = build_player_ui(&mut commands, Player::One);
-    let player_ui_2 = build_player_ui(&mut commands, Player::Two);
+    let player_ui_1 = build_player_ui(&mut commands, &fonts, Player::One);
+    let player_ui_2 = build_player_ui(&mut commands, &fonts, Player::Two);
 
     commands
-        .entity(ui_bottom_space)
+        .entity(bottom_ui)
         .add_children(&[player_ui_1, player_ui_2]);
 
-    let mut ui_node = commands.spawn((Node {
-        width: percent(100),
-        height: percent(100),
-        align_items: AlignItems::Center,
-        justify_content: JustifyContent::Center,
-        ..Default::default()
-    },));
+    let mut battle_ui_node = commands.spawn((
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..Default::default()
+        },
+        BattleEntity {},
+    ));
 
-    ui_node.add_child(ui_bottom_space);
+    battle_ui_node.add_child(bottom_ui);
+    build_top_ui(&mut commands, &fonts);
 }
 
 fn player_ui_info_style() -> Node {
@@ -84,7 +137,7 @@ fn player_ui_info_style() -> Node {
     }
 }
 
-fn build_player_ui_info(commands: &mut Commands, player: Player) -> Entity {
+fn build_player_ui_info(commands: &mut Commands, fonts: &FontResource, player: Player) -> Entity {
     let player_ui_info = commands
         .spawn((
             PlayerUiInfo {},
@@ -94,15 +147,30 @@ fn build_player_ui_info(commands: &mut Commands, player: Player) -> Entity {
         ))
         .id();
 
+    let font_style = TextFont {
+        font: fonts.fine_fantasy.clone(),
+        ..Default::default()
+    };
+
     let health_text = commands
-        .spawn((Text::new("Health"), PlayerUiHealthText {}))
+        .spawn((
+            Text::new("Health"),
+            PlayerUiHealthText {},
+            font_style.clone(),
+        ))
         .id();
     let name_text = commands
-        .spawn((Text::new("Unit Name"), PlayerUiNameText {}))
+        .spawn((
+            Text::new("Unit Name"),
+            PlayerUiNameText {},
+            font_style.clone(),
+        ))
         .id();
-    let ap_text = commands.spawn((Text::new("AP"), PlayerUiApText {})).id();
+    let ap_text = commands
+        .spawn((Text::new("AP"), PlayerUiApText {}, font_style.clone()))
+        .id();
     let move_text = commands
-        .spawn((Text::new("Move"), PlayerUiMoveText {}))
+        .spawn((Text::new("Move"), PlayerUiMoveText {}, font_style.clone()))
         .id();
 
     commands
@@ -112,9 +180,10 @@ fn build_player_ui_info(commands: &mut Commands, player: Player) -> Entity {
     player_ui_info
 }
 
-fn battle_menu_button_font() -> TextFont {
+fn battle_menu_button_font(font: Handle<Font>) -> TextFont {
     let button_text_font = TextFont {
         font_size: 15.0,
+        font,
         ..Default::default()
     };
     button_text_font
@@ -131,7 +200,7 @@ fn player_ui_button_style() -> Node {
     }
 }
 
-fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
+fn build_battle_menu(commands: &mut Commands, fonts: &FontResource, player: Player) -> Entity {
     let player_ui_battle_menu_style = Node {
         height: percent(100),
         width: percent(65),
@@ -152,7 +221,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
             UnitMenuAction::Move,
             children![(
                 Text::new("Move"),
-                battle_menu_button_font(),
+                battle_menu_button_font(fonts.fine_fantasy.clone()),
                 TextColor(Color::srgb(0.9, 0.9, 0.9))
             )],
         ))
@@ -169,7 +238,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
             UnitMenuAction::Attack,
             children![(
                 Text::new("Attack"),
-                battle_menu_button_font(),
+                battle_menu_button_font(fonts.fine_fantasy.clone()),
                 TextColor(Color::srgb(0.9, 0.9, 0.9))
             )],
         ))
@@ -186,7 +255,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
             UnitMenuAction::Wait,
             children![(
                 Text::new("Wait"),
-                battle_menu_button_font(),
+                battle_menu_button_font(fonts.fine_fantasy.clone()),
                 TextColor(Color::srgb(0.9, 0.9, 0.9))
             )],
         ))
@@ -205,7 +274,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
                 players: HashSet::from([player]),
             },
             menu,
-            BackgroundColor(Color::linear_rgba(0.2, 0.2, 0.2, 0.7)),
+            BackgroundColor(UI_BACKGROUND),
             BattlePlayerUI {},
             Visibility::Hidden,
             BorderRadius::right(percent(25)),
@@ -219,7 +288,7 @@ fn build_battle_menu(commands: &mut Commands, player: Player) -> Entity {
     player_ui_battle_menu
 }
 
-fn build_player_ui(commands: &mut Commands, player: Player) -> Entity {
+fn build_player_ui(commands: &mut Commands, fonts: &FontResource, player: Player) -> Entity {
     let player_ui_node = Node {
         height: percent(100),
         width: percent(30),
@@ -236,14 +305,14 @@ fn build_player_ui(commands: &mut Commands, player: Player) -> Entity {
     let player_ui_node = commands
         .spawn((
             Name::new(format!("Player {:?} UI", player)),
-            BackgroundColor(Color::linear_rgba(0.2, 0.2, 0.2, 0.7)),
+            BackgroundColor(UI_BACKGROUND),
             player_ui_node.clone(),
             BorderRadius::all(percent(25)),
         ))
         .id();
 
-    let player_ui_info = build_player_ui_info(commands, player);
-    let player_ui_battle_menu = build_battle_menu(commands, player);
+    let player_ui_info = build_player_ui_info(commands, fonts, player);
+    let player_ui_battle_menu = build_battle_menu(commands, fonts, player);
 
     commands
         .entity(player_ui_node)

@@ -4,6 +4,7 @@ use bevy::{input_focus::InputDispatchPlugin, prelude::*};
 
 use crate::{
     GameState,
+    assets::FontResource,
     menu::{
         menu_navigation::{self, ActiveMenu, handle_menu_cursor_navigation, highlight_menu_option},
         ui_consts::NORMAL_MENU_BUTTON_COLOR,
@@ -33,7 +34,7 @@ enum MainMenuButtonAction {
 
 const TEXT_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
 
-fn main_menu_setup(mut commands: Commands) {
+fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
     // Common style for all buttons on the screen
     let button_node = Node {
         width: px(300),
@@ -47,6 +48,7 @@ fn main_menu_setup(mut commands: Commands) {
 
     let button_text_font = TextFont {
         font_size: 33.0,
+        font: font_resource.fine_fantasy.clone(),
         ..default()
     };
 
@@ -94,6 +96,7 @@ fn main_menu_setup(mut commands: Commands) {
                 Text::new("Tactics Exploration"),
                 TextFont {
                     font_size: 67.0,
+                    font: font_resource.badge.clone(),
                     ..default()
                 },
                 TextColor(TEXT_COLOR),

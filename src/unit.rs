@@ -6,7 +6,7 @@ use crate::animation::{
     AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey,
     UnitAnimationKind, UnitAnimationPlayer,
 };
-use crate::battle::{Enemy, UnitSelectionMessage, UnitUiCommandMessage};
+use crate::battle::{BattleEntity, Enemy, UnitSelectionMessage, UnitUiCommandMessage};
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::enemy::behaviors::EnemyAiBehavior;
@@ -104,6 +104,7 @@ pub fn spawn_obstacle_unit(
                 team: Team(0),
                 name: "Obstacle".to_string(),
             },
+            BattleEntity {},
         ))
         .id()
 }
@@ -162,6 +163,7 @@ pub fn spawn_enemy(
             EnemyAiBehavior {
                 behavior: enemy::behaviors::Behavior::Trapper,
             },
+            BattleEntity {},
         ))
         .id();
 
@@ -212,36 +214,39 @@ pub fn spawn_unit(
         .expect("Must have animation data");
 
     let unit = commands
-        .spawn((UnitBundle {
-            unit: Unit {
-                stats: Stats {
-                    max_health: 10,
-                    health: 10,
-                    strength: 5,
-                    movement: 3,
+        .spawn((
+            UnitBundle {
+                unit: Unit {
+                    stats: Stats {
+                        max_health: 10,
+                        health: 10,
+                        strength: 5,
+                        movement: 3,
+                    },
+                    obstacle: ObstacleType::Filter(HashSet::from([team])),
+                    team,
+                    name: unit_name,
                 },
-                obstacle: ObstacleType::Filter(HashSet::from([team])),
-                team,
-                name: unit_name,
+                grid_position,
+                sprite: Sprite {
+                    image: spritesheet,
+                    texture_atlas: Some(TextureAtlas {
+                        layout: texture_atlas_layout,
+                        index: animation_data.start_index,
+                    }),
+                    color: Color::linear_rgb(1.0, 1.0, 1.0),
+                    flip_x: direction.should_flip_across_y(),
+                    ..Default::default()
+                },
+                transform,
+                player,
+                facing_direction: FacingDirection(direction),
+                animation_player: UnitAnimationPlayer::new(),
+                anchor: TINY_TACTICS_ANCHOR,
+                phase_resources: UnitPhaseResources::default(),
             },
-            grid_position,
-            sprite: Sprite {
-                image: spritesheet,
-                texture_atlas: Some(TextureAtlas {
-                    layout: texture_atlas_layout,
-                    index: animation_data.start_index,
-                }),
-                color: Color::linear_rgb(1.0, 1.0, 1.0),
-                flip_x: direction.should_flip_across_y(),
-                ..Default::default()
-            },
-            transform,
-            player,
-            facing_direction: FacingDirection(direction),
-            animation_player: UnitAnimationPlayer::new(),
-            anchor: TINY_TACTICS_ANCHOR,
-            phase_resources: UnitPhaseResources::default(),
-        },))
+            BattleEntity {},
+        ))
         .id();
 
     let weapon = commands

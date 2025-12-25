@@ -1,3 +1,4 @@
+use crate::battle::BattleEntity;
 use crate::grid;
 use crate::player;
 
@@ -30,17 +31,20 @@ pub fn spawn_cursor(
 
     // Put cursor behind players
     initial_transform.translation.z -= 50.;
-    commands.spawn((CursorBundle {
-        grid_position: initial_grid_pos,
-        transform: initial_transform,
-        sprite: Sprite {
-            image,
-            color: Color::linear_rgb(1.0, 0.0, 1.0),
-            ..Default::default()
+    commands.spawn((
+        CursorBundle {
+            grid_position: initial_grid_pos,
+            transform: initial_transform,
+            sprite: Sprite {
+                image,
+                color: Color::linear_rgb(1.0, 0.0, 1.0),
+                ..Default::default()
+            },
+            cursor: Cursor {},
+            player,
         },
-        cursor: Cursor {},
-        player,
-    },));
+        BattleEntity {},
+    ));
 }
 
 /// Translates Input Actions to grid movement for the cursor

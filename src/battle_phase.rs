@@ -178,20 +178,13 @@ pub fn start_phase(
 }
 
 pub mod phase_ui {
-    use bevy::{ecs::relationship::Relationship, prelude::*};
+    use bevy::prelude::*;
 
-    use crate::battle_phase::PlayerEnemyPhase;
-
-    #[derive(Debug)]
-    pub enum BattleEndCondition {
-        Victory,
-        Defeat,
-    }
+    use crate::{assets::FontResource, battle_phase::PlayerEnemyPhase};
 
     #[derive(Debug)]
     pub enum BattleBannerMessage {
         PhaseBegin(PlayerEnemyPhase),
-        BattleEndCondition(BattleEndCondition),
     }
 
     #[derive(Message, Debug)]
@@ -217,7 +210,11 @@ pub mod phase_ui {
         Exiting,
     }
 
-    fn spawn_phase_ui(commands: &mut Commands, event: &ShowBattleBannerMessage) {
+    fn spawn_phase_ui(
+        commands: &mut Commands,
+        fonts: &Res<FontResource>,
+        event: &ShowBattleBannerMessage,
+    ) {
         let container = commands
             .spawn((
                 Node {
@@ -241,15 +238,9 @@ pub mod phase_ui {
 
         let (color, text) = match &event.message {
             BattleBannerMessage::PhaseBegin(phase) => match phase {
-                PlayerEnemyPhase::Player => (blue.clone(), "Player Phase"),
-                PlayerEnemyPhase::Enemy => (red.clone(), "Enemy Phase"),
+                PlayerEnemyPhase::Player => (blue.clone(), "PLAYER PHASE"),
+                PlayerEnemyPhase::Enemy => (red.clone(), "ENEMY PHASE"),
             },
-            BattleBannerMessage::BattleEndCondition(battle_end_condition) => {
-                match battle_end_condition {
-                    BattleEndCondition::Victory => (blue.clone(), "Victory"),
-                    BattleEndCondition::Defeat => (red.clone(), "Defeat"),
-                }
-            }
         };
 
         let banner = commands
@@ -268,6 +259,7 @@ pub mod phase_ui {
                     Text::new(text),
                     TextFont {
                         font_size: 60.,
+                        font: fonts.fine_fantasy.clone(),
                         ..Default::default()
                     },
                 )],
@@ -279,10 +271,11 @@ pub mod phase_ui {
 
     pub fn spawn_banner_system(
         mut commands: Commands,
+        font_res: Res<FontResource>,
         mut events: MessageReader<ShowBattleBannerMessage>,
     ) {
         for event in events.read() {
-            spawn_phase_ui(&mut commands, event);
+            spawn_phase_ui(&mut commands, &font_res, event);
         }
     }
 
