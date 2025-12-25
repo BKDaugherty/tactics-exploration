@@ -43,7 +43,7 @@ use crate::{
     menu::menu_navigation::{handle_menu_cursor_navigation, highlight_menu_option},
     player::{self, Player},
     unit::{
-        ENEMY_TEAM, PLAYER_TEAM, UnitActionCompletedMessage, UnitExecuteActionMessage,
+        ENEMY_TEAM, PLAYER_TEAM, Unit, UnitActionCompletedMessage, UnitExecuteActionMessage,
         execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_command,
@@ -185,12 +185,86 @@ pub fn battle_plugin(app: &mut App) {
                 .after(prepare_for_phase::<Enemy>)
                 .run_if(in_state(GameState::Battle))
                 .run_if(is_running_enemy_phase),
-        );
+        )
+        .add_systems(
+            Update,
+            check_battle_complete.run_if(in_state(GameState::Battle)),
+        )
+        .add_systems(OnEnter(GameState::BattleResolution), on_battle_resolution)
+        .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);
 }
 
 const DEMO_SQUARE_GRID_BOUNDS: u32 = 8;
 const DEMO_2_GRID_BOUNDS_X: u32 = 12;
 const DEMO_2_GRID_BOUNDS_Y: u32 = 7;
+
+#[derive(Debug)]
+pub enum BattleEndCondition {
+    Victory,
+    Defeat,
+}
+
+#[derive(Resource)]
+pub struct BattleResultResource(pub BattleResult);
+
+#[derive(Debug)]
+pub struct BattleResult {
+    pub battle_condition: BattleEndCondition,
+}
+
+// Naively assumes the BattleObjective is to defeat all enemies
+pub fn check_battle_complete(
+    mut commands: Commands,
+    player_unit_query: Query<&Unit, With<Player>>,
+    enemy_unit_query: Query<&Unit, With<Enemy>>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
+    // All Players have been downed :(
+    if player_unit_query.iter().all(|t| t.downed()) {
+        commands.insert_resource(BattleResultResource(BattleResult {
+            battle_condition: BattleEndCondition::Defeat,
+        }));
+        game_state.set(GameState::BattleResolution);
+    }
+    // All Enemies have been downed :)
+    else if enemy_unit_query.iter().all(|t| t.downed()) {
+        commands.insert_resource(BattleResultResource(BattleResult {
+            battle_condition: BattleEndCondition::Victory,
+        }));
+        game_state.set(GameState::BattleResolution);
+    }
+}
+
+// TODO: Show an animation describing state probably before moving on to MainMenu
+// Maybe even require some button input to move on
+pub fn on_battle_resolution(
+    result: Res<BattleResultResource>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
+    log::info!("Battle Result: {:?}", result.0.battle_condition);
+    game_state.set(GameState::MainMenu);
+}
+
+/// A marker component for things that should get removed when the battle is over.
+#[derive(Component)]
+pub struct BattleEntity {}
+
+pub fn cleanup_battle(
+    mut commands: Commands,
+    query: Query<Entity, With<BattleEntity>>,
+    // TODO: Figure out a better way to clean up TileMaps that are *in*
+    // the battle. Probably not a big deal atm, and I don't really want to touch
+    // that tiled map loader code lol.
+    tilemaps: Query<Entity, With<TilePos>>,
+) {
+    for e in tilemaps {
+        commands.entity(e).despawn();
+    }
+
+    for e in query {
+        commands.entity(e).despawn();
+    }
+}
 
 pub fn load_battle_asset_resources(
     mut commands: Commands,
@@ -239,18 +313,22 @@ pub fn load_demo_battle_scene_2(
             ..Default::default()
         },
         Transform::from_translation(Vec3::new(0.0, 0.0, -10.0)),
+        BattleEntity {},
     ));
 
-    commands.spawn(bevy_ecs_tilemap_example::tiled::TiledMapBundle {
-        tiled_map: map_handle,
-        render_settings: TilemapRenderSettings {
-            // Map size is 12x12 so we'll have render chunks that are:
-            // 12 tiles wide and 1 tile tall.
-            render_chunk_size: UVec2::new(3, 1),
-            y_sort: true,
+    commands.spawn((
+        bevy_ecs_tilemap_example::tiled::TiledMapBundle {
+            tiled_map: map_handle,
+            render_settings: TilemapRenderSettings {
+                // Map size is 12x12 so we'll have render chunks that are:
+                // 12 tiles wide and 1 tile tall.
+                render_chunk_size: UVec2::new(3, 1),
+                y_sort: true,
+            },
+            ..Default::default()
         },
-        ..Default::default()
-    });
+        BattleEntity {},
+    ));
 
     commands.insert_resource(grid::GridManagerResource {
         grid_manager: GridManager::new(DEMO_2_GRID_BOUNDS_X, DEMO_2_GRID_BOUNDS_Y),
