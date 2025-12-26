@@ -5,17 +5,15 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 ## The TODO List
 
 ### Projectier Things
-- [ ] Finish "Gameifying" the Demo
-  - [ ] Victory or Defeat Calculations
-  - [ ] Advance out of BattleState
-    - [ ] Maybe with a "Play Again?" button?
-
-- [ ] Handle Z Index Correctly
-  - [ ] Do some maths to specify what the Z index of everything should be
-  - [ ] Spawn objects from map direclty probably instead of reading from tiled
-
 - [ ] Handle Gamepad Inputs
   - [ ] Create some form of screen for joining game etc
+
+- [ ] Expand on the Combat System
+  - [ ] Ranged Attacks?
+  - [ ] Damage / AP Calculations?
+  - [ ] Multiple Types of Moves?
+  - [ ] Allow the unit to pick a FacedDirection on Wait
+  - [ ] UI Support for more complex choices of "actions"?
 
 - [ ] Animation Data
   - [ ] Update derived animation data to populate expected texture atlas indices
@@ -25,13 +23,6 @@ I like keep tracking of what I think I need to do in a list. For now, this track
   - [ ] The "load_demo_battle_scene" and "spawn_unit" fns are getting a lil out of control. 
   - [ ] Maps / Battles as Data?
     - [ ] Procedurally Generated Levels?
-
-- [ ] Expand on the Combat System
-  - [ ] Ranged Attacks?
-  - [ ] Damage / AP Calculations?
-  - [ ] Multiple Types of Moves?
-  - [ ] Allow the unit to pick a FacedDirection on Wait
-  - [ ] UI Support for more complex choices of "actions"?
 
 - [ ] Outside of Battle...
 
@@ -54,6 +45,7 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 ### Smaller, Bug kind of focus
 - [ ] Ensure assets are loaded before moving to new scene
 - [ ] Sometimes there are weird lines running through the fonts?
+- [ ] Downed Characters should not be allowed to attack lol
 
 ## Archive
 
@@ -131,3 +123,12 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 - [x] Platforms
   - [x] Get the demo running on the Steam Deck
   - [x] Get the demo running on the Web!
+
+- [x] Finish "Gameifying" the Demo
+  - [x] Victory or Defeat Calculations
+  - [x] Advance out of BattleState
+    - [x] Maybe with a "Play Again?" button?
+
+- [x] Handle Z Index Correctly
+  - [x] Do some maths to specify what the Z index of everything should be
+  - [x] Spawn objects from map direclty probably instead of reading from tiled

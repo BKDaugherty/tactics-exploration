@@ -20,8 +20,10 @@ fn main() {
     runner = runner
         .add_plugins(DefaultPlugins)
         .init_state::<GameState>()
-        .add_systems(PreStartup, setup_fonts)
-        .add_systems(Startup, (setup_camera, spawn_coop_players, boot_game))
+        .add_systems(
+            Startup,
+            (setup_camera, spawn_coop_players, boot_game, setup_fonts),
+        )
         .add_plugins(InputManagerPlugin::<PlayerInputAction>::default())
         .add_plugins(main_menu_plugin)
         .add_plugins(battle_plugin);

@@ -189,7 +189,7 @@ pub fn sync_grid_position_to_transform(
     for (grid_pos, mut transform) in query.iter_mut() {
         // Convert grid coordinates to world coordinates
         let world = grid_to_world(grid_pos, TILE_X_SIZE, TILE_Y_SIZE);
-        transform.translation = Vec3::new(world.x, world.y, transform.translation.z);
+        transform.translation = Vec3::new(world.x, world.y, world.z);
     }
 }
 
@@ -241,21 +241,28 @@ impl GridMovement {
     }
 }
 
+pub const MAGIC_Z_INDEX_OFFSET: f32 = 600.;
+
 /// Diamond isometric grid conversion
-pub fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32) -> Vec2 {
+pub fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32) -> Vec3 {
     let offset_x = grid_pos.x as f32 - 5.;
     let offset_y = grid_pos.y as f32 - 4.;
 
     let world_x = (offset_x + offset_y as f32) * (tile_width / 2.0);
     let world_y = (offset_x - offset_y) * (tile_height / 2.0);
-    Vec2::new(world_x, world_y)
+
+    Vec3::new(
+        world_x,
+        world_y,
+        MAGIC_Z_INDEX_OFFSET + (grid_pos.y as f32 - grid_pos.x as f32),
+    )
 }
 
 /// Spawning an entity in the real world from a logical grid pos? Use this to hide some
 /// constants that probably shouldn't exist from yourself.
 pub fn init_grid_to_world_transform(grid_pos: &GridPosition) -> Transform {
     let world = grid_to_world(grid_pos, TILE_X_SIZE, TILE_Y_SIZE);
-    Transform::from_translation(Vec3::new(world.x, world.y, 600.0))
+    Transform::from_translation(Vec3::new(world.x, world.y, world.z))
 }
 
 /// System to resolve GridMovement GridMovement components to Transform components
@@ -300,7 +307,7 @@ pub fn resolve_grid_movement(
 
         let lerped = start_world.lerp(target_world, progress);
 
-        transform.translation = Vec3::new(lerped.x, lerped.y, transform.translation.z);
+        transform.translation = Vec3::new(lerped.x, lerped.y, lerped.z);
 
         // Move to next waypoint when current one completes
         if progress >= 1.0 {
