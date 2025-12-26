@@ -4,3 +4,4 @@ assets/map_assets/example-map-tinytactics/*
 **/*~
 out
 out.zip
+.env

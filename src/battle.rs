@@ -1,6 +1,6 @@
 //! Top level module for a Battle
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use bevy_common_assets::json::JsonAssetPlugin;
@@ -15,9 +15,13 @@ use crate::{
         tinytactics::AnimationAsset,
         unit_animation_tick_system, update_facing_direction_on_movement,
     },
-    assets::{CURSOR_PATH, EXAMPLE_MAP_2_PATH, EXAMPLE_MAP_PATH, GRADIENT_PATH, OVERLAY_PATH},
+    assets::{
+        CURSOR_PATH, EXAMPLE_MAP_2_PATH, EXAMPLE_MAP_PATH, FontResource, GRADIENT_PATH,
+        OVERLAY_PATH,
+    },
     battle_menu::{
-        activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions, update_player_ui_info,
+        UI_BACKGROUND, activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions,
+        update_player_ui_info,
     },
     battle_phase::{
         PhaseMessage, check_should_advance_phase, init_phase_system, is_enemy_phase,
@@ -40,7 +44,10 @@ use crate::{
     },
     grid::{self, GridManager, GridPosition},
     grid_cursor,
-    menu::menu_navigation::{handle_menu_cursor_navigation, highlight_menu_option},
+    menu::{
+        menu_navigation::{self, ActiveMenu, handle_menu_cursor_navigation, highlight_menu_option},
+        ui_consts::NORMAL_MENU_BUTTON_COLOR,
+    },
     player::{self, Player},
     unit::{
         ENEMY_TEAM, PLAYER_TEAM, Unit, UnitActionCompletedMessage, UnitExecuteActionMessage,
@@ -79,6 +86,28 @@ pub enum UnitCommand {
     Attack,
     Wait,
     Cancel,
+}
+
+pub fn god_mode_plugin(app: &mut App) {
+    app.add_systems(Update, handle_god_mode_input);
+}
+
+pub fn handle_god_mode_input(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut player_unit_query: Query<&mut Unit, (With<Player>, Without<Enemy>)>,
+    mut enemy_unit_query: Query<&mut Unit, (With<Enemy>, Without<Player>)>,
+) {
+    if keyboard_input.just_pressed(KeyCode::KeyP) {
+        for mut player in player_unit_query.iter_mut() {
+            player.stats.health = 0;
+        }
+    }
+
+    if keyboard_input.just_pressed(KeyCode::KeyK) {
+        for mut enemy in enemy_unit_query.iter_mut() {
+            enemy.stats.health = 0;
+        }
+    }
 }
 
 /// All logic necessary during a battle
@@ -190,7 +219,16 @@ pub fn battle_plugin(app: &mut App) {
             Update,
             check_battle_complete.run_if(in_state(GameState::Battle)),
         )
-        .add_systems(OnEnter(GameState::BattleResolution), on_battle_resolution)
+        .add_systems(
+            OnEnter(GameState::BattleResolution),
+            spawn_battle_resolution_ui,
+        )
+        .add_systems(
+            Update,
+            (handle_menu_cursor_navigation, highlight_menu_option)
+                .run_if(in_state(GameState::BattleResolution)),
+        )
+        .add_observer(handle_battle_resolution_ui_buttons)
         .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);
 }
 
@@ -210,6 +248,188 @@ pub struct BattleResultResource(pub BattleResult);
 #[derive(Debug)]
 pub struct BattleResult {
     pub battle_condition: BattleEndCondition,
+}
+
+#[derive(Debug, Clone, Component)]
+pub enum BattleResolutionMenuAction {
+    MainMenu,
+    Quit,
+}
+
+pub fn spawn_battle_resolution_ui(
+    mut commands: Commands,
+    battle_result: Res<BattleResultResource>,
+    fonts: Res<FontResource>,
+) {
+    let ui_container = commands
+        .spawn((
+            Name::new("BattleResolutionUI"),
+            BorderRadius::all(percent(20)),
+            Node {
+                width: percent(100),
+                height: percent(100),
+                justify_content: JustifyContent::SpaceEvenly,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                align_content: AlignContent::SpaceEvenly,
+                ..Default::default()
+            },
+            BattleEntity {},
+        ))
+        .id();
+
+    let resolution_buttons_container = commands
+        .spawn((
+            Name::new("ResolutionButtonContainer"),
+            Node {
+                height: percent(40),
+                width: percent(30),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceEvenly,
+                padding: UiRect::horizontal(percent(2)),
+                ..Default::default()
+            },
+            BackgroundColor(Color::linear_rgba(0.4, 0.4, 0.4, 0.8)),
+        ))
+        .id();
+
+    let button_node = Node {
+        width: percent(100),
+        height: percent(20),
+        border: UiRect::all(px(2)),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..Default::default()
+    };
+
+    let button_font = TextFont {
+        font_size: 33.,
+        font: fonts.badge.clone(),
+        ..Default::default()
+    };
+
+    let (condition_text, color) = match battle_result.0.battle_condition {
+        BattleEndCondition::Victory => ("Victory", Color::linear_rgb(0.6, 0.9, 0.6)),
+        BattleEndCondition::Defeat => ("Defeat", Color::linear_rgb(0.9, 0.6, 0.6)),
+    };
+
+    let condition_node = commands
+        .spawn((
+            Name::new("BattleResolutionCondition"),
+            Node {
+                width: percent(40),
+                height: percent(40),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::top(percent(1)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..Default::default()
+            },
+            BackgroundColor(UI_BACKGROUND),
+            children![
+                (
+                    TextColor(color),
+                    TextFont {
+                        font: fonts.badge.clone(),
+                        font_size: 65.,
+                        ..Default::default()
+                    },
+                    Text(condition_text.to_string()),
+                ),
+                (
+                    TextColor(Color::WHITE),
+                    TextFont {
+                        font: fonts.badge.clone(),
+                        font_size: 32.,
+                        ..Default::default()
+                    },
+                    Text("Thanks for playing! :)".to_string()),
+                )
+            ],
+        ))
+        .id();
+
+    let main_menu_button = commands
+        .spawn((
+            Name::new("MainMenuButton"),
+            Button,
+            BorderRadius::all(percent(20)),
+            BorderColor::all(NORMAL_MENU_BUTTON_COLOR),
+            button_node.clone(),
+            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            BattleResolutionMenuAction::MainMenu,
+            children![(
+                Text::new("Main Menu"),
+                button_font.clone(),
+                TextColor(Color::WHITE),
+            ),],
+        ))
+        .id();
+
+    let quit_button = commands
+        .spawn((
+            Name::new("QuitButton"),
+            Button,
+            BorderRadius::all(percent(20)),
+            BorderColor::all(NORMAL_MENU_BUTTON_COLOR),
+            button_node.clone(),
+            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            BattleResolutionMenuAction::Quit,
+            children![(
+                Text::new("Quit"),
+                button_font.clone(),
+                TextColor(Color::WHITE),
+            ),],
+        ))
+        .id();
+
+    let mut battle_resolution_menu = menu_navigation::GameMenuGrid::new_vertical();
+    battle_resolution_menu.push_button_to_stack(main_menu_button);
+    battle_resolution_menu.push_button_to_stack(quit_button);
+
+    let menu = commands
+        .spawn((
+            battle_resolution_menu,
+            menu_navigation::GameMenuController {
+                players: HashSet::from([Player::One, Player::Two]),
+            },
+            ActiveMenu {},
+        ))
+        .id();
+
+    commands
+        .entity(resolution_buttons_container)
+        .add_children(&[main_menu_button, quit_button, menu]);
+
+    commands
+        .entity(ui_container)
+        .add_children(&[condition_node, resolution_buttons_container]);
+}
+
+// TODO: Almost exactly the same code as `main_menu::main_menu_action`
+//
+// Not that it's complicated, but maybe worth visiting to see if there's a
+// better paradigm we can use here. Currently I think the flexibility is probably
+// worth keeping this level of duplication.
+pub fn handle_battle_resolution_ui_buttons(
+    mut click: On<Pointer<Click>>,
+    menu_button: Query<&BattleResolutionMenuAction, With<Button>>,
+    mut app_exit_writer: MessageWriter<AppExit>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
+    let button_entity = click.entity;
+    if let Some(menu_button_action) = menu_button.get(button_entity).ok() {
+        click.propagate(false);
+        match menu_button_action {
+            BattleResolutionMenuAction::Quit => {
+                app_exit_writer.write(AppExit::Success);
+            }
+            BattleResolutionMenuAction::MainMenu => {
+                game_state.set(GameState::MainMenu);
+            }
+        }
+    }
 }
 
 // Naively assumes the BattleObjective is to defeat all enemies
