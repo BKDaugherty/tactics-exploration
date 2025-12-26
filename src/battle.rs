@@ -290,7 +290,8 @@ pub fn spawn_battle_resolution_ui(
                 padding: UiRect::horizontal(percent(2)),
                 ..Default::default()
             },
-            BackgroundColor(Color::linear_rgba(0.4, 0.4, 0.4, 0.8)),
+            BackgroundColor(UI_BACKGROUND),
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -326,6 +327,7 @@ pub fn spawn_battle_resolution_ui(
                 align_items: AlignItems::Center,
                 ..Default::default()
             },
+            BorderRadius::all(percent(20)),
             BackgroundColor(UI_BACKGROUND),
             children![
                 (

@@ -53,7 +53,7 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 
 ### Smaller, Bug kind of focus
 - [ ] Ensure assets are loaded before moving to new scene
-
+- [ ] Sometimes there are weird lines running through the fonts?
 
 ## Archive
 
