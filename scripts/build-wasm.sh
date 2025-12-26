@@ -6,8 +6,18 @@ wasm-bindgen --no-typescript --target web \
     --out-name "tactics-exploration" \
     ./target/wasm32-unknown-unknown/release-wasm/tactics-exploration.wasm
 
+mkdir -p out
+mkdir -p dist
+
 # Can't seem to install this guy
 # wasm-opt -Oz -o .wasm ./out/tactics-exploration ./out/tactics-exploration-unopt
 cp -r assets ./out/assets
 cp web/index.html ./out/index.html
+pushd out
+zip -vr tactics-exploration.zip * -x "*.DS_Store"
+popd
+mv out/tactics-exploration.zip dist/
+
+# Open a Firefox window to edit the Game on itch.io
+open -a Firefox "https://itch.io/game/edit/4146661"
 
