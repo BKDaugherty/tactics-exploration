@@ -1,4 +1,5 @@
 pub mod animation;
+pub mod args;
 pub mod assets;
 pub mod battle;
 pub mod battle_menu;

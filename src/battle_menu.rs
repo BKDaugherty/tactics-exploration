@@ -75,7 +75,7 @@ pub fn build_top_ui(commands: &mut Commands, fonts: &FontResource) {
             ObjectiveUi {},
             BorderRadius::all(percent(20)),
             children![(
-                Text("Objective Text".to_string()),
+                Text("Defeat all Enemies".to_string()),
                 ObjectiveText {},
                 TextFont {
                     font: fonts.fine_fantasy.clone(),
