@@ -10,6 +10,7 @@ use crate::{
         combat::ATTACK_FRAME_DURATION,
         tinytactics::{Character, WeaponType},
     },
+    assets::BATTLE_TACTICS_TILESHEET,
     grid::{GridManagerResource, GridMovement, GridVec},
     unit::Unit,
 };
@@ -503,9 +504,11 @@ pub struct TinytacticsAssets {
     pub cleric_spritesheet: Handle<Image>,
     pub iron_axe_spritesheet: Handle<Image>,
     pub scepter_spritesheet: Handle<Image>,
+    pub tile_spritesheet: Handle<Image>,
     /// Probably could do one of these for all characters for now
     pub unit_layout: Handle<TextureAtlasLayout>,
     pub weapon_layout: Handle<TextureAtlasLayout>,
+    pub tile_layout: Handle<TextureAtlasLayout>,
     pub animation_data: Handle<tinytactics::AnimationAsset>,
     pub unit_animation_data: UnitAnimations,
 }
@@ -539,6 +542,14 @@ pub fn startup_load_tinytactics_assets(
         None,
         None,
     ));
+    let tile_spritesheet = asset_server.load(BATTLE_TACTICS_TILESHEET);
+    let tile_layout = texture_atlas_layouts.add(TextureAtlasLayout::from_grid(
+        UVec2::new(tinytactics::FRAME_SIZE_X, tinytactics::FRAME_SIZE_Y),
+        16,
+        13,
+        None,
+        None,
+    ));
 
     let animation_data = asset_server.load(tinytactics::spritesheet_data_path(Character::Fighter));
     let unit_animations = unit_animations();
@@ -557,6 +568,8 @@ pub fn startup_load_tinytactics_assets(
         },
         iron_axe_spritesheet,
         weapon_layout,
+        tile_layout,
+        tile_spritesheet,
     })
 }
 

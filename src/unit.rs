@@ -10,7 +10,7 @@ use crate::battle::{BattleEntity, Enemy, UnitSelectionMessage, UnitUiCommandMess
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::enemy::behaviors::EnemyAiBehavior;
-use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
+use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, grid_to_world};
 use crate::grid_cursor::LockedOn;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
@@ -86,12 +86,39 @@ pub struct UnitBundle {
     pub phase_resources: UnitPhaseResources,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ObstacleSprite {
+    Rock,
+    Bush,
+}
+
+impl std::fmt::Display for ObstacleSprite {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ObstacleSprite::Rock => write!(f, "Rock"),
+            ObstacleSprite::Bush => write!(f, "Bush"),
+        }
+    }
+}
+
+impl ObstacleSprite {
+    fn tt_sprite_index(&self) -> usize {
+        match self {
+            ObstacleSprite::Rock => 64,
+            ObstacleSprite::Bush => 48,
+        }
+    }
+}
+
 pub fn spawn_obstacle_unit(
     commands: &mut Commands,
+    tt_assets: &TinytacticsAssets,
     grid_position: crate::grid::GridPosition,
+    obstacle_sprite_type: ObstacleSprite,
 ) -> Entity {
     commands
         .spawn((
+            crate::grid::init_grid_to_world_transform(&grid_position),
             grid_position,
             Unit {
                 stats: Stats {
@@ -102,9 +129,20 @@ pub fn spawn_obstacle_unit(
                 },
                 obstacle: ObstacleType::Neutral,
                 team: Team(0),
-                name: "Obstacle".to_string(),
+                name: obstacle_sprite_type.to_string(),
             },
             BattleEntity {},
+            Sprite {
+                image: tt_assets.tile_spritesheet.clone(),
+                texture_atlas: Some(TextureAtlas {
+                    layout: tt_assets.tile_layout.clone(),
+                    index: obstacle_sprite_type.tt_sprite_index(),
+                }),
+                color: Color::WHITE,
+                ..Default::default()
+            },
+            TINY_TACTICS_ANCHOR,
+            UnitPhaseResources::default(),
         ))
         .id()
 }

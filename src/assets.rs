@@ -6,7 +6,7 @@ pub const CURSOR_PATH: &str = "utility_assets/cursor-16.png";
 pub const OVERLAY32_PATH: &str = "utility_assets/iso_color.png";
 pub const OVERLAY_PATH: &str = "utility_assets/iso_color-16.png";
 pub const BATTLE_TACTICS_TILESHEET: &str =
-    "unit_assets/tinytactics_battlekiti_v1_0/20240420tinyTacticsTileset00-upscaled.png";
+    "map_assets/tinytactics-32-map/20240420tinyTacticsTileset00.png";
 
 pub const GRADIENT_PATH: &str = "utility_assets/gradient.png";
 

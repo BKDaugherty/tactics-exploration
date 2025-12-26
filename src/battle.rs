@@ -50,8 +50,9 @@ use crate::{
     },
     player::{self, Player},
     unit::{
-        ENEMY_TEAM, PLAYER_TEAM, Unit, UnitActionCompletedMessage, UnitExecuteActionMessage,
-        execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
+        ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit, UnitActionCompletedMessage,
+        UnitExecuteActionMessage, execute_unit_actions, handle_unit_cursor_actions,
+        handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_command,
     },
@@ -132,7 +133,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_systems(
             OnEnter(GameState::Battle),
             (
-                load_demo_battle_scene_2.after(load_battle_asset_resources),
+                load_demo_battle_scene.after(load_battle_asset_resources),
                 init_phase_system,
                 init_enemy_ai_system,
                 battle_ui_setup,
@@ -517,7 +518,7 @@ pub fn load_battle_asset_resources(
 
 use bevy_ecs_tilemap::prelude::*;
 
-pub fn load_demo_battle_scene_2(
+pub fn load_demo_battle_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     tt_assets: Res<TinytacticsAssets>,
@@ -638,137 +639,19 @@ pub fn load_demo_battle_scene_2(
 
     // Spawn Obstacles
     let obstacle_locations = [
-        GridPosition { x: 2, y: 0 },
-        GridPosition { x: 2, y: 6 },
-        GridPosition { x: 5, y: 1 },
-        GridPosition { x: 7, y: 2 },
-        GridPosition { x: 6, y: 5 },
-        GridPosition { x: 10, y: 1 },
+        (GridPosition { x: 2, y: 0 }, ObstacleSprite::Bush),
+        (GridPosition { x: 2, y: 6 }, ObstacleSprite::Bush),
+        (GridPosition { x: 5, y: 1 }, ObstacleSprite::Rock),
+        (GridPosition { x: 7, y: 2 }, ObstacleSprite::Rock),
+        (GridPosition { x: 6, y: 5 }, ObstacleSprite::Rock),
+        (GridPosition { x: 10, y: 1 }, ObstacleSprite::Rock),
     ];
 
     let mut obstacle_entities = Vec::new();
-    for obstacle_location in obstacle_locations {
-        let e = spawn_obstacle_unit(&mut commands, obstacle_location);
+    for (obstacle_location, sprite_type) in obstacle_locations {
+        let e = spawn_obstacle_unit(&mut commands, &tt_assets, obstacle_location, sprite_type);
         obstacle_entities.push(e);
     }
-
-    let mut static_obstacles = commands.spawn(Name::new("Static Demo Map Obstacles"));
-    static_obstacles.add_children(&obstacle_entities);
-}
-
-/// Loads necessary assets and resources to
-/// create a battle
-///
-/// TODO: Everything in this function should probably be loaded from some
-/// data representation as opposed to just hardcoded here.
-pub fn load_demo_battle_scene(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    tt_assets: Res<TinytacticsAssets>,
-) {
-    let map_handle: Handle<TiledMapAsset> = asset_server.load(EXAMPLE_MAP_PATH);
-    commands.spawn(TiledMap(map_handle));
-
-    commands.insert_resource(grid::GridManagerResource {
-        grid_manager: GridManager::new(DEMO_SQUARE_GRID_BOUNDS, DEMO_SQUARE_GRID_BOUNDS),
-    });
-
-    // Spawn players and player cursors
-    let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
-
-    let player_1_grid_pos = GridPosition { x: 1, y: 3 };
-    let player_2_grid_pos = GridPosition { x: 4, y: 6 };
-    let enemy_grid_pos = GridPosition { x: 5, y: 2 };
-
-    load_demo_battle_players(&mut commands);
-
-    spawn_unit(
-        &mut commands,
-        "Brond".to_string(),
-        &tt_assets,
-        player_1_grid_pos,
-        tt_assets.fighter_spritesheet.clone(),
-        tt_assets.iron_axe_spritesheet.clone(),
-        tt_assets.unit_layout.clone(),
-        tt_assets.weapon_layout.clone(),
-        Player::One,
-        PLAYER_TEAM,
-    );
-    spawn_unit(
-        &mut commands,
-        "Coral".to_string(),
-        &tt_assets,
-        player_2_grid_pos,
-        tt_assets.mage_spritesheet.clone(),
-        tt_assets.scepter_spritesheet.clone(),
-        tt_assets.unit_layout.clone(),
-        tt_assets.weapon_layout.clone(),
-        Player::Two,
-        PLAYER_TEAM,
-    );
-
-    spawn_enemy(
-        &mut commands,
-        "Jimothy Timbers".to_string(),
-        &tt_assets,
-        enemy_grid_pos,
-        tt_assets.cleric_spritesheet.clone(),
-        tt_assets.unit_layout.clone(),
-        ENEMY_TEAM,
-    );
-
-    grid_cursor::spawn_cursor(
-        &mut commands,
-        cursor_image.clone(),
-        player::Player::One,
-        player_1_grid_pos,
-    );
-
-    grid_cursor::spawn_cursor(
-        &mut commands,
-        cursor_image.clone(),
-        player::Player::Two,
-        player_2_grid_pos,
-    );
-
-    let door_location = GridPosition { x: 7, y: 1 };
-
-    // Spawn Obstacles (All walls / corners except the door) + Stools
-    let stool_locations = [
-        GridPosition { x: 2, y: 3 },
-        GridPosition { x: 4, y: 1 },
-        GridPosition { x: 4, y: 3 },
-        GridPosition { x: 4, y: 5 },
-        GridPosition { x: 6, y: 3 },
-    ];
-
-    let mut obstacle_locations = Vec::new();
-    for i in 0..DEMO_SQUARE_GRID_BOUNDS {
-        obstacle_locations.push(GridPosition { x: 0, y: i });
-        obstacle_locations.push(GridPosition { x: i, y: 0 });
-        obstacle_locations.push(GridPosition {
-            x: i,
-            y: DEMO_SQUARE_GRID_BOUNDS - 1,
-        });
-        obstacle_locations.push(GridPosition {
-            x: DEMO_SQUARE_GRID_BOUNDS - 1,
-            y: i,
-        });
-    }
-
-    // Remove door location
-    obstacle_locations.retain(|t| *t != door_location);
-
-    obstacle_locations.extend_from_slice(&stool_locations);
-
-    let mut obstacle_entities = Vec::new();
-    for obstacle_location in obstacle_locations {
-        let e = spawn_obstacle_unit(&mut commands, obstacle_location);
-        obstacle_entities.push(e);
-    }
-
-    let mut static_obstacles = commands.spawn(Name::new("Static Demo Map Obstacles"));
-    static_obstacles.add_children(&obstacle_entities);
 }
 
 // TODO: This should be based on how many players have joined game,
