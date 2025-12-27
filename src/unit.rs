@@ -258,8 +258,8 @@ pub fn spawn_unit(
             UnitBundle {
                 unit: Unit {
                     stats: Stats {
-                        max_health: 10,
-                        health: 10,
+                        max_health: 13,
+                        health: 13,
                         strength: 5,
                         movement: 3,
                     },
