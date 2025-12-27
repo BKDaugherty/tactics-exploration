@@ -30,59 +30,60 @@ pub mod menu_navigation {
 
     #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Component, Default, Reflect)]
     pub struct MenuGridPosition {
-        x: u8,
-        y: u8,
+        pub x: u8,
+        pub y: u8,
     }
 
     #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Default)]
-    struct MenuVec {
+    pub struct MenuVec {
         x: i8,
         y: i8,
     }
 
     #[derive(Debug, Component, Reflect)]
     pub struct GameMenuGrid {
-        width: u8,
-        height: u8,
-        buttons: HashMap<MenuGridPosition, Entity>,
         active_position: MenuGridPosition,
+        buttons: HashMap<MenuGridPosition, Entity>,
+        column_heights: HashMap<u8, u8>,
+        width: u8,
     }
 
     impl GameMenuGrid {
-        /// TODO: Should I require there to always be 1 button or just vibe?
         pub fn new_vertical() -> Self {
             Self {
                 width: 1,
-                height: 0,
+                column_heights: HashMap::from([(1, 0)]),
                 buttons: HashMap::default(),
                 // This is an invalid position at the start...
                 active_position: MenuGridPosition { x: 1, y: 1 },
             }
         }
 
-        pub fn push_button_to_stack(&mut self, button_entity: Entity) {
-            self.height += 1;
-            let pos = MenuGridPosition {
-                x: self.width,
-                y: self.height,
-            };
-            let _ = self.buttons.insert(pos, button_entity);
-        }
-
-        fn apply_menu_vec_to_cursor(&mut self, menu_vec: MenuVec) {
+        pub fn apply_menu_vec_to_cursor(&mut self, menu_vec: MenuVec) {
             let mut x = self.active_position.x as i8 + menu_vec.x;
             let mut y = self.active_position.y as i8 + menu_vec.y;
 
-            if y > self.height as i8 {
-                y = 1;
-            } else if y <= 0 {
-                y = self.height as i8;
-            }
-
             if x <= 0 {
                 x = self.width as i8;
-            } else if x >= self.width as i8 {
+            } else if x > self.width as i8 {
                 x = 1;
+            }
+
+            let height_new = self.column_heights.get(&(x as u8));
+
+            // TODO: Just make this return Err? Would the caller ever really care? I think
+            // the right thing to do here is probably panic since this should never be possible?
+            //
+            // Let's err instead cause I'm a coward.
+            let Some(height_new) = height_new else {
+                error!("No registered height for destination. Skipping application of MenuVec");
+                return;
+            };
+
+            if y > *height_new as i8 {
+                y = 1;
+            } else if y <= 0 {
+                y = *height_new as i8;
             }
 
             self.active_position = MenuGridPosition {
@@ -98,9 +99,38 @@ pub mod menu_navigation {
         pub fn reset_menu_option(&mut self) {
             self.active_position = MenuGridPosition { x: 1, y: 1 };
         }
+
+        /// Pushes a button the default stack of the Game Menu Grid.
+        pub fn push_button_to_stack(&mut self, button_entity: Entity) {
+            if let Err(e) = self.add_button_to_column(1, button_entity) {
+                error!("Failed to push button to base stack: {:?}", e)
+            }
+        }
+
+        /// Pushes buttons to the default stack of the Game Menu Grid.
+        pub fn push_buttons_to_stack(&mut self, buttons: &[Entity]) {
+            for button in buttons {
+                self.push_button_to_stack(*button);
+            }
+        }
+
+        fn add_button_to_column(&mut self, col: u8, button_entity: Entity) -> anyhow::Result<()> {
+            if col > self.width {
+                return Err(anyhow::anyhow!(
+                    "Tried to insert column, greater than width {:?}",
+                    self.width
+                ));
+            }
+            let height = self.column_heights.entry(col).or_insert(0);
+            *height += 1;
+            let pos = MenuGridPosition { x: col, y: *height };
+
+            let _ = self.buttons.insert(pos, button_entity);
+            Ok(())
+        }
     }
 
-    #[derive(Component)]
+    #[derive(Component, Clone)]
     pub struct GameMenuController {
         /// The Vec of players that can control the Game Menu
         pub players: HashSet<Player>,

@@ -13,7 +13,7 @@ I like keep tracking of what I think I need to do in a list. For now, this track
   - [ ] Damage / AP Calculations?
   - [ ] Multiple Types of Moves?
   - [ ] Allow the unit to pick a FacedDirection on Wait
-  - [ ] UI Support for more complex choices of "actions"?
+  - [x] UI Support for more complex choices of "actions"?
 
 - [ ] Animation Data
   - [ ] Update derived animation data to populate expected texture atlas indices
@@ -46,6 +46,12 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 - [ ] Ensure assets are loaded before moving to new scene
 - [ ] Sometimes there are weird lines running through the fonts?
 - [ ] Downed Characters should not be allowed to attack lol
+- [ ] The UI should have "greyed out" options if they can't be taken
+- [ ] Despawn the MainMenu (and anything else associated with the state) when we go into the BattleState
+- [ ] If the Battle ends, but a player happens to have an open menu, the player can still move cursor on menu as it's an "ActiveMenu"
+- [ ] Players can still do stuff with a unit after they've "waited"
+- [ ] Players can still act after they've waited
+- [ ] If you end the phase with a menu open (or maybe between messaging frames?) things can get pretty bad.
 
 ## Archive
 

@@ -7,7 +7,7 @@ default-run = "tactics-exploration"
 [dependencies]
 anyhow = "1.0.100"
 bevy = { version = "0.17.3" }
-bevy-inspector-egui = "0.35.0"
+bevy-inspector-egui = { version = "0.35" }
 bevy_common_assets = { version = "0.14.0", features = ["json"] }
 bevy_ecs_tiled = { version = "0.10.0", features = ["debug"] }
 bevy_ecs_tilemap = "0.17.0"

@@ -6,11 +6,13 @@ use crate::animation::{
     AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey,
     UnitAnimationKind, UnitAnimationPlayer,
 };
-use crate::battle::{BattleEntity, Enemy, UnitSelectionMessage, UnitUiCommandMessage};
+use crate::battle::{
+    BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
+};
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::enemy::behaviors::EnemyAiBehavior;
-use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, grid_to_world};
+use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
 use crate::grid_cursor::LockedOn;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
@@ -503,8 +505,8 @@ pub struct AttackOption {
     grid_position: GridPosition,
 }
 
-// Needs to run after "handle_unit_command"
-pub fn unlock_cursor_after_unit_command(
+// Ideally runs directly after the UnitUiCommand was emitted
+pub fn unlock_cursor_after_unit_ui_command(
     mut commands: Commands,
     mut unit_command_message: MessageReader<UnitUiCommandMessage>,
     cursor_query: Query<(Entity, &Player), With<LockedOn>>,
@@ -703,6 +705,7 @@ pub fn handle_unit_cursor_actions(
     player_unit_query: Query<(Entity, &player::Player, &Unit)>,
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
     mut unit_selection_message: MessageWriter<UnitSelectionMessage>,
+    mut unit_selection_back_message: MessageWriter<UnitSelectionBackMessage>,
     mut execute_action_writer: MessageWriter<UnitExecuteActionMessage>,
 ) {
     for (player, action_state) in player_query.iter() {
@@ -794,10 +797,7 @@ pub fn handle_unit_cursor_actions(
                     // Snap the cursor position back to the origin, and re-open the menu
                     *cursor_grid_pos = original_position;
 
-                    unit_selection_message.write(UnitSelectionMessage {
-                        entity: unit_entity,
-                        player: *player,
-                    });
+                    unit_selection_back_message.write(UnitSelectionBackMessage { player: *player });
 
                     commands.entity(cursor_entity).insert(LockedOn {});
                 }
@@ -835,10 +835,7 @@ pub fn handle_unit_cursor_actions(
                     // Snap the cursor position back to the origin, and re-open the menu
                     *cursor_grid_pos = unit_pos;
 
-                    unit_selection_message.write(UnitSelectionMessage {
-                        entity: unit_entity,
-                        player: *player,
-                    });
+                    unit_selection_back_message.write(UnitSelectionBackMessage { player: *player });
 
                     commands.entity(cursor_entity).insert(LockedOn {});
                 }
@@ -1019,7 +1016,7 @@ mod tests {
         unit::{
             PLAYER_TEAM, Stats, Unit, UnitActionCompletedMessage, UnitExecuteActionMessage,
             execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
-            overlay::OverlaysMessage, unlock_cursor_after_unit_command,
+            overlay::OverlaysMessage, unlock_cursor_after_unit_ui_command,
         },
     };
     use bevy::{
@@ -1138,7 +1135,7 @@ mod tests {
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         app.world_mut()
-            .run_system_once(unlock_cursor_after_unit_command)
+            .run_system_once(unlock_cursor_after_unit_ui_command)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         // Let's also simulate a move of the cursor to a valid destination, and
