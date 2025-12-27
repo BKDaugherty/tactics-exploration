@@ -152,3 +152,24 @@ pub fn attack_execution_despawner(
         }
     }
 }
+
+/// I haven't actually thought about this at all, just trying to build some UIs
+pub mod skills {
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct SkillCategoryId(u32);
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct SkillId(u32);
+
+    impl SkillId {
+        pub fn new() -> Self {
+            SkillId(0)
+        }
+    }
+
+    impl SkillCategoryId {
+        pub fn new() -> Self {
+            SkillCategoryId(0)
+        }
+    }
+}

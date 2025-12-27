@@ -180,7 +180,7 @@ pub fn start_phase(
 pub mod phase_ui {
     use bevy::prelude::*;
 
-    use crate::{assets::FontResource, battle_phase::PlayerEnemyPhase};
+    use crate::{assets::FontResource, battle::BattleEntity, battle_phase::PlayerEnemyPhase};
 
     #[derive(Debug)]
     pub enum BattleBannerMessage {
@@ -230,11 +230,12 @@ pub mod phase_ui {
                     timer: Timer::from_seconds(0.4, TimerMode::Once),
                     state: BannerAnimState::Entering,
                 },
+                BattleEntity {},
             ))
             .id();
 
-        let blue = Color::linear_rgba(0.2, 0.2, 0.95, 1.0);
-        let red = Color::linear_rgba(0.9, 0.35, 0.4, 1.0);
+        let blue = Color::linear_rgba(0.0, 0.0, 1.0, 1.0);
+        let red = Color::linear_rgba(1.0, 0.0, 0.0, 1.0);
 
         let (color, text) = match &event.message {
             BattleBannerMessage::PhaseBegin(phase) => match phase {
@@ -253,13 +254,13 @@ pub mod phase_ui {
                     ..Default::default()
                 },
                 BorderRadius::all(percent(20)),
-                BackgroundColor(Color::linear_rgba(0.4, 0.4, 0.4, 0.8)),
+                BackgroundColor(Color::linear_rgba(0.7, 0.7, 0.7, 0.8)),
                 children![(
                     TextColor(color),
                     Text::new(text),
                     TextFont {
                         font_size: 60.,
-                        font: fonts.fine_fantasy.clone(),
+                        font: fonts.badge.clone(),
                         ..Default::default()
                     },
                 )],

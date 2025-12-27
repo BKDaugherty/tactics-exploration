@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use bevy_common_assets::json::JsonAssetPlugin;
-use bevy_ecs_tiled::prelude::{TiledMap, TiledMapAsset};
 
 use crate::{
     GameState,
@@ -15,14 +14,14 @@ use crate::{
         tinytactics::AnimationAsset,
         unit_animation_tick_system, update_facing_direction_on_movement,
     },
-    assets::{
-        CURSOR_PATH, EXAMPLE_MAP_2_PATH, EXAMPLE_MAP_PATH, FontResource, GRADIENT_PATH,
-        OVERLAY_PATH,
+    assets::{CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH},
+    battle_menu::UI_BACKGROUND,
+    battle_menu::battle_menu_ui_definition::battle_ui_setup,
+    battle_menu::player_battle_ui_systems::{
+        activate_battle_ui, clear_stale_battle_menus_on_activate, handle_battle_ui_interactions,
+        hide_battle_ui_on_unit_ui_command, reactivate_ui_on_back_message,
     },
-    battle_menu::{
-        UI_BACKGROUND, activate_battle_ui, battle_ui_setup, handle_battle_ui_interactions,
-        update_player_ui_info,
-    },
+    battle_menu::player_info_ui_systems::update_player_ui_info,
     battle_phase::{
         PhaseMessage, check_should_advance_phase, init_phase_system, is_enemy_phase,
         is_running_enemy_phase, is_running_player_phase,
@@ -54,7 +53,7 @@ use crate::{
         UnitExecuteActionMessage, execute_unit_actions, handle_unit_cursor_actions,
         handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
-        spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_command,
+        spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_ui_command,
     },
 };
 
@@ -68,6 +67,17 @@ pub struct UnitSelectionMessage {
     /// Unit that was selected
     pub entity: Entity,
     /// Player that selected entity
+    pub player: Player,
+}
+
+/// If a player has selected a terminal node in the BattleUI, but then clicks back
+/// they send this message to tell us not to reset the battle menu, but just bring it back
+/// into focus.
+///
+/// TODO: Think about merging this into UnitSelectionMessage.
+#[derive(Message)]
+pub struct UnitSelectionBackMessage {
+    /// The player that sent the message
     pub player: Player,
 }
 
@@ -116,6 +126,7 @@ pub fn battle_plugin(app: &mut App) {
     app.add_message::<OverlaysMessage>()
         .add_message::<UnitSelectionMessage>()
         .add_message::<UnitUiCommandMessage>()
+        .add_message::<UnitSelectionBackMessage>()
         .add_message::<AnimationMarkerMessage>()
         .add_message::<PhaseMessage>()
         .add_message::<UnitActionCompletedMessage>()
@@ -170,10 +181,13 @@ pub fn battle_plugin(app: &mut App) {
                 handle_overlays_events_system,
                 handle_unit_ui_command,
                 activate_battle_ui.run_if(is_running_player_phase),
+                clear_stale_battle_menus_on_activate.run_if(is_running_player_phase),
                 handle_battle_ui_interactions.run_if(is_running_player_phase),
-                unlock_cursor_after_unit_command.after(handle_unit_ui_command),
+                hide_battle_ui_on_unit_ui_command.run_if(is_running_player_phase),
+                unlock_cursor_after_unit_ui_command.after(handle_battle_ui_interactions),
                 // Player UI System
                 handle_unit_cursor_actions.run_if(is_running_player_phase),
+                reactivate_ui_on_back_message.run_if(is_running_player_phase),
                 execute_unit_actions,
                 // Menu UI
                 highlight_menu_option,
@@ -183,12 +197,12 @@ pub fn battle_plugin(app: &mut App) {
                 attack_impact_system,
                 attack_execution_despawner,
                 // Battle Camera Zoom
-                change_zoom,
                 // UI
                 update_player_ui_info,
             )
                 .run_if(in_state(GameState::Battle)),
         )
+        .add_systems(Update, change_zoom.run_if(in_state(GameState::Battle)))
         .add_systems(
             Update,
             (
@@ -233,7 +247,6 @@ pub fn battle_plugin(app: &mut App) {
         .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);
 }
 
-const DEMO_SQUARE_GRID_BOUNDS: u32 = 8;
 const DEMO_2_GRID_BOUNDS_X: u32 = 12;
 const DEMO_2_GRID_BOUNDS_Y: u32 = 7;
 
@@ -312,8 +325,8 @@ pub fn spawn_battle_resolution_ui(
     };
 
     let (condition_text, color) = match battle_result.0.battle_condition {
-        BattleEndCondition::Victory => ("Victory", Color::linear_rgb(0.6, 0.9, 0.6)),
-        BattleEndCondition::Defeat => ("Defeat", Color::linear_rgb(0.9, 0.6, 0.6)),
+        BattleEndCondition::Victory => ("Victory", Color::linear_rgb(0.4, 0.7, 0.4)),
+        BattleEndCondition::Defeat => ("Defeat", Color::linear_rgb(0.7, 0.4, 0.4)),
     };
 
     let condition_node = commands
