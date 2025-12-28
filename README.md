@@ -49,3 +49,13 @@ couldn't get the steamoskit thing to work.
 Once you have that, it's easy to copy the release files directly to a
 folder, create a desktop shortcut, and then from there you can add the
 "non-steam" content so that you can see the game in playmode.
+
+Add something like this to `~/.ssh/config`
+```
+Host deck
+  HostName <RUN ip addr on deck to get your ip>
+  User deck
+  Port 22
+  IdentityFile ~/.ssh/<YOUR_IDENTITY_FILE>
+```
+Then you can just scp contents over

@@ -9,7 +9,7 @@ use crate::{
         menu_navigation::{self, ActiveMenu, handle_menu_cursor_navigation, highlight_menu_option},
         ui_consts::NORMAL_MENU_BUTTON_COLOR,
     },
-    player::Player,
+    player::{Player, RegisteredPlayers},
 };
 
 #[derive(Component)]
@@ -26,9 +26,14 @@ pub fn main_menu_plugin(app: &mut App) {
         .add_observer(main_menu_action);
 }
 
+enum GameSelect {
+    Solo,
+    Coop,
+}
+
 #[derive(Component)]
 enum MainMenuButtonAction {
-    PlayDemo,
+    PlayDemo(GameSelect),
     Quit,
 }
 
@@ -58,9 +63,24 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
             BorderRadius::all(percent(20)),
             button_node.clone(),
             BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
-            MainMenuButtonAction::PlayDemo,
+            MainMenuButtonAction::PlayDemo(GameSelect::Solo),
             children![(
-                Text::new("Play Demo"),
+                Text::new("Single Player Demo"),
+                button_text_font.clone(),
+                TextColor(TEXT_COLOR),
+            ),],
+        ))
+        .id();
+
+    let coop_button = commands
+        .spawn((
+            Button,
+            BorderRadius::all(percent(20)),
+            button_node.clone(),
+            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            MainMenuButtonAction::PlayDemo(GameSelect::Coop),
+            children![(
+                Text::new("Co-Op Demo"),
                 button_text_font.clone(),
                 TextColor(TEXT_COLOR),
             ),],
@@ -108,7 +128,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
         ],
     ));
 
-    menu_column.add_children(&[play_button, quit_button]);
+    menu_column.add_children(&[play_button, coop_button, quit_button]);
     let menu_column_id = menu_column.id();
 
     let mut menu = commands.spawn((
@@ -126,8 +146,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
     menu.add_child(menu_column_id);
 
     let mut main_menu_grid = menu_navigation::GameMenuGrid::new_vertical();
-    main_menu_grid.push_button_to_stack(play_button);
-    main_menu_grid.push_button_to_stack(quit_button);
+    main_menu_grid.push_buttons_to_stack(&[play_button, coop_button, quit_button]);
 
     commands.spawn((
         main_menu_grid,
@@ -140,6 +159,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
 
 fn main_menu_action(
     mut click: On<Pointer<Click>>,
+    mut commands: Commands,
     menu_button: Query<&MainMenuButtonAction, With<Button>>,
     mut app_exit_writer: MessageWriter<AppExit>,
     mut game_state: ResMut<NextState<GameState>>,
@@ -151,7 +171,23 @@ fn main_menu_action(
             MainMenuButtonAction::Quit => {
                 app_exit_writer.write(AppExit::Success);
             }
-            MainMenuButtonAction::PlayDemo => {
+            MainMenuButtonAction::PlayDemo(g) => {
+                let mut player_setup = RegisteredPlayers {
+                    players: HashSet::new(),
+                };
+
+                match g {
+                    GameSelect::Solo => {
+                        player_setup.players.insert(Player::One);
+                    }
+                    GameSelect::Coop => {
+                        player_setup.players.insert(Player::One);
+                        player_setup.players.insert(Player::Two);
+                    }
+                }
+
+                commands.insert_resource(player_setup);
+
                 game_state.set(GameState::Battle);
             }
         }
