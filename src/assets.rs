@@ -22,9 +22,9 @@ pub struct FontResource {
 }
 
 pub fn setup_fonts(mut commands: Commands, asset_loader: Res<AssetServer>) {
-    let badge = asset_loader.load("font_assets/tinyRPGFontKit01_v1_2/TinyRpg-BadgeFont.ttf");
+    let badge = asset_loader.load("font_assets/tinyRPGFontKit01_v1_2/TinyRPG-BadgeFont.ttf");
     let fine_fantasy =
-        asset_loader.load("font_assets/tinyRPGFontKit01_v1_2/TinyRpg-FineFantasyStrategies.ttf");
+        asset_loader.load("font_assets/tinyRPGFontKit01_v1_2/TinyRPG-FineFantasyStrategies.ttf");
     commands.insert_resource(FontResource {
         fine_fantasy,
         badge,
