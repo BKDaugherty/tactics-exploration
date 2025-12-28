@@ -52,8 +52,9 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 - [ ] Despawn the MainMenu (and anything else associated with the state) when we go into the BattleState
 - [ ] If the Battle ends, but a player happens to have an open menu, the player can still move cursor on menu as it's an "ActiveMenu"
 - [ ] Players can still do stuff with a unit after they've "waited"
-- [ ] Players can still act after they've waited
 - [ ] If you end the phase with a menu open (or maybe between messaging frames?) things can get pretty bad.
+- [ ] It's possible to end the Game with the PlayerPhase UI showing up on top of the battle resolution UI
+- [ ] The PlayerInfoUI can show that an enemy still has health during the BattleResolution screen
 
 ## Archive
 
