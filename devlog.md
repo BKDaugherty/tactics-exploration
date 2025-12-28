@@ -5,6 +5,8 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 ## The TODO List
 
 ### Projectier Things
+- [ ] Store the set of players somewhere
+
 - [ ] Handle Gamepad Inputs
   - [ ] Create some form of screen for joining game etc
 

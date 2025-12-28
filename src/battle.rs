@@ -15,13 +15,16 @@ use crate::{
         unit_animation_tick_system, update_facing_direction_on_movement,
     },
     assets::{CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH},
-    battle_menu::UI_BACKGROUND,
-    battle_menu::battle_menu_ui_definition::battle_ui_setup,
-    battle_menu::player_battle_ui_systems::{
-        activate_battle_ui, clear_stale_battle_menus_on_activate, handle_battle_ui_interactions,
-        hide_battle_ui_on_unit_ui_command, reactivate_ui_on_back_message,
+    battle_menu::{
+        UI_BACKGROUND,
+        battle_menu_ui_definition::battle_ui_setup,
+        player_battle_ui_systems::{
+            activate_battle_ui, clear_stale_battle_menus_on_activate,
+            handle_battle_ui_interactions, hide_battle_ui_on_unit_ui_command,
+            reactivate_ui_on_back_message,
+        },
+        player_info_ui_systems::update_player_ui_info,
     },
-    battle_menu::player_info_ui_systems::update_player_ui_info,
     battle_phase::{
         PhaseMessage, check_should_advance_phase, init_phase_system, is_enemy_phase,
         is_running_enemy_phase, is_running_player_phase,
@@ -47,7 +50,7 @@ use crate::{
         menu_navigation::{self, ActiveMenu, handle_menu_cursor_navigation, highlight_menu_option},
         ui_consts::NORMAL_MENU_BUTTON_COLOR,
     },
-    player::{self, Player},
+    player::{self, Player, RegisteredPlayers},
     unit::{
         ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit, UnitActionCompletedMessage,
         UnitExecuteActionMessage, execute_unit_actions, handle_unit_cursor_actions,
@@ -534,6 +537,7 @@ use bevy_ecs_tilemap::prelude::*;
 pub fn load_demo_battle_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    registered_players: Res<RegisteredPlayers>,
     tt_assets: Res<TinytacticsAssets>,
 ) {
     let map_handle =
@@ -573,13 +577,15 @@ pub fn load_demo_battle_scene(
     // Spawn players and player cursors
     let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
+    // TODO: Make Player Positions generic
     let player_1_grid_pos = GridPosition { x: 0, y: 1 };
     let player_2_grid_pos = GridPosition { x: 0, y: 5 };
     let enemy_1_grid_pos = GridPosition { x: 7, y: 3 };
     let enemy_2_grid_pos = GridPosition { x: 4, y: 2 };
     let enemy_3_grid_pos = GridPosition { x: 4, y: 4 };
 
-    load_demo_battle_players(&mut commands);
+    // TODO: Make players depend on resource
+    load_demo_battle_players(&mut commands, &registered_players);
 
     spawn_unit(
         &mut commands,
@@ -593,18 +599,48 @@ pub fn load_demo_battle_scene(
         Player::One,
         PLAYER_TEAM,
     );
-    spawn_unit(
-        &mut commands,
-        "Coral".to_string(),
-        &tt_assets,
-        player_2_grid_pos,
-        tt_assets.mage_spritesheet.clone(),
-        tt_assets.scepter_spritesheet.clone(),
-        tt_assets.unit_layout.clone(),
-        tt_assets.weapon_layout.clone(),
-        Player::Two,
-        PLAYER_TEAM,
-    );
+
+    if registered_players.players.len() > 1 {
+        spawn_unit(
+            &mut commands,
+            "Coral".to_string(),
+            &tt_assets,
+            player_2_grid_pos,
+            tt_assets.mage_spritesheet.clone(),
+            tt_assets.scepter_spritesheet.clone(),
+            tt_assets.unit_layout.clone(),
+            tt_assets.weapon_layout.clone(),
+            Player::Two,
+            PLAYER_TEAM,
+        );
+
+        spawn_enemy(
+            &mut commands,
+            "Deege".to_string(),
+            &tt_assets,
+            enemy_3_grid_pos,
+            tt_assets.cleric_spritesheet.clone(),
+            tt_assets.unit_layout.clone(),
+            ENEMY_TEAM,
+        );
+
+        grid_cursor::spawn_cursor(
+            &mut commands,
+            cursor_image.clone(),
+            player::Player::Two,
+            player_2_grid_pos,
+        );
+
+        spawn_enemy(
+            &mut commands,
+            "Chaumwer".to_string(),
+            &tt_assets,
+            enemy_2_grid_pos,
+            tt_assets.cleric_spritesheet.clone(),
+            tt_assets.unit_layout.clone(),
+            ENEMY_TEAM,
+        );
+    }
 
     spawn_enemy(
         &mut commands,
@@ -616,38 +652,11 @@ pub fn load_demo_battle_scene(
         ENEMY_TEAM,
     );
 
-    spawn_enemy(
-        &mut commands,
-        "Chaumwer".to_string(),
-        &tt_assets,
-        enemy_2_grid_pos,
-        tt_assets.cleric_spritesheet.clone(),
-        tt_assets.unit_layout.clone(),
-        ENEMY_TEAM,
-    );
-
-    spawn_enemy(
-        &mut commands,
-        "Deege".to_string(),
-        &tt_assets,
-        enemy_3_grid_pos,
-        tt_assets.cleric_spritesheet.clone(),
-        tt_assets.unit_layout.clone(),
-        ENEMY_TEAM,
-    );
-
     grid_cursor::spawn_cursor(
         &mut commands,
         cursor_image.clone(),
         player::Player::One,
         player_1_grid_pos,
-    );
-
-    grid_cursor::spawn_cursor(
-        &mut commands,
-        cursor_image.clone(),
-        player::Player::Two,
-        player_2_grid_pos,
     );
 
     // Spawn Obstacles
@@ -669,11 +678,14 @@ pub fn load_demo_battle_scene(
 
 // TODO: This should be based on how many players have joined game,
 // and likely should happen on some form of Player Join Screen
-fn load_demo_battle_players(commands: &mut Commands) {
+fn load_demo_battle_players(commands: &mut Commands, players: &RegisteredPlayers) {
+    let mut player_game_state_map = HashMap::new();
+
+    for player in &players.players {
+        player_game_state_map.insert(*player, player::PlayerState::default());
+    }
+
     commands.insert_resource(player::PlayerGameStates {
-        player_state: HashMap::from([
-            (Player::One, player::PlayerState::default()),
-            (Player::Two, player::PlayerState::default()),
-        ]),
+        player_state: player_game_state_map,
     });
 }

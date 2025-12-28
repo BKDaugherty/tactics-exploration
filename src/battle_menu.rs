@@ -91,11 +91,19 @@ pub enum UnitMenuAction {
 ///
 /// Includes the definition of the Battle Menus, PlayerUI, and the ObjectiveUI.
 pub mod battle_menu_ui_definition {
+    use std::collections::HashMap;
+
+    use crate::player::RegisteredPlayers;
+
     use super::*;
 
     /// Setup the Battle UI! Intended to run OnEnter(GameState::Battle)
-    pub fn battle_ui_setup(mut commands: Commands, fonts: Res<FontResource>) {
-        build_battle_grid_ui(&mut commands, &fonts);
+    pub fn battle_ui_setup(
+        mut commands: Commands,
+        fonts: Res<FontResource>,
+        registered_players: Res<RegisteredPlayers>,
+    ) {
+        build_battle_grid_ui(&mut commands, &fonts, &registered_players);
         build_top_ui(&mut commands, &fonts);
     }
 
@@ -143,7 +151,11 @@ pub mod battle_menu_ui_definition {
         commands.entity(ui_top_space).add_child(objective_ui);
     }
 
-    fn build_battle_grid_ui(commands: &mut Commands, fonts: &FontResource) {
+    fn build_battle_grid_ui(
+        commands: &mut Commands,
+        fonts: &FontResource,
+        registered_players: &RegisteredPlayers,
+    ) {
         let top_level_battle_grid_container = commands
             .spawn((
                 Name::new("BattleUI"),
@@ -175,8 +187,11 @@ pub mod battle_menu_ui_definition {
             .id();
 
         // TODO: Formalize this into some data representation somewhere? Probably dependent on the configuration of players...
-        let player_offsets = [(3, 2, Player::One), (3, 4, Player::Two)];
-        for player_offset in player_offsets {
+        let player_offsets = HashMap::from([(Player::One, (3, 2)), (Player::Two, (3, 4))]);
+        for player in registered_players.players.iter().cloned() {
+            let player_offset = player_offsets
+                .get(&player)
+                .expect("Must be a UI value for the player");
             let player_ui_container = commands
                 .spawn((
                     Name::new("PlayerUiContainer"),
@@ -217,7 +232,7 @@ pub mod battle_menu_ui_definition {
                         ..Default::default()
                     },
                     Visibility::Hidden,
-                    player_offset.2,
+                    player,
                 ))
                 .id();
 
@@ -278,7 +293,7 @@ pub mod battle_menu_ui_definition {
                     BackgroundColor(UI_BACKGROUND),
                     Visibility::Hidden,
                     BorderRadius::right(percent(5)),
-                    player_offset.2,
+                    player,
                     ZIndex(1),
                     BoxShadow::new(Color::BLACK, percent(-2), px(0), percent(0), percent(2)),
                     SkillMenu {},
@@ -299,7 +314,7 @@ pub mod battle_menu_ui_definition {
                     },
                     Visibility::Hidden,
                     BattleUiContainer {},
-                    player_offset.2,
+                    player,
                 ))
                 .id();
 
@@ -345,13 +360,13 @@ pub mod battle_menu_ui_definition {
                         ..Default::default()
                     },
                     GameMenuController {
-                        players: HashSet::from([player_offset.2]),
+                        players: HashSet::from([player]),
                     },
                     menu,
                     BattlePlayerUI {},
                     Visibility::Hidden,
                     BorderRadius::right(percent(5)),
-                    player_offset.2,
+                    player,
                     BackgroundColor(UI_BACKGROUND),
                     BoxShadow::new(Color::BLACK, percent(-0.5), px(0), percent(0), percent(2)),
                 ))
@@ -375,7 +390,7 @@ pub mod battle_menu_ui_definition {
                     BoxShadow::new(Color::BLACK, percent(-2), px(0), percent(0), percent(2)),
                     Visibility::Hidden,
                     BorderRadius::right(percent(5)),
-                    player_offset.2,
+                    player,
                     ZIndex(2),
                     SkillsFilteredByCategoryMenu {},
                 ))
