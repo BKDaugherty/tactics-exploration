@@ -13,6 +13,7 @@ pub mod grid_cursor;
 pub mod main_menu;
 pub mod menu;
 pub mod player;
+pub mod projectile;
 pub mod unit;
 
 use bevy::prelude::*;

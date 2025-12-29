@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use crate::{
     battle::Enemy,
     battle_phase::{PhaseMessage, PhaseMessageType, PlayerEnemyPhase, UnitPhaseResources},
-    combat::AttackIntent,
+    combat::{AttackIntent, skills::ATTACK_SKILL_ID},
     enemy::behaviors::EnemyAiBehavior,
     grid::{GridManagerResource, GridPosition, GridPositionChangeResult, manhattan_distance},
     unit::{
@@ -21,7 +21,6 @@ pub struct ActiveEnemy {}
 
 #[derive(Resource)]
 pub struct EnemyTurnConductorResource(pub EnemyTurnConductor);
-
 pub struct EnemyTurnConductor {
     queue: VecDeque<Entity>,
 }
@@ -193,6 +192,7 @@ pub fn plan_enemy_action(
                                     action: UnitExecuteAction::Attack(AttackIntent {
                                         attacker: enemy,
                                         defender: target_entity,
+                                        skill: ATTACK_SKILL_ID,
                                     }),
                                 },
                             ]);

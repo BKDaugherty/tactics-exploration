@@ -206,6 +206,15 @@ pub struct GridVec {
     pub y: i32,
 }
 
+impl GridVec {
+    pub fn scale(&self, scalar: i32) -> GridVec {
+        Self {
+            x: self.x * scalar,
+            y: self.y * scalar,
+        }
+    }
+}
+
 pub fn manhattan_distance(a: &GridPosition, b: &GridPosition) -> u32 {
     ((a.x as i32 - b.x as i32).abs() + (a.y as i32 - b.y as i32).abs()) as u32
 }

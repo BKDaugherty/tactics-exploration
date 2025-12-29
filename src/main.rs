@@ -18,7 +18,7 @@ fn main() {
     let mut runner = &mut app;
 
     runner = runner
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .init_state::<GameState>()
         .add_systems(
             Startup,

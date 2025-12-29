@@ -30,3 +30,48 @@ pub fn setup_fonts(mut commands: Commands, asset_loader: Res<AssetServer>) {
         badge,
     });
 }
+
+/// Skills need to be able to reference in data format
+/// what asset they spawn for VFX. For now, this can be tracked in a "DB".
+pub mod sprite_db {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct SpriteId(pub u32);
+
+    #[derive(Debug, Resource)]
+    pub struct SpriteDB {
+        pub sprite_id_to_handle: HashMap<SpriteId, Handle<Image>>,
+    }
+
+    impl SpriteDB {
+        fn new() -> Self {
+            Self {
+                sprite_id_to_handle: HashMap::new(),
+            }
+        }
+    }
+
+    fn build_sprite_map() -> HashMap<SpriteId, String> {
+        HashMap::from([
+            (
+                SpriteId(5),
+                "misc_assets/fire_effect_2/explosion_2_spritesheet.png".to_string(),
+            ),
+            (SpriteId(6), "misc_assets/arrow.png".to_string()),
+        ])
+    }
+
+    pub fn build_sprite_db(mut commands: Commands, asset_server: Res<AssetServer>) {
+        let map = build_sprite_map();
+        let mut db = SpriteDB::new();
+        for (id, path) in map {
+            let handle = asset_server.load(path);
+            db.sprite_id_to_handle.insert(id, handle);
+        }
+
+        commands.insert_resource(db);
+    }
+}

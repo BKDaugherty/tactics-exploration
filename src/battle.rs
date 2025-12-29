@@ -9,12 +9,17 @@ use crate::{
     GameState,
     animation::{
         AnimationMarkerMessage, TinytacticsAssets,
-        combat::{apply_animation_on_attack_phase, update_facing_direction_on_attack},
+        animation_db::{AnimationDB, load_animation_data},
+        animation_follower_system, animation_tick_system,
+        combat::update_facing_direction_on_attack,
         idle_animation_system, startup_load_tinytactics_assets,
         tinytactics::AnimationAsset,
-        unit_animation_tick_system, update_facing_direction_on_movement,
+        update_facing_direction_on_movement,
     },
-    assets::{CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH},
+    assets::{
+        CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH,
+        sprite_db::build_sprite_db,
+    },
     battle_menu::{
         UI_BACKGROUND,
         battle_menu_ui_definition::battle_ui_setup,
@@ -37,8 +42,10 @@ use crate::{
     bevy_ecs_tilemap_example,
     camera::change_zoom,
     combat::{
-        advance_attack_phase_based_on_attack_animation_markers, attack_execution_despawner,
-        attack_impact_system, attack_intent_system,
+        CombatStageComplete, ImpactEvent, attack_execution_despawner, attack_intent_system,
+        check_combat_timeline_should_advance, cleanup_vfx_on_animation_complete,
+        handle_combat_stage_enter, impact_event_handler, listen_for_combat_conditions,
+        skills::{SkillCategoryId, SkillId, UnitSkills, setup_skill_system},
     },
     enemy::{
         begin_enemy_phase, execute_enemy_action, init_enemy_ai_system, plan_enemy_action,
@@ -51,6 +58,7 @@ use crate::{
         ui_consts::NORMAL_MENU_BUTTON_COLOR,
     },
     player::{self, Player, RegisteredPlayers},
+    projectile::{ProjectileArrived, projectile_arrival_system, projectile_bezier_system},
     unit::{
         ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit, UnitActionCompletedMessage,
         UnitExecuteActionMessage, execute_unit_actions, handle_unit_cursor_actions,
@@ -100,6 +108,7 @@ pub enum UnitCommand {
     Attack,
     Wait,
     Cancel,
+    UseSkill(SkillId),
 }
 
 pub fn god_mode_plugin(app: &mut App) {
@@ -136,6 +145,9 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<UnitExecuteActionMessage>()
         .add_message::<ShowBattleBannerMessage>()
         .add_message::<BattlePhaseMessageComplete>()
+        .add_message::<CombatStageComplete>()
+        .add_message::<ImpactEvent>()
+        .add_message::<ProjectileArrived>()
         // .add_plugins(TiledPlugin::default())
         // .add_plugins(TiledDebugPluginGroup)
         .add_plugins((
@@ -143,13 +155,21 @@ pub fn battle_plugin(app: &mut App) {
             bevy_ecs_tilemap_example::tiled::TiledMapPlugin,
         ))
         .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
-        .add_systems(OnEnter(GameState::Battle), load_battle_asset_resources)
+        .add_systems(
+            OnEnter(GameState::Battle),
+            (
+                load_battle_asset_resources,
+                load_animation_data,
+                build_sprite_db,
+            ),
+        )
         .add_systems(
             OnEnter(GameState::Battle),
             (
                 load_demo_battle_scene.after(load_battle_asset_resources),
                 init_phase_system,
                 init_enemy_ai_system,
+                setup_skill_system,
                 battle_ui_setup,
             ),
         )
@@ -197,7 +217,6 @@ pub fn battle_plugin(app: &mut App) {
                 handle_menu_cursor_navigation,
                 // Combat
                 attack_intent_system,
-                attack_impact_system,
                 attack_execution_despawner,
                 // Battle Camera Zoom
                 // UI
@@ -210,14 +229,24 @@ pub fn battle_plugin(app: &mut App) {
             Update,
             (
                 // Animation
-                unit_animation_tick_system,
+                animation_tick_system,
+                animation_follower_system.after(animation_tick_system),
                 update_facing_direction_on_movement,
                 idle_animation_system,
-                // AnimationCombat
-                advance_attack_phase_based_on_attack_animation_markers,
-                apply_animation_on_attack_phase,
                 update_facing_direction_on_attack,
+                cleanup_vfx_on_animation_complete,
             )
+                .run_if(in_state(GameState::Battle)),
+        )
+        .add_systems(
+            Update,
+            (
+                listen_for_combat_conditions,
+                check_combat_timeline_should_advance,
+                handle_combat_stage_enter,
+                impact_event_handler,
+            )
+                .chain()
                 .run_if(in_state(GameState::Battle)),
         )
         .add_systems(
@@ -232,6 +261,11 @@ pub fn battle_plugin(app: &mut App) {
                 .after(prepare_for_phase::<Enemy>)
                 .run_if(in_state(GameState::Battle))
                 .run_if(is_running_enemy_phase),
+        )
+        .add_systems(
+            Update,
+            (projectile_bezier_system, projectile_arrival_system)
+                .run_if(in_state(GameState::Battle)),
         )
         .add_systems(
             Update,
@@ -539,6 +573,7 @@ pub fn load_demo_battle_scene(
     asset_server: Res<AssetServer>,
     registered_players: Res<RegisteredPlayers>,
     tt_assets: Res<TinytacticsAssets>,
+    anim_db: Res<AnimationDB>,
 ) {
     let map_handle =
         bevy_ecs_tilemap_example::tiled::TiledMapHandle(asset_server.load(EXAMPLE_MAP_2_PATH));
@@ -591,11 +626,14 @@ pub fn load_demo_battle_scene(
         &mut commands,
         "Brond".to_string(),
         &tt_assets,
+        &anim_db,
         player_1_grid_pos,
         tt_assets.fighter_spritesheet.clone(),
         tt_assets.iron_axe_spritesheet.clone(),
-        tt_assets.unit_layout.clone(),
-        tt_assets.weapon_layout.clone(),
+        UnitSkills {
+            learned_skills: HashSet::from([SkillId(4), SkillId(3), SkillId(2)]),
+            equipped_skill_categories: Vec::from([SkillCategoryId(1), SkillCategoryId(3)]),
+        },
         Player::One,
         PLAYER_TEAM,
     );
@@ -605,11 +643,14 @@ pub fn load_demo_battle_scene(
             &mut commands,
             "Coral".to_string(),
             &tt_assets,
+            &anim_db,
             player_2_grid_pos,
             tt_assets.mage_spritesheet.clone(),
             tt_assets.scepter_spritesheet.clone(),
-            tt_assets.unit_layout.clone(),
-            tt_assets.weapon_layout.clone(),
+            UnitSkills {
+                learned_skills: HashSet::from([SkillId(2)]),
+                equipped_skill_categories: Vec::from([SkillCategoryId(1)]),
+            },
             Player::Two,
             PLAYER_TEAM,
         );
@@ -618,9 +659,13 @@ pub fn load_demo_battle_scene(
             &mut commands,
             "Deege".to_string(),
             &tt_assets,
-            enemy_3_grid_pos,
+            &anim_db,
+            enemy_2_grid_pos,
             tt_assets.cleric_spritesheet.clone(),
-            tt_assets.unit_layout.clone(),
+            UnitSkills {
+                learned_skills: HashSet::new(),
+                equipped_skill_categories: Vec::new(),
+            },
             ENEMY_TEAM,
         );
 
@@ -635,9 +680,13 @@ pub fn load_demo_battle_scene(
             &mut commands,
             "Chaumwer".to_string(),
             &tt_assets,
-            enemy_2_grid_pos,
+            &anim_db,
+            enemy_3_grid_pos,
             tt_assets.cleric_spritesheet.clone(),
-            tt_assets.unit_layout.clone(),
+            UnitSkills {
+                learned_skills: HashSet::new(),
+                equipped_skill_categories: Vec::new(),
+            },
             ENEMY_TEAM,
         );
     }
@@ -646,9 +695,13 @@ pub fn load_demo_battle_scene(
         &mut commands,
         "Jimothy Timbers".to_string(),
         &tt_assets,
+        &anim_db,
         enemy_1_grid_pos,
         tt_assets.cleric_spritesheet.clone(),
-        tt_assets.unit_layout.clone(),
+        UnitSkills {
+            learned_skills: HashSet::new(),
+            equipped_skill_categories: Vec::new(),
+        },
         ENEMY_TEAM,
     );
 
