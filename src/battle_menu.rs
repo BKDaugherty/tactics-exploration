@@ -588,6 +588,8 @@ pub mod player_info_ui_systems {
 /// This UI allows the user to pick what they want a unit to do.
 pub mod player_battle_ui_systems {
 
+    use crate::combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills};
+
     use super::*;
 
     /// An ActiveBattleMenu component
@@ -786,6 +788,7 @@ pub mod player_battle_ui_systems {
     pub fn handle_battle_ui_interactions(
         mut commands: Commands,
         fonts: Res<FontResource>,
+        skill_db: Res<SkillDBResource>,
         player_input_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
         mut player_battle_menu: Query<
             (
@@ -815,6 +818,7 @@ pub mod player_battle_ui_systems {
                 Without<ActiveMenu>,
             ),
         >,
+        unit_skills_query: Query<&UnitSkills>,
         mut battle_command_writer: MessageWriter<UnitUiCommandMessage>,
     ) {
         for (player, input_actions) in player_input_query.iter() {
@@ -851,11 +855,7 @@ pub mod player_battle_ui_systems {
                                 UnitMenuAction::Attack => UnitCommand::Attack,
                                 UnitMenuAction::Wait => UnitCommand::Wait,
                                 UnitMenuAction::UseSkill(skill_id) => {
-                                    log::info!(
-                                        "Player tried to use a Skill with id {:?}! That's cute!",
-                                        skill_id
-                                    );
-                                    continue;
+                                    UnitCommand::UseSkill(skill_id.clone())
                                 }
                             },
                             unit: battle_menu.selected_unit,
@@ -871,30 +871,45 @@ pub mod player_battle_ui_systems {
                         else {
                             continue;
                         };
-                        // Create button
+
+                        let Some(unit_skills) =
+                            unit_skills_query.get(battle_menu.selected_unit).ok()
+                        else {
+                            error!("No skills found for Unit: {:?}", battle_menu.selected_unit);
+                            continue;
+                        };
+
                         let attack_button = commands
                             .spawn(battle_ui_button(
                                 &fonts,
-                                BattleMenuAction::Action(UnitMenuAction::Attack),
+                                BattleMenuAction::Action(UnitMenuAction::UseSkill(ATTACK_SKILL_ID)),
                                 "Attack",
                             ))
                             .id();
 
-                        // TODO: Pull from Unit somehow?
-                        let skill_category_button = commands
-                            .spawn(battle_ui_button(
-                                &fonts,
-                                BattleMenuAction::OpenSkillsFilteredByCategoryMenu(
-                                    skills::SkillCategoryId::new(),
-                                ),
-                                "Holy Magic",
-                            ))
-                            .id();
+                        let mut buttons = Vec::new();
+                        buttons.push(attack_button);
+
+                        for category_id in &unit_skills.equipped_skill_categories {
+                            let category = skill_db.skill_db.get_category(&category_id);
+
+                            let button_id = commands
+                                .spawn(battle_ui_button(
+                                    &fonts,
+                                    BattleMenuAction::OpenSkillsFilteredByCategoryMenu(
+                                        category_id.clone(),
+                                    ),
+                                    &category.name,
+                                ))
+                                .id();
+
+                            buttons.push(button_id)
+                        }
 
                         initialize_skill_menu(
                             &mut commands,
                             skill_menu,
-                            vec![attack_button, skill_category_button],
+                            buttons,
                             &mut vis,
                             SkillMenuHandMeDowns {
                                 battle_menu: battle_menu.to_owned(),
@@ -907,7 +922,7 @@ pub mod player_battle_ui_systems {
 
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                     }
-                    BattleMenuAction::OpenSkillsFilteredByCategoryMenu(_selected_category) => {
+                    BattleMenuAction::OpenSkillsFilteredByCategoryMenu(selected_category) => {
                         let Some((skill_menu_category, _, mut vis)) = skill_menu_category_query
                             .iter_mut()
                             .filter(|(_, p, _)| *p == player)
@@ -916,21 +931,39 @@ pub mod player_battle_ui_systems {
                             continue;
                         };
 
-                        // Create button
-                        let skill_button = commands
-                            .spawn(battle_ui_button(
-                                &fonts,
-                                BattleMenuAction::Action(UnitMenuAction::UseSkill(
-                                    skills::SkillId::new(),
-                                )),
-                                "Holy Strike",
-                            ))
-                            .id();
+                        let Some(unit_skills) =
+                            unit_skills_query.get(battle_menu.selected_unit).ok()
+                        else {
+                            error!("No skills found for Unit: {:?}", battle_menu.selected_unit);
+                            continue;
+                        };
+
+                        let mut buttons = Vec::new();
+                        for skill_id in &unit_skills.learned_skills {
+                            if selected_category
+                                != skill_db.skill_db.get_category_for_skill(&skill_id)
+                            {
+                                continue;
+                            }
+
+                            let skill = skill_db.skill_db.get_skill(skill_id);
+                            let button_id = commands
+                                .spawn(battle_ui_button(
+                                    &fonts,
+                                    BattleMenuAction::Action(UnitMenuAction::UseSkill(
+                                        skill_id.clone(),
+                                    )),
+                                    &skill.name,
+                                ))
+                                .id();
+
+                            buttons.push(button_id)
+                        }
 
                         initialize_skill_menu(
                             &mut commands,
                             skill_menu_category,
-                            vec![skill_button],
+                            buttons,
                             &mut vis,
                             SkillMenuHandMeDowns {
                                 battle_menu: battle_menu.to_owned(),

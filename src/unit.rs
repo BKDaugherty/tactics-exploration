@@ -1,7 +1,12 @@
+use anyhow::Context;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use leafwing_input_manager::prelude::ActionState;
 
+use crate::animation::animation_db::registered_sprite_ids::{
+    TT_UNIT_ANIMATED_SPRITE_ID, TT_WEAPON_ANIMATED_SPRITE_ID,
+};
+use crate::animation::animation_db::{AnimationDB, AnimationKey, AnimationStartIndexKey};
 use crate::animation::{
     AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey,
     UnitAnimationKind, UnitAnimationPlayer,
@@ -11,8 +16,9 @@ use crate::battle::{
 };
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
+use crate::combat::skills::{ATTACK_SKILL_ID, SkillDBResource, Targeting, UnitSkills};
 use crate::enemy::behaviors::EnemyAiBehavior;
-use crate::grid::{GridManager, GridMovement, GridPosition, GridVec};
+use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, manhattan_distance};
 use crate::grid_cursor::LockedOn;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
@@ -67,12 +73,69 @@ impl Unit {
     }
 }
 
+/// Lowkey, should Magic Power be Neutral, and AttackPower be Physical or
+/// something like that? Or is it fun having a Strength / Def?
+#[derive(Debug, Clone, Reflect, PartialEq, Eq, Hash)]
+pub enum ElementalType {
+    Fire,
+}
+
 #[derive(Debug, Reflect, Clone)]
 pub struct Stats {
     pub max_health: u32,
     pub strength: u32,
+    pub magic_power: u32,
+    pub defense: u32,
+    /// At the moment, elemental_affinity is both (Str, Def) for the element
+    pub elemental_affinities: HashMap<ElementalType, u32>,
+    // TODO: Should stats represent the current state?
     pub health: u32,
     pub movement: u32,
+}
+
+impl Stats {
+    fn new() -> Self {
+        Self {
+            max_health: 0,
+            strength: 0,
+            magic_power: 0,
+            defense: 0,
+            movement: 0,
+            health: 0,
+            elemental_affinities: HashMap::new(),
+        }
+    }
+
+    fn with_health(&mut self, health: u32) -> &mut Self {
+        self.health = health;
+        self.max_health = health;
+        self
+    }
+
+    fn with_strength(&mut self, strength: u32) -> &mut Self {
+        self.strength = strength;
+        self
+    }
+
+    fn with_elemental_affinity(&mut self, element: ElementalType, affinity: u32) -> &mut Self {
+        let _ = self.elemental_affinities.insert(element, affinity);
+        self
+    }
+
+    fn with_magic_power(&mut self, p: u32) -> &mut Self {
+        self.magic_power = p;
+        self
+    }
+
+    fn with_movement(&mut self, p: u32) -> &mut Self {
+        self.movement = p;
+        self
+    }
+
+    fn with_defense(&mut self, p: u32) -> &mut Self {
+        self.defense = p;
+        self
+    }
 }
 
 #[derive(Bundle)]
@@ -123,12 +186,11 @@ pub fn spawn_obstacle_unit(
             crate::grid::init_grid_to_world_transform(&grid_position),
             grid_position,
             Unit {
-                stats: Stats {
-                    max_health: 3,
-                    strength: 0,
-                    health: 3,
-                    movement: 0,
-                },
+                stats: Stats::new()
+                    .with_health(3)
+                    .with_defense(0)
+                    .with_movement(0)
+                    .to_owned(),
                 obstacle: ObstacleType::Neutral,
                 team: Team(0),
                 name: obstacle_sprite_type.to_string(),
@@ -154,31 +216,32 @@ pub fn spawn_enemy(
     commands: &mut Commands,
     unit_name: String,
     tt_assets: &Res<TinytacticsAssets>,
+    anim_db: &AnimationDB,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
-    texture_atlas_layout: Handle<TextureAtlasLayout>,
+    skills: UnitSkills,
     team: Team,
 ) {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
     let direction = Direction::SW;
-    let animation_data = tt_assets
-        .unit_animation_data
-        .unit_animations
-        .get(&UnitAnimationKey {
-            direction: direction.animation_direction(),
-            kind: UnitAnimationKind::IdleWalk,
+    let animation_start_index = anim_db
+        .get_start_index(&AnimationStartIndexKey {
+            facing_direction: Some(direction.animation_direction()),
+            key: AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::IdleWalk.into(),
+            },
         })
         .expect("Must have animation data");
 
     let unit_e = commands
         .spawn((
             Unit {
-                stats: Stats {
-                    max_health: 10,
-                    health: 10,
-                    strength: 5,
-                    movement: 3,
-                },
+                stats: Stats::new()
+                    .with_health(10)
+                    .with_defense(1)
+                    .with_movement(3)
+                    .to_owned(),
                 obstacle: ObstacleType::Filter(HashSet::from([team])),
                 team,
                 name: unit_name,
@@ -187,8 +250,8 @@ pub fn spawn_enemy(
             Sprite {
                 image: spritesheet,
                 texture_atlas: Some(TextureAtlas {
-                    layout: texture_atlas_layout,
-                    index: animation_data.start_index,
+                    layout: tt_assets.tt_unit_layout.clone(),
+                    index: (*animation_start_index).into(),
                 }),
                 color: Color::linear_rgb(1.0, 1.0, 1.0),
                 flip_x: direction.should_flip_across_y(),
@@ -196,7 +259,7 @@ pub fn spawn_enemy(
             },
             transform,
             FacingDirection(crate::animation::Direction::SW),
-            UnitAnimationPlayer::new(),
+            UnitAnimationPlayer::new(TT_UNIT_ANIMATED_SPRITE_ID),
             TINY_TACTICS_ANCHOR,
             UnitPhaseResources::default(),
             Enemy {},
@@ -204,6 +267,7 @@ pub fn spawn_enemy(
                 behavior: enemy::behaviors::Behavior::Trapper,
             },
             BattleEntity {},
+            skills,
         ))
         .id();
 
@@ -218,7 +282,10 @@ pub fn spawn_enemy(
                 flip_x: direction.should_flip_across_y(),
                 ..Default::default()
             },
-            AnimationFollower { leader: unit_e },
+            AnimationFollower {
+                leader: unit_e,
+                animated_sprite_id: TT_WEAPON_ANIMATED_SPRITE_ID,
+            },
             Visibility::Hidden,
             TINY_TACTICS_ANCHOR,
         ))
@@ -234,22 +301,23 @@ pub fn spawn_unit(
     commands: &mut Commands,
     unit_name: String,
     tt_assets: &Res<TinytacticsAssets>,
+    anim_db: &Res<AnimationDB>,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
     weapon_spritesheet: Handle<Image>,
-    texture_atlas_layout: Handle<TextureAtlasLayout>,
-    weapon_atlas_layout: Handle<TextureAtlasLayout>,
+    skills: UnitSkills,
     player: crate::player::Player,
     team: Team,
 ) {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
     let direction = Direction::NE;
-    let animation_data = tt_assets
-        .unit_animation_data
-        .unit_animations
-        .get(&UnitAnimationKey {
-            direction: direction.animation_direction(),
-            kind: UnitAnimationKind::IdleWalk,
+    let animation_start_index = anim_db
+        .get_start_index(&AnimationStartIndexKey {
+            facing_direction: Some(direction.animation_direction()),
+            key: AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::IdleWalk.into(),
+            },
         })
         .expect("Must have animation data");
 
@@ -257,12 +325,13 @@ pub fn spawn_unit(
         .spawn((
             UnitBundle {
                 unit: Unit {
-                    stats: Stats {
-                        max_health: 13,
-                        health: 13,
-                        strength: 5,
-                        movement: 3,
-                    },
+                    stats: Stats::new()
+                        .with_health(13)
+                        .with_defense(1)
+                        .with_magic_power(1)
+                        .with_movement(4)
+                        .with_strength(2)
+                        .to_owned(),
                     obstacle: ObstacleType::Filter(HashSet::from([team])),
                     team,
                     name: unit_name,
@@ -271,21 +340,23 @@ pub fn spawn_unit(
                 sprite: Sprite {
                     image: spritesheet,
                     texture_atlas: Some(TextureAtlas {
-                        layout: texture_atlas_layout,
-                        index: animation_data.start_index,
+                        layout: tt_assets.tt_unit_layout.clone(),
+                        index: (*animation_start_index).into(),
                     }),
                     color: Color::linear_rgb(1.0, 1.0, 1.0),
                     flip_x: direction.should_flip_across_y(),
+                    custom_size: Some(Vec2::splat(32.)),
                     ..Default::default()
                 },
                 transform,
                 player,
                 facing_direction: FacingDirection(direction),
-                animation_player: UnitAnimationPlayer::new(),
+                animation_player: UnitAnimationPlayer::new(TT_UNIT_ANIMATED_SPRITE_ID),
                 anchor: TINY_TACTICS_ANCHOR,
                 phase_resources: UnitPhaseResources::default(),
             },
             BattleEntity {},
+            skills,
         ))
         .id();
 
@@ -294,13 +365,16 @@ pub fn spawn_unit(
             Sprite {
                 image: weapon_spritesheet,
                 texture_atlas: Some(TextureAtlas {
-                    layout: weapon_atlas_layout,
+                    layout: tt_assets.weapon_layout.clone(),
                     index: 0,
                 }),
                 flip_x: direction.should_flip_across_y(),
                 ..Default::default()
             },
-            AnimationFollower { leader: unit },
+            AnimationFollower {
+                leader: unit,
+                animated_sprite_id: TT_WEAPON_ANIMATED_SPRITE_ID,
+            },
             Visibility::Hidden,
             TINY_TACTICS_ANCHOR,
         ))
@@ -567,6 +641,67 @@ pub fn execute_unit_actions(
     }
 }
 
+/// Builds a bounds square then filters for hamming distance
+pub fn radius_range_at_position(
+    grid_manager: &GridManager,
+    origin: &GridPosition,
+    range: u32,
+) -> Vec<GridPosition> {
+    let bounds = DIRECTION_VECS.map(|t| {
+        grid_manager
+            .change_position_with_bounds(*origin, t.scale(range as i32))
+            .position()
+    });
+
+    // Note that we panic here if there are no valid positions, but there should always be valid positions
+    let (x_min, x_max, y_min, y_max) = (
+        bounds
+            .iter()
+            .map(|t| t.x)
+            .min()
+            .expect("No minimum x value"),
+        bounds
+            .iter()
+            .map(|t| t.x)
+            .max()
+            .expect("No maximum x value"),
+        bounds
+            .iter()
+            .map(|t| t.y)
+            .min()
+            .expect("No minimum y value"),
+        bounds
+            .iter()
+            .map(|t| t.y)
+            .max()
+            .expect("No maximum y value"),
+    );
+
+    let mut targets = Vec::new();
+
+    for x in x_min..=x_max {
+        for y in y_min..=y_max {
+            let target_pos = GridPosition { x, y };
+
+            if manhattan_distance(origin, &target_pos) <= range {
+                targets.push(target_pos);
+            }
+        }
+    }
+
+    targets
+}
+
+pub fn build_attack_space_options(
+    grid_manager: &GridManager,
+    targeting: &Targeting,
+    origin: &GridPosition,
+) -> Vec<GridPosition> {
+    match targeting {
+        Targeting::TargetInRange(range) => radius_range_at_position(grid_manager, origin, *range),
+    }
+}
+
 // TODO: Don't make this dependent on PlayerGameStates
 // We need to drive the interaction between the cursor
 // in a better way. (Which will enable us to use this for AIs too!)
@@ -574,6 +709,7 @@ pub fn execute_unit_actions(
 // PlayerGameStates probably could just be an Event we pass.
 pub fn handle_unit_ui_command(
     grid_manager_res: Res<grid::GridManagerResource>,
+    skill_db: Res<SkillDBResource>,
     mut player_state: ResMut<player::PlayerGameStates>,
     mut unit_command_message: MessageReader<UnitUiCommandMessage>,
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
@@ -622,24 +758,26 @@ pub fn handle_unit_ui_command(
                     },
                 });
             }
-            crate::battle::UnitCommand::Attack => {
+            crate::battle::UnitCommand::UseSkill(skill_id) => {
+                let skill = skill_db.skill_db.get_skill(&skill_id);
+
                 let mut options_for_attack = Vec::new();
 
-                if unit_resources.action_points_left_in_phase == 0 {
+                // TODO: It'd be nice to block this before this point
+                // in le UI
+                if unit_resources.action_points_left_in_phase < skill.cost.ap.into() {
                     warn!("Unit is attempting to attack with no AP!");
                     continue;
                 }
 
-                // Assume all units have the same attack range for now
-                for dir in DIRECTION_VECS {
-                    let grid::GridPositionChangeResult::Moved(possible_attack_pos) =
-                        grid_manager_res
-                            .grid_manager
-                            .change_position_with_bounds(*position, dir)
-                    else {
-                        continue;
-                    };
+                let target_options = build_attack_space_options(
+                    &grid_manager_res.grid_manager,
+                    &skill.targeting,
+                    position,
+                );
 
+                // Assume all units have the same attack range for now
+                for possible_attack_pos in &target_options {
                     // Is there a unit that can be attacked there?
                     if let Some((target_entity, target_unit)) = grid_manager_res
                         .grid_manager
@@ -653,7 +791,7 @@ pub fn handle_unit_ui_command(
                     {
                         options_for_attack.push(AttackOption {
                             target: target_entity,
-                            grid_position: possible_attack_pos,
+                            grid_position: *possible_attack_pos,
                         });
                     }
                 }
@@ -664,19 +802,18 @@ pub fn handle_unit_ui_command(
                     .map(|t| (t.grid_position.clone(), t))
                     .collect();
 
-                // Change Player State to moving the unit
-                player_state.cursor_state =
-                    player::PlayerCursorState::LookingForTargetWithAttack(unit_entity, options_map);
+                // I hate this abstraction lol
+                player_state.cursor_state = player::PlayerCursorState::LookingForTargetWithAttack(
+                    unit_entity,
+                    options_map,
+                    skill_id,
+                );
 
                 overlay_message_writer.write(OverlaysMessage {
                     player: message.player,
                     action: overlay::OverlaysAction::Spawn {
                         spawn_type: overlay::OverlaysType::Attack,
-                        positions: options_for_attack
-                            .iter()
-                            .cloned()
-                            .map(|t| t.grid_position)
-                            .collect(),
+                        positions: target_options,
                     },
                 });
             }
@@ -687,6 +824,9 @@ pub fn handle_unit_ui_command(
                 });
 
                 player_state.cursor_state = player::PlayerCursorState::Idle;
+            }
+            crate::battle::UnitCommand::Attack => {
+                error!("Attacks are deprecated, don't ya know?");
             }
         }
     }
@@ -804,6 +944,7 @@ pub fn handle_unit_cursor_actions(
             } else if let PlayerCursorState::LookingForTargetWithAttack(
                 unit_entity,
                 mut valid_attack_moves,
+                skill_id,
             ) = player_state.cursor_state.clone()
             {
                 if action_state.just_pressed(&PlayerInputAction::Select) {
@@ -819,6 +960,7 @@ pub fn handle_unit_cursor_actions(
                         action: UnitExecuteAction::Attack(AttackIntent {
                             attacker: unit_entity,
                             defender: valid_move.target,
+                            skill: skill_id,
                         }),
                     });
 
@@ -1005,7 +1147,7 @@ mod tests {
         battle::{UnitCommand, UnitSelectionMessage, UnitUiCommandMessage},
         battle_phase::{
             PhaseMessage, UnitPhaseResources, check_should_advance_phase, init_phase_system,
-            refresh_units_at_beginning_of_phase,
+            prepare_for_phase,
         },
         grid::{
             self, GridManager, GridManagerResource, GridMovement, GridPosition,
@@ -1065,12 +1207,7 @@ mod tests {
             .spawn((
                 // TODO: Make constructor
                 Unit {
-                    stats: Stats {
-                        max_health: 10,
-                        health: 10,
-                        strength: 5,
-                        movement: 2,
-                    },
+                    stats: Stats::new().with_movement(2).with_health(5).to_owned(),
                     team: PLAYER_TEAM,
                     obstacle: crate::unit::ObstacleType::Filter(HashSet::from([PLAYER_TEAM])),
                     name: "Bob".to_string(),
@@ -1101,7 +1238,7 @@ mod tests {
             .run_system_once(check_should_advance_phase::<Player>)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
         app.world_mut()
-            .run_system_once(refresh_units_at_beginning_of_phase::<Player>)
+            .run_system_once(prepare_for_phase::<Player>)
             .map_err(|e| anyhow::anyhow!("Failed to run system: {:?}", e))?;
 
         app.world_mut()

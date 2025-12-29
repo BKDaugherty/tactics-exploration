@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
 use crate::{
+    combat::skills::SkillId,
     grid::GridPosition,
     unit::{AttackOption, ValidMove},
 };
@@ -99,7 +100,7 @@ pub enum PlayerCursorState {
     Idle,
     /// Moving Entity from source position
     MovingUnit(Entity, GridPosition, HashMap<GridPosition, ValidMove>),
-    LookingForTargetWithAttack(Entity, HashMap<GridPosition, AttackOption>),
+    LookingForTargetWithAttack(Entity, HashMap<GridPosition, AttackOption>, SkillId),
 }
 
 #[derive(Debug, Default)]

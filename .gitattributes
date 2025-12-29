@@ -80,3 +80,5 @@ assets/font_assets/tinyRPGFontKit01_v1_2/TinyRPG-BadgeFont.ttf filter=lfs diff=l
 assets/font_assets/tinyRPGFontKit01_v1_2/TinyRPG-BrilliantStrength.ttf filter=lfs diff=lfs merge=lfs -text
 assets/font_assets/tinyRPGFontKit01_v1_2/TinyRPG-FineFantasyStrategies.ttf filter=lfs diff=lfs merge=lfs -text
 assets/font_assets/tinyRPGFontKit01_v1_2/TinyRPG-FineFantasyStrategiesItalicNumbers.ttf filter=lfs diff=lfs merge=lfs -text
+assets/misc_assets/fire_effect_2/explosion_2_spritesheet.png filter=lfs diff=lfs merge=lfs -text
+assets/misc_assets/arrow.png filter=lfs diff=lfs merge=lfs -text

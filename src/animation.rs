@@ -2,15 +2,21 @@
 
 use std::collections::HashMap;
 
-use bevy::prelude::*;
+use bevy::{app::Animation, prelude::*};
 pub use tinytactics::Direction;
 
 use crate::{
     animation::{
+        animation_db::{
+            AnimatedSpriteId, AnimationDB, AnimationKey, AnimationStartIndexKey,
+            FollowerAnimationKey, RegisteredAnimationId,
+            registered_sprite_ids::FLAME_VFX_ANIMATED_SPRITE_ID,
+        },
         combat::ATTACK_FRAME_DURATION,
         tinytactics::{Character, WeaponType},
     },
     assets::BATTLE_TACTICS_TILESHEET,
+    combat::{CombatAnimationId, UnitIsAttacking},
     grid::{GridManagerResource, GridMovement, GridVec},
     unit::Unit,
 };
@@ -33,7 +39,7 @@ pub enum AnimationPriority {
     Combat,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimationMarker {
     /// The frame at which the animation "hit" the target.
     ///
@@ -51,90 +57,76 @@ pub enum AnimationMarker {
 pub struct AnimationMarkerMessage {
     pub entity: Entity,
     pub marker: AnimationMarker,
+    pub id: Option<AnimationId>,
 }
 
 #[derive(Component)]
 pub struct AnimationFollower {
     pub leader: Entity,
+    pub animated_sprite_id: AnimatedSpriteId,
 }
 
-pub fn unit_animation_tick_system(
-    time: Res<Time>,
-    animation_data: Res<TinytacticsAssets>,
-    mut query: Query<
-        (
-            Entity,
-            &FacingDirection,
-            &mut UnitAnimationPlayer,
-            &mut Sprite,
-        ),
-        Without<AnimationFollower>,
-    >,
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum AnimationId {
+    Combat(CombatAnimationId),
+}
+
+// Problem, I need a general animation_tick system
+// But if the FacingDirection changes, I'll want to update the
+// AnimationId
+
+// So the AnimationPlayer could carry the AnimationInformation associated?
+// And then playing an animation could involve looking up the relevant information?
+
+// AnimationKind
+//
+
+// So maybe I have a database of...
+// Animation -> TextureAtlas start index?
+
+// Specific Animation
+
+/// One per registered TextureAtlas basically
+
+// AnimationDB
+// - Provides lookups for a registered AnimationKey to Start Index
+//
+//
+// - AnimationKey -> StartIndex
+
+// AnimationClip
+// - AnimationData
+// - StartIndex (relative to the TextureAtlas)
+
+// AnimationData
+// - Frame Count
+// - AnimationOffsetMarkers (relative to frames in atlas)
+
+pub fn animation_follower_system(
+    anim_db: Res<AnimationDB>,
+    anim_query: Query<(Option<&FacingDirection>, &UnitAnimationPlayer)>,
     mut follower_query: Query<
         (&AnimationFollower, &mut Sprite, &mut Visibility),
         With<AnimationFollower>,
     >,
-    mut marker_events: MessageWriter<AnimationMarkerMessage>,
 ) {
-    for (entity, dir, mut player, mut sprite) in &mut query {
-        // Get the current animation, if any
-        let Some(anim) = &mut player.current_animation else {
-            continue;
-        };
-
-        let key = UnitAnimationKey {
-            kind: anim.id,
-            direction: dir.0.animation_direction(),
-        };
-
-        let Some(clip_data) = animation_data.unit_animation_data.unit_animations.get(&key) else {
-            warn!("No animation data found for running clip");
-            continue;
-        };
-
-        anim.timer.tick(time.delta());
-        if anim.timer.just_finished() {
-            anim.frame += 1;
-
-            // Send event before bounds checking to allow for using the len(frames) as a "Complete" marker
-            if let Some(marker) = clip_data.inner.animation_offset_markers.get(&anim.frame) {
-                marker_events.write(AnimationMarkerMessage {
-                    entity,
-                    marker: *marker,
-                });
-            }
-
-            if anim.frame >= clip_data.inner.frame_count {
-                player.current_animation = None;
-                continue;
-            }
-        }
-
-        if let Some(texture_atlas) = sprite.texture_atlas.as_mut() {
-            let target_frame = anim.frame + clip_data.start_index;
-            texture_atlas.index = target_frame;
-            sprite.flip_x = dir.0.should_flip_across_y();
-        }
-    }
-
-    // TODO: This system feels really hyperspecific for overlays based on Attack
-    // I'd love to make these a littel better
     for (follower, mut sprite, mut vis) in follower_query.iter_mut() {
-        if let Some((_, facing_direction, player, _)) = query.get(follower.leader).ok() {
+        if let Some((facing_direction, player)) = anim_query.get(follower.leader).ok() {
             let Some(anim) = &player.current_animation else {
                 *vis = Visibility::Hidden;
                 continue;
             };
 
-            let Some(weapon_animation) =
-                animation_data
-                    .unit_animation_data
-                    .weapon_animations
-                    .get(&UnitAnimationKey {
-                        kind: anim.id,
-                        direction: facing_direction.0.animation_direction(),
-                    })
-            else {
+            let Some(follower_start_index) = anim_db.get_follower_animation_start_index(
+                &FollowerAnimationKey {
+                    follower_id: follower.animated_sprite_id,
+                    followee_key: AnimationKey {
+                        animated_sprite_id: player.animated_sprite_id,
+                        animation_id: anim.id,
+                    },
+                },
+                facing_direction.cloned().map(|t| t.0.animation_direction()),
+            ) else {
                 *vis = Visibility::Hidden;
                 continue;
             };
@@ -144,10 +136,88 @@ pub fn unit_animation_tick_system(
                 continue;
             };
 
-            texture_atlas.index = anim.frame + weapon_animation.start_index;
-            sprite.flip_x = facing_direction.0.should_flip_across_y();
+            texture_atlas.index = anim.frame + *follower_start_index as usize;
+
+            if let Some(fd) = facing_direction {
+                sprite.flip_x = fd.0.should_flip_across_y();
+            }
 
             *vis = Visibility::Visible;
+        }
+    }
+}
+
+pub fn animation_tick_system(
+    time: Res<Time>,
+    anim_db: Res<AnimationDB>,
+    mut query: Query<
+        (
+            Entity,
+            Option<&FacingDirection>,
+            &mut UnitAnimationPlayer,
+            &mut Sprite,
+        ),
+        Without<AnimationFollower>,
+    >,
+    mut marker_events: MessageWriter<AnimationMarkerMessage>,
+) {
+    for (entity, dir, mut player, mut sprite) in &mut query {
+        let animated_sprite_id = player.animated_sprite_id;
+
+        // Get the current animation, if any
+        let Some(anim) = &mut player.current_animation else {
+            continue;
+        };
+
+        let key = AnimationKey {
+            animated_sprite_id,
+            animation_id: anim.id,
+        };
+
+        let (Some(clip_data), Some(clip_start_index)) = (
+            anim_db.get_data(&key),
+            anim_db.get_start_index(&AnimationStartIndexKey {
+                facing_direction: dir.map(|t| t.0.animation_direction()),
+                key: key.clone(),
+            }),
+        ) else {
+            warn!("No animation data found for running clip");
+            continue;
+        };
+
+        anim.timer.tick(time.delta());
+        if anim.timer.just_finished() {
+            anim.frame += 1;
+
+            if animated_sprite_id == FLAME_VFX_ANIMATED_SPRITE_ID {
+                info!(
+                    "Current Frame: {:?}, Clip Data: {:?}",
+                    anim.frame, clip_data
+                );
+            }
+
+            // Send event before bounds checking to allow for using the len(frames) as a "Complete" marker
+            if let Some(marker) = clip_data.animation_offset_markers.get(&anim.frame) {
+                marker_events.write(AnimationMarkerMessage {
+                    entity,
+                    marker: *marker,
+                    id: anim.animation_id.clone(),
+                });
+            }
+
+            if anim.frame >= clip_data.frame_count {
+                player.current_animation = None;
+                continue;
+            }
+        }
+
+        if let Some(texture_atlas) = sprite.texture_atlas.as_mut() {
+            let target_frame = anim.frame + *clip_start_index as usize;
+            texture_atlas.index = target_frame;
+
+            if let Some(dir) = dir {
+                sprite.flip_x = dir.0.should_flip_across_y();
+            }
         }
     }
 }
@@ -159,42 +229,6 @@ pub mod combat {
 
     pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 8.;
     pub const HURT_BY_ATTACK_FRAME_DURATION: f32 = ATTACK_FRAME_DURATION * 2.;
-
-    pub fn apply_animation_on_attack_phase(
-        mut attacks: Query<&mut AttackExecution>,
-        mut anims: Query<&mut UnitAnimationPlayer>,
-    ) {
-        for mut attack in attacks.iter_mut() {
-            match attack.animation_phase {
-                crate::combat::AttackPhase::Windup => {
-                    if let Some(mut attacker) = anims.get_mut(attack.attacker).ok() {
-                        attacker.play(AnimToPlay {
-                            id: UnitAnimationKind::Attack,
-                            frame_duration: ATTACK_FRAME_DURATION,
-                        });
-                    }
-                    attack.animation_phase = crate::combat::AttackPhase::PostWindup;
-                }
-                crate::combat::AttackPhase::Impact => {
-                    let anim = match attack.outcome.defender_reaction {
-                        DefenderReaction::TakeHit => UnitAnimationKind::TakeDamage,
-                        _ => {
-                            warn!("We only have a TakeDamage animation!");
-                            UnitAnimationKind::TakeDamage
-                        }
-                    };
-                    if let Some(mut defender) = anims.get_mut(attack.defender).ok() {
-                        defender.play(AnimToPlay {
-                            frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
-                            id: anim,
-                        });
-                    }
-                    attack.animation_phase = AttackPhase::PostImpact;
-                }
-                _ => {}
-            }
-        }
-    }
 
     /// How do I ensure that this runs before I despawn the AttackIntent?
     pub fn update_facing_direction_on_attack(
@@ -230,15 +264,13 @@ pub mod combat {
 }
 
 pub fn idle_animation_system(
-    res: Res<TinytacticsAssets>,
-    mut query: Query<(
-        &Unit,
-        &FacingDirection,
-        &mut UnitAnimationPlayer,
-        Option<&GridMovement>,
-    )>,
+    res: Res<AnimationDB>,
+    mut query: Query<
+        (&Unit, &mut UnitAnimationPlayer, Option<&GridMovement>),
+        Without<UnitIsAttacking>,
+    >,
 ) {
-    for (unit, dir, mut anim_player, moving) in &mut query {
+    for (unit, mut anim_player, moving) in &mut query {
         let anim_kind_to_play = match (unit.downed(), unit.critical_health(), moving) {
             (true, _, _) => UnitAnimationKind::IdleDead,
             (false, true, None) => UnitAnimationKind::IdleHurt,
@@ -246,20 +278,16 @@ pub fn idle_animation_system(
             (false, false, _) => UnitAnimationKind::IdleWalk,
         };
 
-        let Some(inner) = res
-            .unit_animation_data
-            .unit_animations
-            .get(&UnitAnimationKey {
-                kind: anim_kind_to_play,
-                direction: dir.0.animation_direction(),
-            })
-        else {
+        let Some(inner) = res.get_data(&AnimationKey {
+            animated_sprite_id: anim_player.animated_sprite_id,
+            animation_id: anim_kind_to_play.into(),
+        }) else {
             return;
         };
 
         let anim_to_play = AnimToPlay {
-            id: anim_kind_to_play,
-            frame_duration: inner.inner.frame_duration,
+            id: anim_kind_to_play.into(),
+            frame_duration: inner.frame_duration,
         };
 
         match &anim_player.current_animation {
@@ -274,13 +302,15 @@ pub fn idle_animation_system(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u32)]
 pub enum UnitAnimationKind {
-    IdleWalk,
-    IdleHurt,
-    IdleDead,
-    Charge,
-    Attack,
-    TakeDamage,
+    IdleWalk = 1,
+    IdleHurt = 2,
+    IdleDead = 3,
+    Charge = 4,
+    Attack = 5,
+    TakeDamage = 6,
+    Release = 7,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -297,6 +327,7 @@ impl UnitAnimationKind {
             UnitAnimationKind::IdleDead => AnimationPriority::Idle,
             UnitAnimationKind::Charge => AnimationPriority::Combat,
             UnitAnimationKind::Attack => AnimationPriority::Combat,
+            UnitAnimationKind::Release => AnimationPriority::Combat,
             UnitAnimationKind::TakeDamage => AnimationPriority::Reaction,
         }
     }
@@ -304,35 +335,62 @@ impl UnitAnimationKind {
 
 #[derive(Debug)]
 pub struct PlayingAnimation {
-    id: UnitAnimationKind,
-    frame: usize,
-    timer: Timer,
+    pub animation_id: Option<AnimationId>,
+    pub id: RegisteredAnimationId,
+    pub frame: usize,
+    pub timer: Timer,
 }
 
 #[derive(Clone, Debug)]
 pub struct AnimToPlay {
-    id: UnitAnimationKind,
-    frame_duration: f32,
+    pub id: RegisteredAnimationId,
+    pub frame_duration: f32,
 }
 
 #[derive(Component, Debug)]
 pub struct UnitAnimationPlayer {
     current_animation: Option<PlayingAnimation>,
+    pub animated_sprite_id: AnimatedSpriteId,
 }
 
 impl UnitAnimationPlayer {
-    pub fn new() -> Self {
+    pub fn new(animated_sprite_id: AnimatedSpriteId) -> Self {
         Self {
             current_animation: None,
+            animated_sprite_id,
         }
     }
 
+    /// Sometimes you want to spawn an AnimationPlayer with an animation already running!
+    pub fn new_with_animation(
+        animated_sprite_id: AnimatedSpriteId,
+        current_animation: PlayingAnimation,
+    ) -> Self {
+        Self {
+            animated_sprite_id,
+            current_animation: Some(current_animation),
+        }
+    }
+
+    // TODO: As we start to rely on animations more, we probably can't accept this.
+    // I think we should ensure that we queue animations that aren't Idle priority.
+    //
+    // Then when we finish an animation, we can pop from the queue?
     pub fn play(&mut self, anim: AnimToPlay) {
+        self.play_with_maybe_id(anim, None);
+    }
+
+    pub fn play_with_id(&mut self, anim: AnimToPlay, animation_id: AnimationId) {
+        self.play_with_maybe_id(anim, Some(animation_id));
+    }
+
+    pub fn play_with_maybe_id(&mut self, anim: AnimToPlay, animation_id: Option<AnimationId>) {
         if self.preempts(&anim) && !self.is_already_running(&anim) {
             self.current_animation = Some(PlayingAnimation {
                 id: anim.id,
                 frame: 0,
                 timer: Timer::from_seconds(anim.frame_duration, TimerMode::Repeating),
+                animation_id,
             })
         }
     }
@@ -346,12 +404,12 @@ impl UnitAnimationPlayer {
 
     fn preempts(&self, anim: &AnimToPlay) -> bool {
         self.current_priority()
-            .map(|t| anim.id.priority() >= t)
+            .map(|t| anim.id.priority >= t)
             .unwrap_or(true)
     }
 
     pub fn current_priority(&self) -> Option<AnimationPriority> {
-        self.current_animation.as_ref().map(|a| a.id.priority())
+        self.current_animation.as_ref().map(|a| a.id.priority)
     }
 }
 
@@ -360,127 +418,7 @@ pub struct AnimationState(pub AnimationType);
 
 #[derive(Asset, TypePath, Debug)]
 pub struct UnitAnimations {
-    pub unit_animations: HashMap<UnitAnimationKey, UnitAnimationData>,
-    pub weapon_animations: HashMap<UnitAnimationKey, UnitAnimationData>,
-}
-
-pub fn generate_animations(
-    kind: UnitAnimationKind,
-    data: UnitAnimationDataInner,
-    direction_to_start: &[(Direction, usize); 2],
-) -> Vec<(UnitAnimationKey, UnitAnimationData)> {
-    direction_to_start
-        .into_iter()
-        .map(|(k, v)| {
-            (
-                UnitAnimationKey {
-                    kind,
-                    direction: *k,
-                },
-                UnitAnimationData {
-                    start_index: *v,
-                    inner: data.clone(),
-                },
-            )
-        })
-        .collect()
-}
-
-pub fn weapon_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
-    let attack_data = UnitAnimationDataInner {
-        frame_count: 4,
-        frame_duration: ATTACK_FRAME_DURATION,
-        animation_offset_markers: HashMap::new(),
-    };
-    let attack_start_indices = [(Direction::NE, 0), (Direction::SE, 4)];
-    let attack_anims = generate_animations(
-        UnitAnimationKind::Attack,
-        attack_data,
-        &attack_start_indices,
-    );
-    attack_anims.into_iter().collect()
-}
-
-pub fn unit_animations() -> HashMap<UnitAnimationKey, UnitAnimationData> {
-    let idle_data = UnitAnimationDataInner {
-        frame_count: 8,
-        frame_duration: (1.0 / 8.),
-        animation_offset_markers: HashMap::new(),
-    };
-
-    let idle_start_indices = [(Direction::NE, 0), (Direction::SE, 8)];
-
-    let attack_data = UnitAnimationDataInner {
-        frame_count: 4,
-        frame_duration: ATTACK_FRAME_DURATION,
-        animation_offset_markers: HashMap::from([
-            (2, AnimationMarker::HitFrame),
-            (4, AnimationMarker::Complete),
-        ]),
-    };
-
-    let attack_start_indices = [(Direction::NE, 16), (Direction::SE, 20)];
-
-    let attack_anims = generate_animations(
-        UnitAnimationKind::Attack,
-        attack_data,
-        &attack_start_indices,
-    );
-
-    let take_damage_indices = [(Direction::NE, 40), (Direction::SE, 44)];
-
-    let take_damage_anim_data = UnitAnimationDataInner {
-        frame_count: 1,
-        frame_duration: (1.0 / 4.),
-        animation_offset_markers: HashMap::new(),
-    };
-
-    let take_damage_anims = generate_animations(
-        UnitAnimationKind::TakeDamage,
-        take_damage_anim_data,
-        &take_damage_indices,
-    );
-
-    let hurt_idle_indices = [(Direction::NE, 48), (Direction::SE, 52)];
-
-    let hurt_idle_anim_data = UnitAnimationDataInner {
-        frame_count: 1,
-        frame_duration: 1.0,
-        animation_offset_markers: HashMap::new(),
-    };
-
-    let hurt_idle_anims = generate_animations(
-        UnitAnimationKind::IdleHurt,
-        hurt_idle_anim_data,
-        &hurt_idle_indices,
-    );
-
-    let death_idle_indices = [(Direction::NE, 56), (Direction::SE, 60)];
-
-    let death_idle_anim_data = UnitAnimationDataInner {
-        frame_count: 1,
-        frame_duration: (1.0),
-        animation_offset_markers: HashMap::new(),
-    };
-
-    let death_idle_anims = generate_animations(
-        UnitAnimationKind::IdleDead,
-        death_idle_anim_data,
-        &death_idle_indices,
-    );
-
-    let idle_anims =
-        generate_animations(UnitAnimationKind::IdleWalk, idle_data, &idle_start_indices);
-
-    let mut all_anims = Vec::new();
-
-    all_anims.extend(idle_anims);
-    all_anims.extend(attack_anims);
-    all_anims.extend(take_damage_anims);
-    all_anims.extend(hurt_idle_anims);
-    all_anims.extend(death_idle_anims);
-
-    all_anims.into_iter().collect()
+    pub animation_db: AnimationDB,
 }
 
 #[derive(Debug)]
@@ -506,11 +444,10 @@ pub struct TinytacticsAssets {
     pub scepter_spritesheet: Handle<Image>,
     pub tile_spritesheet: Handle<Image>,
     /// Probably could do one of these for all characters for now
-    pub unit_layout: Handle<TextureAtlasLayout>,
+    pub tt_unit_layout: Handle<TextureAtlasLayout>,
     pub weapon_layout: Handle<TextureAtlasLayout>,
     pub tile_layout: Handle<TextureAtlasLayout>,
     pub animation_data: Handle<tinytactics::AnimationAsset>,
-    pub unit_animation_data: UnitAnimations,
 }
 
 pub fn startup_load_tinytactics_assets(
@@ -551,21 +488,16 @@ pub fn startup_load_tinytactics_assets(
         None,
     ));
 
+    // TODO: Use AnimationData to populate le db?
     let animation_data = asset_server.load(tinytactics::spritesheet_data_path(Character::Fighter));
-    let unit_animations = unit_animations();
-    let weapon_animations = weapon_animations();
 
     commands.insert_resource(TinytacticsAssets {
         fighter_spritesheet,
         mage_spritesheet,
         cleric_spritesheet,
-        unit_layout: layout,
+        tt_unit_layout: layout,
         animation_data,
         scepter_spritesheet,
-        unit_animation_data: UnitAnimations {
-            unit_animations,
-            weapon_animations,
-        },
         iron_axe_spritesheet,
         weapon_layout,
         tile_layout,
@@ -898,5 +830,365 @@ pub mod tinytactics {
             weapon
         ))
         .expect("Should be valid path")
+    }
+}
+
+pub mod animation_db {
+    use crate::animation::animation_db::registered_sprite_ids::{
+        FLAME_VFX_ANIMATED_SPRITE_ID, TT_UNIT_ANIMATED_SPRITE_ID, TT_WEAPON_ANIMATED_SPRITE_ID,
+        build_animated_sprite_to_atlas_layout,
+    };
+
+    use super::*;
+
+    pub fn load_animation_data(
+        mut commands: Commands,
+        mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    ) {
+        let mut animation_db =
+            build_animation_db().expect("Must be able to build static animation data");
+
+        animation_db.initialize_atlas_map(&mut texture_atlas_layouts);
+        commands.insert_resource(animation_db);
+    }
+
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    pub struct FollowerAnimationKey {
+        pub(crate) follower_id: AnimatedSpriteId,
+        pub(crate) followee_key: AnimationKey,
+    }
+
+    // TODO: Build this from json?
+    fn build_animation_db() -> anyhow::Result<AnimationDB> {
+        let mut db = AnimationDB::new();
+        db.register_animation(
+            "weapon_attack",
+            AnimationKey {
+                animated_sprite_id: TT_WEAPON_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::Attack.into(),
+            },
+            UnitAnimationDataInner {
+                frame_count: 4,
+                frame_duration: ATTACK_FRAME_DURATION,
+                animation_offset_markers: HashMap::new(),
+            },
+            &[(Some(Direction::NE), 0), (Some(Direction::SE), 4)],
+        )?
+        .register_animation(
+            "unit_attack",
+            AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::Attack.into(),
+            },
+            UnitAnimationDataInner {
+                frame_count: 4,
+                frame_duration: ATTACK_FRAME_DURATION,
+                animation_offset_markers: HashMap::from([
+                    (2, AnimationMarker::HitFrame),
+                    (4, AnimationMarker::Complete),
+                ]),
+            },
+            &[(Some(Direction::NE), 16), (Some(Direction::SE), 20)],
+        )?
+        .register_animation(
+            "unit_idle_walk",
+            AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::IdleWalk.into(),
+            },
+            UnitAnimationDataInner {
+                frame_count: 8,
+                frame_duration: (1.0 / 8.),
+                animation_offset_markers: HashMap::new(),
+            },
+            &[(Some(Direction::NE), 0), (Some(Direction::SE), 8)],
+        )?
+        .register_animation(
+            "unit_take_damage",
+            AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::TakeDamage.into(),
+            },
+            UnitAnimationDataInner {
+                frame_count: 1,
+                frame_duration: (1.0 / 4.),
+                animation_offset_markers: HashMap::new(),
+            },
+            &[(Some(Direction::NE), 40), (Some(Direction::SE), 44)],
+        )?
+        .register_animation(
+            "unit_idle_hurt",
+            AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::IdleHurt.into(),
+            },
+            UnitAnimationDataInner {
+                frame_count: 1,
+                frame_duration: 1.0,
+                animation_offset_markers: HashMap::new(),
+            },
+            &[(Some(Direction::NE), 48), (Some(Direction::SE), 52)],
+        )?
+        .register_animation(
+            "unit_idle_dead",
+            AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::IdleDead.into(),
+            },
+            UnitAnimationDataInner {
+                frame_count: 1,
+                frame_duration: (1.0),
+                animation_offset_markers: HashMap::new(),
+            },
+            &[(Some(Direction::NE), 56), (Some(Direction::SE), 60)],
+        )?
+        .register_animation(
+            "unit_charge",
+            AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::Charge.into(),
+            },
+            UnitAnimationDataInner {
+                frame_count: 1,
+                frame_duration: (1.0),
+                animation_offset_markers: HashMap::from([(1, AnimationMarker::Complete)]),
+            },
+            // TODO: Fix Spritesheet
+            &[(Some(Direction::NE), 36), (Some(Direction::SE), 32)],
+        )?
+        .register_animation(
+            "unit_release",
+            AnimationKey {
+                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::Release.into(),
+            },
+            UnitAnimationDataInner {
+                frame_count: 1,
+                frame_duration: (1.0),
+                animation_offset_markers: HashMap::from([(1, AnimationMarker::Complete)]),
+            },
+            &[(Some(Direction::NE), 24), (Some(Direction::SE), 28)],
+        )?
+        .register_follower(
+            FollowerAnimationKey {
+                follower_id: TT_WEAPON_ANIMATED_SPRITE_ID,
+                followee_key: AnimationKey {
+                    animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
+                    animation_id: UnitAnimationKind::Attack.into(),
+                },
+            },
+            AnimationKey {
+                animated_sprite_id: TT_WEAPON_ANIMATED_SPRITE_ID,
+                animation_id: UnitAnimationKind::Attack.into(),
+            },
+        )?
+        .register_animation(
+            "flame_explosion",
+            AnimationKey {
+                animated_sprite_id: FLAME_VFX_ANIMATED_SPRITE_ID,
+                // Duplicated rn between here and in Skill definition
+                animation_id: RegisteredAnimationId {
+                    id: 1,
+                    priority: AnimationPriority::Combat,
+                },
+            },
+            UnitAnimationDataInner {
+                frame_duration: (1.0 / 9.),
+                frame_count: 18,
+                animation_offset_markers: HashMap::from([
+                    (9, AnimationMarker::HitFrame),
+                    (18, AnimationMarker::Complete),
+                ]),
+            },
+            &[(None, 0)],
+        )?;
+
+        Ok(db)
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct AnimatedSpriteId(pub u32);
+
+    /// TODO: Might need to encode priority of the animation in this struct too?
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct RegisteredAnimationId {
+        pub id: u8,
+        pub priority: AnimationPriority,
+    }
+
+    impl From<UnitAnimationKind> for RegisteredAnimationId {
+        fn from(value: UnitAnimationKind) -> Self {
+            RegisteredAnimationId {
+                id: value as u8,
+                priority: value.priority(),
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+
+    pub struct AnimationKey {
+        pub animated_sprite_id: AnimatedSpriteId,
+        /// Local ID to a specific animation for the animated_sprite_id
+        pub animation_id: RegisteredAnimationId,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+
+    pub struct AnimationStartIndexKey {
+        pub facing_direction: Option<Direction>,
+        pub key: AnimationKey,
+    }
+
+    #[derive(Debug, Resource)]
+    pub struct AnimationDB {
+        index_key_to_start_frame: HashMap<AnimationStartIndexKey, u8>,
+        animation_data: HashMap<AnimationKey, UnitAnimationDataInner>,
+        follower_map: HashMap<FollowerAnimationKey, AnimationKey>,
+        atlas_map: HashMap<AnimatedSpriteId, Handle<TextureAtlasLayout>>,
+    }
+
+    impl AnimationDB {
+        fn new() -> Self {
+            Self {
+                index_key_to_start_frame: HashMap::new(),
+                animation_data: HashMap::new(),
+                follower_map: HashMap::new(),
+                atlas_map: HashMap::new(),
+            }
+        }
+
+        fn register_animation(
+            &mut self,
+            _name: &str,
+            key: AnimationKey,
+            data: UnitAnimationDataInner,
+            offsets: &[(Option<Direction>, u8)],
+        ) -> anyhow::Result<&mut Self> {
+            if let Some(t) = self.animation_data.insert(key.clone(), data) {
+                anyhow::bail!("Data already existed for key {:?}, data: {:?}", key, t);
+            };
+
+            for (direction, offset) in offsets {
+                self.index_key_to_start_frame.insert(
+                    AnimationStartIndexKey {
+                        facing_direction: *direction,
+                        key: key.clone(),
+                    },
+                    *offset,
+                );
+            }
+            Ok(self)
+        }
+
+        fn register_follower(
+            &mut self,
+            f_key: FollowerAnimationKey,
+            key: AnimationKey,
+        ) -> anyhow::Result<&mut Self> {
+            if let Some(t) = self.follower_map.insert(f_key, key) {
+                anyhow::bail!("Follower already existed: {:?}", t);
+            };
+            Ok(self)
+        }
+
+        pub fn get_data(&self, key: &AnimationKey) -> Option<&UnitAnimationDataInner> {
+            self.animation_data.get(key)
+        }
+
+        pub fn get_start_index(&self, key: &AnimationStartIndexKey) -> Option<&u8> {
+            self.index_key_to_start_frame.get(key)
+        }
+
+        pub fn get_follower_animation_start_index(
+            &self,
+            key: &FollowerAnimationKey,
+            facing_direction: Option<Direction>,
+        ) -> Option<&u8> {
+            let key = self.follower_map.get(&key);
+
+            key.cloned()
+                .map(|t| {
+                    self.index_key_to_start_frame.get(&AnimationStartIndexKey {
+                        facing_direction,
+                        key: t,
+                    })
+                })
+                .flatten()
+        }
+
+        pub fn get_atlas(&self, key: &AnimatedSpriteId) -> Option<Handle<TextureAtlasLayout>> {
+            self.atlas_map.get(key).cloned()
+        }
+
+        pub fn initialize_atlas_map(
+            &mut self,
+            texture_atlas_layouts: &mut ResMut<Assets<TextureAtlasLayout>>,
+        ) {
+            let map = build_animated_sprite_to_atlas_layout();
+
+            for (id, layout) in map {
+                let handle = texture_atlas_layouts.add(layout);
+                self.atlas_map.insert(id, handle.clone());
+            }
+        }
+    }
+
+    pub mod registered_sprite_ids {
+        use std::collections::HashMap;
+
+        use bevy::prelude::*;
+
+        use crate::animation::tinytactics;
+
+        use super::AnimatedSpriteId;
+
+        pub const TT_UNIT_ANIMATED_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(1);
+        pub const TT_WEAPON_ANIMATED_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(2);
+        pub const BATTLE_TACTICS_TILESHEET: AnimatedSpriteId = AnimatedSpriteId(3);
+        pub const FLAME_VFX_ANIMATED_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(4);
+
+        pub fn build_animated_sprite_to_atlas_layout()
+        -> HashMap<AnimatedSpriteId, TextureAtlasLayout> {
+            HashMap::from([
+                (
+                    TT_UNIT_ANIMATED_SPRITE_ID,
+                    TextureAtlasLayout::from_grid(
+                        UVec2::new(tinytactics::FRAME_SIZE_X, tinytactics::FRAME_SIZE_Y),
+                        16,
+                        13,
+                        None,
+                        None,
+                    ),
+                ),
+                (
+                    TT_WEAPON_ANIMATED_SPRITE_ID,
+                    TextureAtlasLayout::from_grid(
+                        UVec2::new(
+                            tinytactics::FRAME_SIZE_X + 16,
+                            tinytactics::FRAME_SIZE_Y + 16,
+                        ),
+                        4,
+                        2,
+                        None,
+                        None,
+                    ),
+                ),
+                (
+                    BATTLE_TACTICS_TILESHEET,
+                    TextureAtlasLayout::from_grid(
+                        UVec2::new(tinytactics::FRAME_SIZE_X, tinytactics::FRAME_SIZE_Y),
+                        16,
+                        13,
+                        None,
+                        None,
+                    ),
+                ),
+                (
+                    FLAME_VFX_ANIMATED_SPRITE_ID,
+                    TextureAtlasLayout::from_grid(UVec2::new(48, 48), 18, 1, None, None),
+                ),
+            ])
+        }
     }
 }
