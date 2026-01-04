@@ -108,7 +108,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2).into()),
+        BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2)),
         BorderRadius::all(percent(20)),
         children![
             // Display the game name
@@ -165,7 +165,7 @@ fn main_menu_action(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     let button_entity = click.entity;
-    if let Some(menu_button_action) = menu_button.get(button_entity).ok() {
+    if let Ok(menu_button_action) = menu_button.get(button_entity) {
         click.propagate(false);
         match menu_button_action {
             MainMenuButtonAction::Quit => {

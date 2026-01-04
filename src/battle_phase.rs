@@ -239,8 +239,8 @@ pub mod phase_ui {
 
         let (color, text) = match &event.message {
             BattleBannerMessage::PhaseBegin(phase) => match phase {
-                PlayerEnemyPhase::Player => (blue.clone(), "PLAYER PHASE"),
-                PlayerEnemyPhase::Enemy => (red.clone(), "ENEMY PHASE"),
+                PlayerEnemyPhase::Player => (blue, "PLAYER PHASE"),
+                PlayerEnemyPhase::Enemy => (red, "ENEMY PHASE"),
             },
         };
 

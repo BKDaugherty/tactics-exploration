@@ -257,7 +257,7 @@ pub fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32)
     let offset_x = grid_pos.x as f32 - 5.;
     let offset_y = grid_pos.y as f32 - 4.;
 
-    let world_x = (offset_x + offset_y as f32) * (tile_width / 2.0);
+    let world_x = (offset_x + offset_y) * (tile_width / 2.0);
     let world_y = (offset_x - offset_y) * (tile_height / 2.0);
 
     Vec3::new(

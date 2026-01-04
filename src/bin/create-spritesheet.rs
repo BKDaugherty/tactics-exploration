@@ -31,7 +31,7 @@ pub fn generate_animations_for_weapons() -> anyhow::Result<()> {
             image_data.keys().filter(|(w, _)| *w == weapon).collect();
 
         let mut output_img =
-            ImageBuffer::<Rgba<u8>, Vec<u8>>::new(new_image_width, new_image_height as u32);
+            ImageBuffer::<Rgba<u8>, Vec<u8>>::new(new_image_width, new_image_height);
         let mut height = 0;
 
         for (w, d) in keys_of_weapon.into_iter().cloned() {
@@ -85,7 +85,7 @@ fn main() -> anyhow::Result<()> {
             .filter(|(c, _, _)| *c == character)
             .collect();
         let mut output_img =
-            ImageBuffer::<Rgba<u8>, Vec<u8>>::new(new_image_width, new_image_height as u32);
+            ImageBuffer::<Rgba<u8>, Vec<u8>>::new(new_image_width, new_image_height);
 
         let mut animation_data = Vec::new();
         let mut height = 0;

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::collections::BTreeMap;
 
 use bevy::prelude::*;
 
@@ -6,16 +6,16 @@ use crate::{
     animation::{
         AnimToPlay, AnimationId, AnimationMarker, AnimationMarkerMessage, PlayingAnimation,
         UnitAnimationKind, UnitAnimationPlayer,
-        animation_db::{AnimationDB, AnimationKey, AnimationStartIndexKey, RegisteredAnimationId},
-        combat::{ATTACK_FRAME_DURATION, HURT_BY_ATTACK_FRAME_DURATION},
+        animation_db::{AnimationDB, AnimationKey, AnimationStartIndexKey},
+        combat::HURT_BY_ATTACK_FRAME_DURATION,
     },
     assets::sprite_db::SpriteDB,
     battle_phase::UnitPhaseResources,
     combat::skills::{
-        CastingData, Skill, SkillAction, SkillActionIndex, SkillActionType, SkillAnimationId,
-        SkillDBResource, SkillEvent, SkillId,
+        CastingData, Skill, SkillAction, SkillActionType, SkillAnimationId, SkillDBResource,
+        SkillEvent, SkillId,
     },
-    grid::{GridPosition, grid_to_world, init_grid_to_world_transform},
+    grid::{GridPosition, init_grid_to_world_transform},
     projectile::{ProjectileArrived, spawn_arrow},
     unit::{Stats, TINY_TACTICS_ANCHOR, Unit, UnitAction, UnitActionCompletedMessage},
 };
@@ -265,10 +265,10 @@ pub fn cleanup_vfx_on_animation_complete(
     query: Query<Entity, With<VFXMarker>>,
 ) {
     for message in messages.read() {
-        if let Some(e) = query.get(message.entity).ok() {
-            if message.marker == AnimationMarker::Complete {
-                commands.entity(e).despawn();
-            }
+        if let Ok(e) = query.get(message.entity)
+            && message.marker == AnimationMarker::Complete
+        {
+            commands.entity(e).despawn();
         }
     }
 }
@@ -382,8 +382,8 @@ pub fn handle_combat_stage_enter(
                     };
 
                     let Some(anim_data) = anim_db.get_data(&AnimationKey {
-                        animated_sprite_id: player.animated_sprite_id.clone(),
-                        animation_id: unit_animation_kind.clone().into(),
+                        animated_sprite_id: player.animated_sprite_id,
+                        animation_id: (*unit_animation_kind).into(),
                     }) else {
                         error!(
                             "No animation data for unit combat attack: {:?}",
@@ -421,7 +421,7 @@ pub fn handle_combat_stage_enter(
                             let combat_anim_id =
                                 CombatAnimationId::new(message.attack_execution, *skill_anim_id);
 
-                            let Some(image) = sprite_db.sprite_id_to_handle.get(&sprite) else {
+                            let Some(image) = sprite_db.sprite_id_to_handle.get(sprite) else {
                                 error!("No image for Projectile Sprite");
                                 continue;
                             };
@@ -478,7 +478,7 @@ fn build_timeline_for_skill(
     defender_grid_pos: &GridPosition,
 ) -> CombatTimeline {
     let mut timeline = CombatTimeline::new();
-    let mut stage_id = timeline.current_stage.clone();
+    let mut stage_id = timeline.current_stage;
     stage_id.0 += 1;
     for skill_stage in &skill.animation_data {
         let stage = match &skill_stage.stage {
@@ -486,7 +486,7 @@ fn build_timeline_for_skill(
                 CombatStage::UnitAttack(
                     attack_intent.attacker,
                     CombatAnimationId::new(ae_entity, *skill_animation_id),
-                    unit_animation_kind.clone(),
+                    *unit_animation_kind,
                 )
             }
             skills::SkillStageAction::Cast(casting_data) => {
@@ -525,9 +525,7 @@ fn build_timeline_for_skill(
 
         timeline.stages.insert(stage_id, stage);
 
-        timeline
-            .conditions_to_advance
-            .insert(stage_id.clone(), triggers);
+        timeline.conditions_to_advance.insert(stage_id, triggers);
 
         stage_id.0 += 1;
     }
@@ -595,11 +593,9 @@ pub fn impact_event_handler(
             continue;
         };
 
-        let damage = calculate_damage(&attacker, &defender, &impact.skill_actions);
+        let damage = calculate_damage(attacker, defender, &impact.skill_actions);
 
-        if let Some((mut defender, _, mut animation_player)) =
-            unit_query.get_mut(impact.defender).ok()
-        {
+        if let Ok((mut defender, _, mut animation_player)) = unit_query.get_mut(impact.defender) {
             defender.stats.health = defender.stats.health.saturating_sub(damage);
             animation_player.play(AnimToPlay {
                 id: UnitAnimationKind::TakeDamage.into(),
@@ -608,7 +604,7 @@ pub fn impact_event_handler(
         }
 
         // TODO: I'd really like to put this somewhere else?
-        if let Some((_, mut attacker_resources, _)) = unit_query.get_mut(impact.attacker).ok() {
+        if let Ok((_, mut attacker_resources, _)) = unit_query.get_mut(impact.attacker) {
             attacker_resources.action_points_left_in_phase = attacker_resources
                 .action_points_left_in_phase
                 .saturating_sub(1);
@@ -644,11 +640,10 @@ pub mod skills {
 
     use crate::{
         animation::{
-            AnimationId, AnimationMarker, UnitAnimationKind,
+            AnimationMarker, UnitAnimationKind,
             animation_db::{AnimatedSpriteId, AnimationKey, RegisteredAnimationId},
         },
         assets::sprite_db::SpriteId,
-        grid::GridPosition,
     };
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -833,21 +828,19 @@ pub mod skills {
         pub fn get_skill(&self, skill_id: &SkillId) -> &Skill {
             self.skills
                 .get(skill_id)
-                .expect(&format!("SkillID should be registered: {:?}", skill_id))
+                .unwrap_or_else(|| panic!("SkillID should be registered: {:?}", skill_id))
         }
 
         pub fn get_category(&self, category_id: &SkillCategoryId) -> &SkillCategory {
-            self.skill_categories.get(category_id).expect(&format!(
-                "SkillCategory should be registered: {:?}",
-                category_id
-            ))
+            self.skill_categories
+                .get(category_id)
+                .unwrap_or_else(|| panic!("SkillCategory should be registered: {:?}", category_id))
         }
 
         pub fn get_category_for_skill(&self, skill_id: &SkillId) -> &SkillCategoryId {
-            self.category_by_skills.get(skill_id).expect(&format!(
-                "Skill should be registered with a category: {:?}",
-                skill_id
-            ))
+            self.category_by_skills.get(skill_id).unwrap_or_else(|| {
+                panic!("Skill should be registered with a category: {:?}", skill_id)
+            })
         }
 
         fn register_category(

@@ -472,7 +472,7 @@ pub fn handle_battle_resolution_ui_buttons(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     let button_entity = click.entity;
-    if let Some(menu_button_action) = menu_button.get(button_entity).ok() {
+    if let Ok(menu_button_action) = menu_button.get(button_entity) {
         click.propagate(false);
         match menu_button_action {
             BattleResolutionMenuAction::Quit => {
