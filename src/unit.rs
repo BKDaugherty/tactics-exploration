@@ -1,4 +1,3 @@
-use anyhow::Context;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use leafwing_input_manager::prelude::ActionState;
@@ -8,15 +7,15 @@ use crate::animation::animation_db::registered_sprite_ids::{
 };
 use crate::animation::animation_db::{AnimationDB, AnimationKey, AnimationStartIndexKey};
 use crate::animation::{
-    AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKey,
-    UnitAnimationKind, UnitAnimationPlayer,
+    AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKind,
+    UnitAnimationPlayer,
 };
 use crate::battle::{
     BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
 };
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
-use crate::combat::skills::{ATTACK_SKILL_ID, SkillDBResource, Targeting, UnitSkills};
+use crate::combat::skills::{SkillDBResource, Targeting, UnitSkills};
 use crate::enemy::behaviors::EnemyAiBehavior;
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, manhattan_distance};
 use crate::grid_cursor::LockedOn;
@@ -64,12 +63,12 @@ pub struct Unit {
 impl Unit {
     /// Whether or not the unit is at 0 health
     pub fn downed(&self) -> bool {
-        return self.stats.health == 0;
+        self.stats.health == 0
     }
 
     // Not downed, but less than 30% of max health is "critical"
     pub fn critical_health(&self) -> bool {
-        return !self.downed() && (self.stats.health as f32 / self.stats.max_health as f32) <= 0.3;
+        !self.downed() && (self.stats.health as f32 / self.stats.max_health as f32) <= 0.3
     }
 }
 
@@ -470,7 +469,7 @@ pub fn get_valid_moves_for_unit(
 
         if to_explore != movement.origin && !is_obstructed {
             valid_moves.insert(
-                to_explore.clone(),
+                to_explore,
                 ValidMove {
                     target: to_explore,
                     path: path.clone(),
@@ -628,7 +627,7 @@ pub fn execute_unit_actions(
                 commands.spawn(attack_intent.clone());
             }
             UnitExecuteAction::Wait => {
-                if let Some(mut resources) = unit_phase_resources.get_mut(message.entity).ok() {
+                if let Ok(mut resources) = unit_phase_resources.get_mut(message.entity) {
                     resources.waited = true;
                 }
 
@@ -781,7 +780,7 @@ pub fn handle_unit_ui_command(
                     // Is there a unit that can be attacked there?
                     if let Some((target_entity, target_unit)) = grid_manager_res
                         .grid_manager
-                        .get_by_position(&possible_attack_pos)
+                        .get_by_position(possible_attack_pos)
                         .cloned()
                         .unwrap_or_default()
                         .iter()
@@ -799,7 +798,7 @@ pub fn handle_unit_ui_command(
                 let options_map: HashMap<GridPosition, AttackOption> = options_for_attack
                     .iter()
                     .cloned()
-                    .map(|t| (t.grid_position.clone(), t))
+                    .map(|t| (t.grid_position, t))
                     .collect();
 
                 // I hate this abstraction lol

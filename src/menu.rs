@@ -183,14 +183,13 @@ pub mod menu_navigation {
             let mut buttons: Vec<&Entity> = menu.buttons.values().collect();
             if let Some(active_button) = menu.get_active_menu_option() {
                 buttons.retain(|e| *e != active_button);
-                if let Some((_, mut border_color)) = border_color_query.get_mut(*active_button).ok()
-                {
+                if let Ok((_, mut border_color)) = border_color_query.get_mut(*active_button) {
                     *border_color = BorderColor::all(FOCUSED_BORDER_BUTTON_COLOR)
                 }
             }
 
             for button in buttons {
-                if let Some((_, mut border_color)) = border_color_query.get_mut(*button).ok() {
+                if let Ok((_, mut border_color)) = border_color_query.get_mut(*button) {
                     *border_color = BorderColor::all(NORMAL_MENU_BUTTON_COLOR)
                 }
             }

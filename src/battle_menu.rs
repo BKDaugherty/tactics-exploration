@@ -544,13 +544,13 @@ pub mod player_info_ui_systems {
                 };
 
                 for child in children {
-                    if let Some(mut text) = player_ui_health_text.get_mut(*child).ok() {
-                        text.0 = PlayerUiHealthText::derive_text(&unit);
-                    } else if let Some(mut text) = player_ui_name_text.get_mut(*child).ok() {
-                        text.0 = PlayerUiNameText::derive_text(&unit);
-                    } else if let Some(mut text) = player_ui_move_text.get_mut(*child).ok() {
+                    if let Ok(mut text) = player_ui_health_text.get_mut(*child) {
+                        text.0 = PlayerUiHealthText::derive_text(unit);
+                    } else if let Ok(mut text) = player_ui_name_text.get_mut(*child) {
+                        text.0 = PlayerUiNameText::derive_text(unit);
+                    } else if let Ok(mut text) = player_ui_move_text.get_mut(*child) {
                         text.0 = format!("Move: {}", phase_resources.movement_points_left_in_phase);
-                    } else if let Some(mut text) = player_ui_ap_text.get_mut(*child).ok() {
+                    } else if let Ok(mut text) = player_ui_ap_text.get_mut(*child) {
                         text.0 = format!("AP: {}", phase_resources.action_points_left_in_phase);
                     }
                 }
@@ -624,8 +624,7 @@ pub mod player_battle_ui_systems {
         for message in message_reader.read() {
             let Some((_, mut vis, children)) = battle_container_ui
                 .iter_mut()
-                .filter(|(p, _, _)| **p == message.player)
-                .next()
+                .find(|(p, _, _)| **p == message.player)
             else {
                 warn!(
                     "No BattleUiContainer found for player: {:?}",
@@ -637,7 +636,7 @@ pub mod player_battle_ui_systems {
             *vis = Visibility::Visible;
             let mut target = children.first().cloned();
             for child in children.iter().rev() {
-                if let Some(_) = nested_dynamic.get(child).ok().flatten() {
+                if nested_dynamic.get(child).ok().flatten().is_some() {
                     target = Some(child);
                     break;
                 }
@@ -682,8 +681,7 @@ pub mod player_battle_ui_systems {
 
             if let Some((_, mut vis)) = battle_container_ui
                 .iter_mut()
-                .filter(|(p, _)| **p == message.player)
-                .next()
+                .find(|(p, _)| **p == message.player)
             {
                 *vis = Visibility::Visible;
             }
@@ -740,11 +738,7 @@ pub mod player_battle_ui_systems {
         mut unit_command_message: MessageReader<UnitUiCommandMessage>,
     ) {
         for message in unit_command_message.read() {
-            if let Some((_, mut vis)) = query
-                .iter_mut()
-                .filter(|(p, _)| **p == message.player)
-                .next()
-            {
+            if let Some((_, mut vis)) = query.iter_mut().find(|(p, _)| **p == message.player) {
                 *vis = Visibility::Hidden;
             }
         }
@@ -825,8 +819,7 @@ pub mod player_battle_ui_systems {
             let Some((battle_menu_e, battle_menu, menu, controller, mut visibility, nested)) =
                 player_battle_menu
                     .iter_mut()
-                    .filter(|(_, _, _, controller, _, _)| controller.players.contains(player))
-                    .next()
+                    .find(|(_, _, _, controller, _, _)| controller.players.contains(player))
             else {
                 continue;
             };
@@ -855,7 +848,7 @@ pub mod player_battle_ui_systems {
                                 UnitMenuAction::Attack => UnitCommand::Attack,
                                 UnitMenuAction::Wait => UnitCommand::Wait,
                                 UnitMenuAction::UseSkill(skill_id) => {
-                                    UnitCommand::UseSkill(skill_id.clone())
+                                    UnitCommand::UseSkill(*skill_id)
                                 }
                             },
                             unit: battle_menu.selected_unit,
@@ -864,10 +857,8 @@ pub mod player_battle_ui_systems {
                     }
                     BattleMenuAction::OpenSkillMenu => {
                         // Should only be one Menu per player
-                        let Some((skill_menu, _, mut vis)) = skill_menu_query
-                            .iter_mut()
-                            .filter(|(_, p, _)| *p == player)
-                            .next()
+                        let Some((skill_menu, _, mut vis)) =
+                            skill_menu_query.iter_mut().find(|(_, p, _)| *p == player)
                         else {
                             continue;
                         };
@@ -891,13 +882,13 @@ pub mod player_battle_ui_systems {
                         buttons.push(attack_button);
 
                         for category_id in &unit_skills.equipped_skill_categories {
-                            let category = skill_db.skill_db.get_category(&category_id);
+                            let category = skill_db.skill_db.get_category(category_id);
 
                             let button_id = commands
                                 .spawn(battle_ui_button(
                                     &fonts,
                                     BattleMenuAction::OpenSkillsFilteredByCategoryMenu(
-                                        category_id.clone(),
+                                        *category_id,
                                     ),
                                     &category.name,
                                 ))
@@ -925,8 +916,7 @@ pub mod player_battle_ui_systems {
                     BattleMenuAction::OpenSkillsFilteredByCategoryMenu(selected_category) => {
                         let Some((skill_menu_category, _, mut vis)) = skill_menu_category_query
                             .iter_mut()
-                            .filter(|(_, p, _)| *p == player)
-                            .next()
+                            .find(|(_, p, _)| *p == player)
                         else {
                             continue;
                         };
@@ -941,7 +931,7 @@ pub mod player_battle_ui_systems {
                         let mut buttons = Vec::new();
                         for skill_id in &unit_skills.learned_skills {
                             if selected_category
-                                != skill_db.skill_db.get_category_for_skill(&skill_id)
+                                != skill_db.skill_db.get_category_for_skill(skill_id)
                             {
                                 continue;
                             }
@@ -950,9 +940,7 @@ pub mod player_battle_ui_systems {
                             let button_id = commands
                                 .spawn(battle_ui_button(
                                     &fonts,
-                                    BattleMenuAction::Action(UnitMenuAction::UseSkill(
-                                        skill_id.clone(),
-                                    )),
+                                    BattleMenuAction::Action(UnitMenuAction::UseSkill(*skill_id)),
                                     &skill.name,
                                 ))
                                 .id();

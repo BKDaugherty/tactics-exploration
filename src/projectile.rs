@@ -74,7 +74,7 @@ pub fn projectile_arrival_system(
             writer.write(ProjectileArrived {
                 entity,
                 combat_anim_id: bezier.combat_anim_id.clone(),
-                ae_entity: bezier.ae_entity.clone(),
+                ae_entity: bezier.ae_entity,
             });
             commands.entity(entity).despawn();
         }

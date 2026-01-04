@@ -269,7 +269,7 @@ pub fn resolve_enemy_action(
 ) {
     for message in reader.read() {
         // Assume for now that the enemy only has one "action"
-        if let Some(e) = query.get(message.unit).ok() {
+        if let Ok(e) = query.get(message.unit) {
             match message.action {
                 // If we just finished moving or attacking,
                 // remove the action in progress component so the "execute_enemy_action"

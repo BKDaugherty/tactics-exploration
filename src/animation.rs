@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use bevy::{app::Animation, prelude::*};
+use bevy::prelude::*;
 pub use tinytactics::Direction;
 
 use crate::{
@@ -111,7 +111,7 @@ pub fn animation_follower_system(
     >,
 ) {
     for (follower, mut sprite, mut vis) in follower_query.iter_mut() {
-        if let Some((facing_direction, player)) = anim_query.get(follower.leader).ok() {
+        if let Ok((facing_direction, player)) = anim_query.get(follower.leader) {
             let Some(anim) = &player.current_animation else {
                 *vis = Visibility::Hidden;
                 continue;
@@ -225,7 +225,7 @@ pub fn animation_tick_system(
 /// The set of systems and data associated with Combat Animations
 pub mod combat {
     use super::*;
-    use crate::combat::{AttackExecution, AttackIntent, AttackPhase, DefenderReaction};
+    use crate::combat::AttackIntent;
 
     pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 8.;
     pub const HURT_BY_ATTACK_FRAME_DURATION: f32 = ATTACK_FRAME_DURATION * 2.;
@@ -513,25 +513,25 @@ pub fn update_facing_direction_on_movement(
     mut query: Query<(&GridMovement, &mut FacingDirection), Changed<GridMovement>>,
 ) {
     for (movement, mut facing_direction) in query.iter_mut() {
-        if let Some(next_pos) = movement.waypoints.get(movement.current_waypoint_index + 1) {
-            if let Some(current_pos) = movement.waypoints.get(movement.current_waypoint_index) {
-                let delta = GridVec {
-                    x: next_pos.x as i32 - current_pos.x as i32,
-                    y: next_pos.y as i32 - current_pos.y as i32,
-                };
+        if let Some(next_pos) = movement.waypoints.get(movement.current_waypoint_index + 1)
+            && let Some(current_pos) = movement.waypoints.get(movement.current_waypoint_index)
+        {
+            let delta = GridVec {
+                x: next_pos.x as i32 - current_pos.x as i32,
+                y: next_pos.y as i32 - current_pos.y as i32,
+            };
 
-                // Convert delta to direction
-                let new_direction = match (delta.x, delta.y) {
-                    (0, 1) => Direction::SE,
-                    (-1, 0) => Direction::SW,
-                    (1, 0) => Direction::NE,
-                    (0, -1) => Direction::NW,
-                    _ => facing_direction.0,
-                };
+            // Convert delta to direction
+            let new_direction = match (delta.x, delta.y) {
+                (0, 1) => Direction::SE,
+                (-1, 0) => Direction::SW,
+                (1, 0) => Direction::NE,
+                (0, -1) => Direction::NW,
+                _ => facing_direction.0,
+            };
 
-                if !(facing_direction.0 == new_direction) {
-                    facing_direction.0 = new_direction;
-                }
+            if (facing_direction.0 != new_direction) {
+                facing_direction.0 = new_direction;
             }
         }
     }
@@ -720,9 +720,7 @@ pub mod tinytactics {
     pub fn sprite_filename(character: Character, action: Action, dir: Direction) -> PathBuf {
         PathBuf::from_str(&format!(
             "{FILE_PREFIX}{UNIT_DATE_MADE}{}-{}{}.png",
-            character.to_string(),
-            action.to_string(),
-            dir.to_string()
+            character, action, dir
         ))
         .expect("Should be valid path")
     }
@@ -818,8 +816,7 @@ pub mod tinytactics {
     pub fn weapon_attack_sprite_filename(weapon: WeaponType, dir: Direction) -> PathBuf {
         PathBuf::from_str(&format!(
             "{FILE_PREFIX}{WEAPON_DATE_MADE}weapons-{}attack{}.png",
-            weapon.to_string(),
-            dir.to_string()
+            weapon, dir
         ))
         .expect("Should be valid path")
     }
@@ -1105,16 +1102,14 @@ pub mod animation_db {
             key: &FollowerAnimationKey,
             facing_direction: Option<Direction>,
         ) -> Option<&u8> {
-            let key = self.follower_map.get(&key);
+            let key = self.follower_map.get(key);
 
-            key.cloned()
-                .map(|t| {
-                    self.index_key_to_start_frame.get(&AnimationStartIndexKey {
-                        facing_direction,
-                        key: t,
-                    })
+            key.cloned().and_then(|t| {
+                self.index_key_to_start_frame.get(&AnimationStartIndexKey {
+                    facing_direction,
+                    key: t,
                 })
-                .flatten()
+            })
         }
 
         pub fn get_atlas(&self, key: &AnimatedSpriteId) -> Option<Handle<TextureAtlasLayout>> {
