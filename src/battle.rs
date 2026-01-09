@@ -31,8 +31,10 @@ use crate::{
         player_info_ui_systems::update_player_ui_info,
     },
     battle_phase::{
-        PhaseMessage, check_should_advance_phase, init_phase_system, is_enemy_phase,
-        is_running_enemy_phase, is_running_player_phase,
+        PhaseMessage, StartOfPhaseEffectsMessage, TurnStartMessage,
+        advance_after_start_of_phase_effects, check_for_active_effect_damage_on_turn_start,
+        check_should_advance_phase, decrement_turn_count_effects_on_turn_start, init_phase_system,
+        is_enemy_phase, is_running_enemy_phase, is_running_player_phase,
         phase_ui::{
             BattlePhaseMessageComplete, ShowBattleBannerMessage, banner_animation_system,
             spawn_banner_system,
@@ -63,9 +65,9 @@ use crate::{
     player::{self, Player, RegisteredBattlePlayers},
     projectile::{ProjectileArrived, projectile_arrival_system, projectile_bezier_system},
     unit::{
-        ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit, UnitActionCompletedMessage,
-        UnitExecuteActionMessage, execute_unit_actions, handle_unit_cursor_actions,
-        handle_unit_ui_command,
+        CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit,
+        UnitActionCompletedMessage, UnitExecuteActionMessage, execute_unit_actions,
+        handle_unit_cursor_actions, handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_ui_command,
     },
@@ -151,6 +153,8 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<CombatStageComplete>()
         .add_message::<ImpactEvent>()
         .add_message::<ProjectileArrived>()
+        .add_message::<TurnStartMessage>()
+        .add_message::<StartOfPhaseEffectsMessage>()
         // .add_plugins(TiledPlugin::default())
         // .add_plugins(TiledDebugPluginGroup)
         .add_plugins((
@@ -183,11 +187,17 @@ pub fn battle_plugin(app: &mut App) {
                 check_should_advance_phase::<Enemy>,
                 prepare_for_phase::<Player>.after(check_should_advance_phase::<Player>),
                 prepare_for_phase::<Enemy>.after(check_should_advance_phase::<Enemy>),
+                decrement_turn_count_effects_on_turn_start::<Player>,
+                decrement_turn_count_effects_on_turn_start::<Enemy>,
+                check_for_active_effect_damage_on_turn_start::<Player>,
+                check_for_active_effect_damage_on_turn_start::<Enemy>,
+                advance_after_start_of_phase_effects,
                 spawn_banner_system,
                 banner_animation_system,
                 start_phase,
             )
-                .run_if(in_state(GameState::Battle)),
+                .run_if(in_state(GameState::Battle))
+                .chain(),
         )
         .add_systems(
             Update,
@@ -476,7 +486,7 @@ pub fn handle_battle_resolution_ui_buttons(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     let button_entity = click.entity;
-    if let Ok(menu_button_action) = menu_button.get(button_entity) {
+    if let Some(menu_button_action) = menu_button.get(button_entity).ok() {
         click.propagate(false);
         match menu_button_action {
             BattleResolutionMenuAction::Quit => {
@@ -495,7 +505,13 @@ pub fn check_battle_complete(
     player_unit_query: Query<&Unit, With<Player>>,
     enemy_unit_query: Query<&Unit, With<Enemy>>,
     mut game_state: ResMut<NextState<GameState>>,
+    combat_marker_query: Query<Entity, With<CombatActionMarker>>,
 ) {
+    // Wait until combat is finished before calling the fight complete
+    if !combat_marker_query.is_empty() {
+        return;
+    }
+
     // All Players have been downed :(
     if player_unit_query.iter().all(|t| t.downed()) {
         commands.insert_resource(BattleResultResource(BattleResult {

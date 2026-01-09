@@ -2,6 +2,9 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::*;
 
+use crate::gameplay_effects::ActiveEffects;
+use crate::gameplay_effects::Effect;
+use crate::gameplay_effects::EffectMetadata;
 use crate::{
     animation::{
         AnimToPlay, AnimationId, AnimationMarker, AnimationMarkerMessage, PlayingAnimation,
@@ -20,38 +23,9 @@ use crate::{
     unit::{Stats, TINY_TACTICS_ANCHOR, Unit, UnitAction, UnitActionCompletedMessage},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AttackPhase {
-    /// The attacker is preparing for the hit
-    Windup,
-    ///
-    PostWindup,
-    /// The attacker has attempted to hit the defender
-    Impact,
-    /// The impact of the attack has been resolved by the attack impact system
-    PostImpact,
-    /// The attack is complete.
-    Done,
-}
-
-pub struct AttackOutcome {
-    /// The amount of AP that the Attack costed.
-    pub ap_cost: u32,
-    // Whether or not the defender was hit
-    pub defender_reaction: DefenderReaction,
-    // TODO: Unify this with DefenderReaction probably
-    pub damage: u32,
-}
-
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum DefenderReaction {
-    Dodge,
-    TakeHit,
-}
-
 #[derive(Component)]
 pub struct AttackExecution {
-    pub attacker: Entity,
+    pub attacker: Option<Entity>,
     pub defender: Entity,
     pub skill: Skill,
     pub combat_timeline: CombatTimeline,
@@ -70,7 +44,7 @@ pub struct CombatStageId(pub u32);
 enum CombatStage {
     UnitAttack(Entity, CombatAnimationId, UnitAnimationKind),
     Cast(GridPosition, CastingData),
-    Impact(Entity, Entity, Vec<SkillAction>),
+    Impact(Option<Entity>, Entity, Vec<SkillAction>),
 }
 
 pub struct CombatTimeline {
@@ -86,6 +60,65 @@ impl CombatTimeline {
             stages: BTreeMap::new(),
             conditions_to_advance: BTreeMap::from([(CombatStageId(0), Vec::new())]),
         }
+    }
+
+    fn parse_triggers(ae_entity: Entity, trigger: &SkillEvent) -> Vec<AttackExecutionTrigger> {
+        match trigger {
+            SkillEvent::AnimationMarker(skill_animation_id, animation_marker) => {
+                vec![AttackExecutionTrigger::AnimationMarker(
+                    CombatAnimationId::new(ae_entity, *skill_animation_id),
+                    *animation_marker,
+                )]
+            }
+            SkillEvent::ProjectileImpact(skill_animation_id) => {
+                vec![AttackExecutionTrigger::ProjectileImpactEvent(
+                    CombatAnimationId::new(ae_entity, *skill_animation_id),
+                )]
+            }
+        }
+    }
+
+    /// Assumes that there's no attacker for this skill variant
+    ///
+    /// Returns an error if it needs an attacker to do something.
+    pub fn build_without_attacker(
+        ae_entity: Entity,
+        skill: Skill,
+        defender_e: Entity,
+        defender_grid_pos: &GridPosition,
+    ) -> anyhow::Result<Self> {
+        let mut timeline = CombatTimeline::new();
+        let mut stage_id = timeline.current_stage;
+        stage_id.0 += 1;
+        for skill_stage in &skill.animation_data {
+            let stage = match &skill_stage.stage {
+                skills::SkillStageAction::Cast(casting_data) => {
+                    CombatStage::Cast(*defender_grid_pos, casting_data.clone())
+                }
+                skills::SkillStageAction::Impact(action_indices) => {
+                    let mut actions = Vec::new();
+                    for action_index in action_indices {
+                        if let Some(action) = skill.actions.get(action_index.0) {
+                            actions.push(action.clone());
+                        }
+                    }
+                    CombatStage::Impact(None, defender_e, actions)
+                }
+                otherwise => {
+                    anyhow::bail!(
+                        "Unsupported skill stage passed to build_without_attacker: {:?}",
+                        otherwise
+                    );
+                }
+            };
+
+            let triggers = Self::parse_triggers(ae_entity, &skill_stage.advancing_event);
+            timeline.stages.insert(stage_id, stage);
+            timeline.conditions_to_advance.insert(stage_id, triggers);
+            stage_id.0 += 1;
+        }
+
+        Ok(timeline)
     }
 }
 
@@ -122,16 +155,31 @@ pub fn select_stat(modifier: skills::AttackModifier, stats: &Stats) -> u32 {
 }
 
 /// Assumes everything is gonna hit for now
-fn calculate_damage(attacker: &Unit, defender: &Unit, skill_actions: &Vec<SkillAction>) -> u32 {
-    let mut damage = 0;
+fn calculate_damage(
+    attacker: Option<&Unit>,
+    defender: &Unit,
+    skill_actions: &Vec<SkillAction>,
+) -> i32 {
+    let (mut damage, mut healing) = (0, 0);
     for action in skill_actions {
         if let SkillActionType::DamagingSkill { scaled_damage } = &action.action_type {
-            let bonus_attack = select_stat(scaled_damage.offensive_modifier, &attacker.stats);
+            let bonus_attack = attacker
+                .map(|t| select_stat(scaled_damage.offensive_modifier, &t.stats))
+                .unwrap_or_default();
             let defense = select_stat(scaled_damage.defensive_modifier, &defender.stats);
             damage += scaled_damage.power + bonus_attack - defense;
         }
     }
-    damage
+    for action in skill_actions {
+        if let SkillActionType::HealingSkill { scaled_damage } = &action.action_type {
+            let bonus_attack = attacker
+                .map(|t| select_stat(scaled_damage.offensive_modifier, &t.stats))
+                .unwrap_or_default();
+            let defense = select_stat(scaled_damage.defensive_modifier, &defender.stats);
+            healing += scaled_damage.power + bonus_attack - defense;
+        }
+    }
+    healing as i32 - damage as i32
 }
 
 #[derive(Message)]
@@ -248,7 +296,7 @@ impl CombatAnimationId {
 /// This is basically a collision?
 #[derive(Message)]
 pub struct ImpactEvent {
-    attacker: Entity,
+    attacker: Option<Entity>,
     /// TBD, maybe a GridPosition instead to calculate whether or not the hit should happen?
     defender: Entity,
     // grid_position: GridPosition,
@@ -426,8 +474,12 @@ pub fn handle_combat_stage_enter(
                                 continue;
                             };
 
-                            let Some(start_grid_pos) = grid_position_query.get(ae.attacker).ok()
+                            let Some(start_grid_pos) = ae
+                                .attacker
+                                .map(|t| grid_position_query.get(t).ok())
+                                .flatten()
                             else {
+                                error!("No attacker, or no grid position for spawned projectile!");
                                 continue;
                             };
 
@@ -468,7 +520,7 @@ pub fn handle_combat_stage_enter(
 
 #[derive(Component)]
 pub struct AttackResolved {
-    attacker: Entity,
+    attacker: Option<Entity>,
 }
 
 fn build_timeline_for_skill(
@@ -505,23 +557,15 @@ fn build_timeline_for_skill(
                     };
                     actions.push(action.to_owned());
                 }
-                CombatStage::Impact(attack_intent.attacker, attack_intent.defender, actions)
+                CombatStage::Impact(
+                    Some(attack_intent.attacker),
+                    attack_intent.defender,
+                    actions,
+                )
             }
         };
 
-        let triggers = match skill_stage.advancing_event {
-            SkillEvent::AnimationMarker(skill_animation_id, animation_marker) => {
-                vec![AttackExecutionTrigger::AnimationMarker(
-                    CombatAnimationId::new(ae_entity, skill_animation_id),
-                    animation_marker,
-                )]
-            }
-            SkillEvent::ProjectileImpact(skill_animation_id) => {
-                vec![AttackExecutionTrigger::ProjectileImpactEvent(
-                    CombatAnimationId::new(ae_entity, skill_animation_id),
-                )]
-            }
-        };
+        let triggers = CombatTimeline::parse_triggers(ae_entity, &skill_stage.advancing_event);
 
         timeline.stages.insert(stage_id, stage);
 
@@ -548,6 +592,7 @@ pub fn attack_intent_system(
     skill_db: Res<SkillDBResource>,
     intent_query: Query<(Entity, &AttackIntent)>,
     unit_query: Query<(&Unit, &GridPosition)>,
+    mut attacker_resource_query: Query<&mut UnitPhaseResources>,
 ) {
     for (e, intent) in intent_query {
         commands
@@ -570,9 +615,19 @@ pub fn attack_intent_system(
         let skill = skill_db.skill_db.get_skill(&intent.skill);
         let combat_timeline = build_timeline_for_skill(e, intent, skill, defender_grid_pos);
 
+        let Some(mut attacker_resources) = attacker_resource_query.get_mut(intent.attacker).ok()
+        else {
+            error!("Attacker has no resources!");
+            continue;
+        };
+
+        attacker_resources.action_points_left_in_phase = attacker_resources
+            .action_points_left_in_phase
+            .saturating_sub(skill.cost.ap as u32);
+
         // TODO: Create the concept of an AttackPreview, and ask the player for confirmation.
         tracker.insert(AttackExecution {
-            attacker: intent.attacker,
+            attacker: Some(intent.attacker),
             defender: intent.defender,
             skill: skill.to_owned(),
             combat_timeline,
@@ -580,14 +635,16 @@ pub fn attack_intent_system(
     }
 }
 
+// TODO: Should Attacker be Optional here?
 pub fn impact_event_handler(
     mut impact_events: MessageReader<ImpactEvent>,
-    mut unit_query: Query<(&mut Unit, &mut UnitPhaseResources, &mut UnitAnimationPlayer)>,
+    mut unit_query: Query<(&mut Unit, &mut UnitAnimationPlayer, &mut ActiveEffects)>,
 ) {
     for impact in impact_events.read() {
-        let Some((attacker, _, _)) = unit_query.get(impact.attacker).ok() else {
-            continue;
-        };
+        let attacker = impact
+            .attacker
+            .map(|t| unit_query.get(t).ok().map(|(attacker, _, _)| attacker))
+            .flatten();
 
         let Some((defender, _, _)) = unit_query.get(impact.defender).ok() else {
             continue;
@@ -595,19 +652,44 @@ pub fn impact_event_handler(
 
         let damage = calculate_damage(attacker, defender, &impact.skill_actions);
 
-        if let Ok((mut defender, _, mut animation_player)) = unit_query.get_mut(impact.defender) {
-            defender.stats.health = defender.stats.health.saturating_sub(damage);
-            animation_player.play(AnimToPlay {
-                id: UnitAnimationKind::TakeDamage.into(),
-                frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
-            });
+        if let Ok((mut defender, mut animation_player, _)) = unit_query.get_mut(impact.defender) {
+            if damage < 0 {
+                defender.stats.health = defender.stats.health.saturating_sub(damage.unsigned_abs());
+                animation_player.play(AnimToPlay {
+                    id: UnitAnimationKind::TakeDamage.into(),
+                    frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
+                });
+            }
+
+            if damage > 0 {
+                defender.stats.health = u32::min(
+                    defender.stats.max_health,
+                    defender.stats.health + damage as u32,
+                );
+                animation_player.play(AnimToPlay {
+                    id: UnitAnimationKind::Release.into(),
+                    frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
+                });
+            }
         }
 
-        // TODO: I'd really like to put this somewhere else?
-        if let Ok((_, mut attacker_resources, _)) = unit_query.get_mut(impact.attacker) {
-            attacker_resources.action_points_left_in_phase = attacker_resources
-                .action_points_left_in_phase
-                .saturating_sub(1);
+        if let Ok((_, _, mut defender_effects)) = unit_query.get_mut(impact.defender) {
+            for action in &impact.skill_actions {
+                let SkillActionType::ApplyEffects { effects } = &action.action_type else {
+                    continue;
+                };
+
+                // Attach a Gameplay effect to the unit
+                for effect in effects {
+                    defender_effects.apply_effect(Effect {
+                        metadata: EffectMetadata {
+                            source: impact.attacker,
+                            target: impact.defender,
+                        },
+                        data: effect.clone(),
+                    });
+                }
+            }
         }
     }
 }
@@ -619,17 +701,20 @@ pub fn attack_execution_despawner(
     mut action_completed_message: MessageWriter<UnitActionCompletedMessage>,
 ) {
     for (e, attack) in attacks {
-        action_completed_message.write(UnitActionCompletedMessage {
-            unit: attack.attacker,
-            action: UnitAction::Attack,
-        });
+        if let Some(attacker) = attack.attacker {
+            action_completed_message.write(UnitActionCompletedMessage {
+                unit: attacker,
+                action: UnitAction::Attack,
+            });
+
+            commands.entity(attacker).remove::<UnitIsAttacking>();
+        }
 
         info!(
             "Unit Action Completed, removing attack anim and despawning tracker for: {:?}",
             attack.attacker
         );
 
-        commands.entity(attack.attacker).remove::<UnitIsAttacking>();
         commands.entity(e).despawn();
     }
 }
@@ -642,9 +727,13 @@ pub mod skills {
     use crate::{
         animation::{
             AnimationMarker, UnitAnimationKind,
-            animation_db::{AnimatedSpriteId, AnimationKey, RegisteredAnimationId},
+            animation_db::{
+                AnimatedSpriteId, AnimationKey, RegisteredAnimationId,
+                registered_sprite_ids::POISON_VFX_ANIMATED_SPRITE_ID,
+            },
         },
         assets::sprite_db::SpriteId,
+        gameplay_effects::{EffectData, StatusTag},
     };
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -695,22 +784,26 @@ pub mod skills {
         TargetInRange(u32),
     }
 
+    pub enum TargetType {
+        Any,
+    }
+
     /// Buffs and Debuffs
     ///
     /// Idk
-    #[derive(Debug, Clone)]
-    pub struct Effect {
-        pub name: String,
-        pub duration: EffectDuration,
-    }
+    // #[derive(Debug, Clone)]
+    // pub struct Effect {
+    //     pub name: String,
+    //     pub duration: EffectDuration,
+    // }
 
-    #[derive(Debug, Clone)]
-    pub enum EffectDuration {
-        TurnCount(u32),
-        ForTheRun,
-        /// Lol idk when this would be applied but seems funny
-        Permanent,
-    }
+    // #[derive(Debug, Clone)]
+    // pub enum EffectDuration {
+    //     TurnCount(u32),
+    //     ForTheRun,
+    //     /// Lol idk when this would be applied but seems funny
+    //     Permanent,
+    // }
 
     /// The cost of the skill in UnitResources?
     ///
@@ -728,7 +821,8 @@ pub mod skills {
     #[derive(Debug, Clone)]
     pub enum SkillActionType {
         DamagingSkill { scaled_damage: DamagingSkill },
-        ApplyEffect { effect: Effect },
+        HealingSkill { scaled_damage: DamagingSkill },
+        ApplyEffects { effects: Vec<EffectData> },
     }
 
     #[derive(Debug, Clone)]
@@ -1014,34 +1108,39 @@ pub mod skills {
                     name: "Dev Category".to_string(),
                 },
             )?
+            .register_category(
+                SkillCategoryId(4),
+                SkillCategory {
+                    name: "Gallantry".to_string(),
+                },
+            )?
+            .register_category(
+                SkillCategoryId(5),
+                SkillCategory {
+                    name: "Marksmanship".to_string(),
+                },
+            )?
+            .register_category(
+                SkillCategoryId(6),
+                SkillCategory {
+                    name: "Sword Arts".to_string(),
+                },
+            )?
             .register_skill(
                 SkillCategoryId(1),
                 SkillId(2),
                 Skill {
                     name: "Flame".to_owned(),
-                    actions: Vec::from([
-                        SkillAction {
-                            base_accuracy: 0.8,
-                            action_type: SkillActionType::DamagingSkill {
-                                scaled_damage: DamagingSkill {
-                                    power: 2,
-                                    offensive_modifier: AttackModifier::FireAttack,
-                                    defensive_modifier: AttackModifier::FireResistance,
-                                },
+                    actions: Vec::from([SkillAction {
+                        base_accuracy: 0.8,
+                        action_type: SkillActionType::DamagingSkill {
+                            scaled_damage: DamagingSkill {
+                                power: 2,
+                                offensive_modifier: AttackModifier::FireAttack,
+                                defensive_modifier: AttackModifier::FireResistance,
                             },
                         },
-                        SkillAction {
-                            base_accuracy: 0.3,
-                            action_type: SkillActionType::ApplyEffect {
-                                // Certainly this needs to be more datay, but
-                                // let's roll with it for now
-                                effect: Effect {
-                                    name: "Burn".to_string(),
-                                    duration: EffectDuration::TurnCount(2),
-                                },
-                            },
-                        },
-                    ]),
+                    }]),
                     targeting: Targeting::TargetInRange(3),
                     animation_data: vec![
                         SkillStage {
@@ -1096,7 +1195,7 @@ pub mod skills {
                 },
             )?
             .register_skill(
-                SkillCategoryId(3),
+                SkillCategoryId(6),
                 SkillId(3),
                 Skill {
                     name: "Hit em Twice".to_owned(),
@@ -1189,6 +1288,196 @@ pub mod skills {
                         SkillStage {
                             stage: SkillStageAction::Impact(vec![SkillActionIndex(0)]),
                             advancing_event: SkillEvent::ProjectileImpact(SkillAnimationId(1)),
+                        },
+                    ],
+                    cost: SkillCost { ap: 1 },
+                },
+            )?
+            .register_skill(
+                SkillCategoryId(5),
+                SkillId(5),
+                Skill {
+                    name: "Poison Shot".to_owned(),
+                    actions: Vec::from([
+                        SkillAction {
+                            base_accuracy: 1.0,
+                            action_type: SkillActionType::DamagingSkill {
+                                scaled_damage: DamagingSkill {
+                                    power: 1,
+                                    offensive_modifier: AttackModifier::PhysicalAttack,
+                                    defensive_modifier: AttackModifier::PhysicalResistance,
+                                },
+                            },
+                        },
+                        SkillAction {
+                            base_accuracy: 1.0,
+                            action_type: SkillActionType::ApplyEffects {
+                                effects: Vec::from([EffectData {
+                                    effect_type:
+                                        crate::gameplay_effects::EffectType::StatusInfliction(
+                                            StatusTag::Poisoned,
+                                        ),
+                                    duration: crate::gameplay_effects::EffectDuration::TurnCount(3),
+                                }]),
+                            },
+                        },
+                    ]),
+                    targeting: Targeting::TargetInRange(5),
+                    animation_data: vec![
+                        SkillStage {
+                            stage: SkillStageAction::Cast(CastingData::Projectile(
+                                SpriteId(6),
+                                SkillAnimationId(1),
+                            )),
+                            advancing_event: SkillEvent::ProjectileImpact(SkillAnimationId(1)),
+                        },
+                        SkillStage {
+                            stage: SkillStageAction::Impact(vec![
+                                SkillActionIndex(0),
+                                SkillActionIndex(1),
+                            ]),
+                            advancing_event: SkillEvent::ProjectileImpact(SkillAnimationId(1)),
+                        },
+                    ],
+                    cost: SkillCost { ap: 1 },
+                },
+            )?
+            .register_skill(
+                SkillCategoryId(5),
+                SkillId(6),
+                Skill {
+                    name: "Stun Shot".to_owned(),
+                    actions: Vec::from([
+                        SkillAction {
+                            base_accuracy: 1.0,
+                            action_type: SkillActionType::DamagingSkill {
+                                scaled_damage: DamagingSkill {
+                                    power: 1,
+                                    offensive_modifier: AttackModifier::PhysicalAttack,
+                                    defensive_modifier: AttackModifier::PhysicalResistance,
+                                },
+                            },
+                        },
+                        SkillAction {
+                            base_accuracy: 1.0,
+                            action_type: SkillActionType::ApplyEffects {
+                                effects: Vec::from([EffectData {
+                                    effect_type:
+                                        crate::gameplay_effects::EffectType::StatusInfliction(
+                                            StatusTag::Stunned,
+                                        ),
+                                    duration: crate::gameplay_effects::EffectDuration::TurnCount(3),
+                                }]),
+                            },
+                        },
+                    ]),
+                    targeting: Targeting::TargetInRange(5),
+                    animation_data: vec![
+                        SkillStage {
+                            stage: SkillStageAction::Cast(CastingData::Projectile(
+                                SpriteId(6),
+                                SkillAnimationId(1),
+                            )),
+                            advancing_event: SkillEvent::ProjectileImpact(SkillAnimationId(1)),
+                        },
+                        SkillStage {
+                            stage: SkillStageAction::Impact(vec![SkillActionIndex(0)]),
+                            advancing_event: SkillEvent::ProjectileImpact(SkillAnimationId(1)),
+                        },
+                    ],
+                    cost: SkillCost { ap: 1 },
+                },
+            )?
+            // Uh, not a skill necessarily, but this pretty much gets what I want for free so...
+            .register_skill(
+                SkillCategoryId(3),
+                SkillId(7),
+                Skill {
+                    name: "Take Poison Damage".to_owned(),
+                    actions: Vec::from([SkillAction {
+                        base_accuracy: 1.0,
+                        action_type: SkillActionType::DamagingSkill {
+                            scaled_damage: DamagingSkill {
+                                power: 2,
+                                offensive_modifier: AttackModifier::None,
+                                defensive_modifier: AttackModifier::None,
+                            },
+                        },
+                    }]),
+                    targeting: Targeting::TargetInRange(0),
+                    animation_data: vec![
+                        SkillStage {
+                            stage: SkillStageAction::Cast(CastingData::TileSprite(
+                                SpriteId(7),
+                                AnimationKey {
+                                    animated_sprite_id: POISON_VFX_ANIMATED_SPRITE_ID,
+                                    animation_id: RegisteredAnimationId {
+                                        id: 1,
+                                        priority: crate::animation::AnimationPriority::Combat,
+                                    },
+                                },
+                                SkillAnimationId(1),
+                            )),
+                            advancing_event: SkillEvent::AnimationMarker(
+                                SkillAnimationId(1),
+                                AnimationMarker::HitFrame,
+                            ),
+                        },
+                        SkillStage {
+                            stage: SkillStageAction::Impact(vec![SkillActionIndex(0)]),
+                            advancing_event: SkillEvent::AnimationMarker(
+                                SkillAnimationId(1),
+                                AnimationMarker::Complete,
+                            ),
+                        },
+                    ],
+                    cost: SkillCost { ap: 1 },
+                },
+            )?
+            .register_skill(
+                SkillCategoryId(1),
+                SkillId(8),
+                Skill {
+                    name: "Heal".to_owned(),
+                    actions: Vec::from([SkillAction {
+                        base_accuracy: 1.0,
+                        action_type: SkillActionType::HealingSkill {
+                            scaled_damage: DamagingSkill {
+                                power: 5,
+                                offensive_modifier: AttackModifier::None,
+                                defensive_modifier: AttackModifier::None,
+                            },
+                        },
+                    }]),
+                    targeting: Targeting::TargetInRange(0),
+                    animation_data: vec![
+                        // TODO: Using flare damage for now lol
+                        SkillStage {
+                            stage: SkillStageAction::UnitAttack(
+                                SkillAnimationId(1),
+                                UnitAnimationKind::Charge,
+                            ),
+                            advancing_event: SkillEvent::AnimationMarker(
+                                SkillAnimationId(1),
+                                AnimationMarker::Complete,
+                            ),
+                        },
+                        SkillStage {
+                            stage: SkillStageAction::UnitAttack(
+                                SkillAnimationId(2),
+                                UnitAnimationKind::Release,
+                            ),
+                            advancing_event: SkillEvent::AnimationMarker(
+                                SkillAnimationId(2),
+                                AnimationMarker::Complete,
+                            ),
+                        },
+                        SkillStage {
+                            stage: SkillStageAction::Impact(vec![SkillActionIndex(0)]),
+                            advancing_event: SkillEvent::AnimationMarker(
+                                SkillAnimationId(2),
+                                AnimationMarker::Complete,
+                            ),
                         },
                     ],
                     cost: SkillCost { ap: 1 },

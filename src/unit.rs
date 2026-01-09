@@ -18,6 +18,7 @@ use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::combat::skills::{SkillDBResource, Targeting, UnitSkills};
 use crate::enemy::behaviors::EnemyAiBehavior;
+use crate::gameplay_effects::ActiveEffects;
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, manhattan_distance};
 use crate::grid_cursor::LockedOn;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
@@ -75,9 +76,19 @@ impl Unit {
 
 /// Lowkey, should Magic Power be Neutral, and AttackPower be Physical or
 /// something like that? Or is it fun having a Strength / Def?
-#[derive(Debug, Clone, Reflect, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Reflect, PartialEq, Eq, Hash, Copy)]
 pub enum ElementalType {
     Fire,
+}
+
+/// Is it worth storing things like this?
+///
+/// I imagine I will still want to display in UIs
+/// why someones stats are what they are?
+#[derive(Debug, Clone, Reflect, PartialEq, Eq)]
+pub struct StatAttribute {
+    current_value: u32,
+    base_value: u32,
 }
 
 #[derive(Debug, Reflect, Clone)]
@@ -149,6 +160,7 @@ pub struct UnitBundle {
     pub animation_player: UnitAnimationPlayer,
     pub anchor: Anchor,
     pub phase_resources: UnitPhaseResources,
+    pub active_effects: ActiveEffects,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -207,6 +219,9 @@ pub fn spawn_obstacle_unit(
             },
             TINY_TACTICS_ANCHOR,
             UnitPhaseResources::default(),
+            ActiveEffects {
+                effects: Vec::new(),
+            },
         ))
         .id()
 }
@@ -268,6 +283,9 @@ pub fn spawn_enemy(
             },
             BattleEntity {},
             skills,
+            ActiveEffects {
+                effects: Vec::new(),
+            },
         ))
         .id();
 
@@ -341,6 +359,9 @@ pub fn spawn_unit(
                 animation_player: UnitAnimationPlayer::new(TT_UNIT_ANIMATED_SPRITE_ID),
                 anchor: TINY_TACTICS_ANCHOR,
                 phase_resources: UnitPhaseResources::default(),
+                active_effects: ActiveEffects {
+                    effects: Vec::new(),
+                },
             },
             BattleEntity {},
             skills,
@@ -596,6 +617,10 @@ pub enum UnitExecuteAction {
     Wait,
 }
 
+/// Marker component for systems that want to wait until combat is over.
+#[derive(Reflect, Debug, Component)]
+pub struct CombatActionMarker;
+
 pub fn execute_unit_actions(
     mut commands: Commands,
     mut reader: MessageReader<UnitExecuteActionMessage>,
@@ -612,7 +637,7 @@ pub fn execute_unit_actions(
                     .insert(GridMovement::new(valid_move.path.clone(), 0.4));
             }
             UnitExecuteAction::Attack(attack_intent) => {
-                commands.spawn(attack_intent.clone());
+                commands.spawn((CombatActionMarker, attack_intent.clone()));
             }
             UnitExecuteAction::Wait => {
                 if let Ok(mut resources) = unit_phase_resources.get_mut(message.entity) {
@@ -766,7 +791,10 @@ pub fn handle_unit_ui_command(
                 // Assume all units have the same attack range for now
                 for possible_attack_pos in &target_options {
                     // Is there a unit that can be attacked there?
-                    if let Some((target_entity, target_unit)) = grid_manager_res
+                    //
+                    // TODO: Add some form of "targeting options" or something for
+                    // deciding if you can cast this on an enemy or player or self or not
+                    if let Some((target_entity, _)) = grid_manager_res
                         .grid_manager
                         .get_by_position(possible_attack_pos)
                         .cloned()
@@ -774,7 +802,6 @@ pub fn handle_unit_ui_command(
                         .iter()
                         .filter_map(|e| unit_query.get(*e).ok())
                         .next()
-                        && unit.team != target_unit.team
                     {
                         options_for_attack.push(AttackOption {
                             target: target_entity,
@@ -1000,7 +1027,10 @@ pub struct UnitActionCompletedMessage {
 }
 
 pub mod jobs {
-    use crate::assets::sprite_db::{SpriteId, TinyTacticsSprites};
+    use crate::{
+        assets::sprite_db::{SpriteId, TinyTacticsSprites},
+        combat::skills::{SkillCategoryId, SkillId},
+    };
 
     use super::*;
 
@@ -1057,9 +1087,23 @@ pub mod jobs {
         /// I'm also not stoked on this long term, but for the demo we aren't doing
         /// progressions, so Jobs need to determine skills!
         pub fn base_unit_skills(&self) -> UnitSkills {
-            UnitSkills {
-                learned_skills: HashSet::new(),
-                equipped_skill_categories: Vec::new(),
+            match self {
+                UnitJob::Knight => UnitSkills {
+                    learned_skills: HashSet::new(),
+                    equipped_skill_categories: Vec::from(&[SkillCategoryId(4)]),
+                },
+                UnitJob::Mage => UnitSkills {
+                    learned_skills: HashSet::from([SkillId(2), SkillId(8)]),
+                    equipped_skill_categories: Vec::from(&[SkillCategoryId(1)]),
+                },
+                UnitJob::Archer => UnitSkills {
+                    learned_skills: HashSet::from([SkillId(6), SkillId(5)]),
+                    equipped_skill_categories: Vec::from(&[SkillCategoryId(5)]),
+                },
+                UnitJob::Mercenary => UnitSkills {
+                    learned_skills: HashSet::from([SkillId(3)]),
+                    equipped_skill_categories: Vec::from(&[SkillCategoryId(6)]),
+                },
             }
         }
     }

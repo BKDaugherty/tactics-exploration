@@ -5,16 +5,22 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 ## The TODO List
 
 ### Projectier Things
-- [ ] Store the set of players somewhere
 
-- [ ] Handle Gamepad Inputs
-  - [ ] Create some form of screen for joining game etc
+- [ ] Combat Wishlist
+    - [ ] Healing Skills
+    - [ ] Hit Chance calculations
+    - [ ] Movement Based Attacks (Knockback + Charge)
+    - [ ] AOE attacks
+    - [ ] Weapon Range / Weapon Attacks
+    - [ ] Stat Buffs
+    - [ ] Damage Sounds
+    - [ ] A more unified persistent effect system
 
 - [ ] Expand on the Combat System
-  - [ ] Ranged Attacks?
   - [ ] Damage / AP Calculations?
-  - [ ] Multiple Types of Moves?
   - [ ] Allow the unit to pick a FacedDirection on Wait
+  - [x] Ranged Attacks?
+  - [x] Multiple Types of Moves?
   - [x] UI Support for more complex choices of "actions"?
 
 - [ ] Animation Data
@@ -25,6 +31,7 @@ I like keep tracking of what I think I need to do in a list. For now, this track
   - [ ] The "load_demo_battle_scene" and "spawn_unit" fns are getting a lil out of control. 
   - [ ] Maps / Battles as Data?
     - [ ] Procedurally Generated Levels?
+    - [ ] Dungeons?
 
 - [ ] Outside of Battle...
 
@@ -33,9 +40,6 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 - [ ] The Progression?
 
 - [ ] The Meta Progression?
-
-- [ ] Save Games?
-  - [ ] Load Games??
   
 - [ ] Add the idea of Height to the Grid??!
 
@@ -57,6 +61,13 @@ I like keep tracking of what I think I need to do in a list. For now, this track
 - [ ] The PlayerInfoUI can show that an enemy still has health during the BattleResolution screen
 
 ## Archive
+- [x] Save Games?
+  - [x] Load Games??
+
+- [x] Store the set of players somewhere
+
+- [x] Handle Gamepad Inputs
+  - [x] Create some form of screen for joining game etc
 
 - [x] A GridManager for tracking all of the "entities" I want
   - [x] I'll need a bevy_system for tracking entities

@@ -112,6 +112,10 @@ pub mod sprite_db {
                 "misc_assets/fire_effect_2/explosion_2_spritesheet.png".to_string(),
             ),
             (SpriteId(6), "misc_assets/arrow.png".to_string()),
+            (
+                SpriteId(7),
+                "misc_assets/acid-vfx/acid-vfx-1.png".to_string(),
+            ),
         ])
     }
 

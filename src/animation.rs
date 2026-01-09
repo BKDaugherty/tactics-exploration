@@ -832,8 +832,8 @@ pub mod tinytactics {
 
 pub mod animation_db {
     use crate::animation::animation_db::registered_sprite_ids::{
-        FLAME_VFX_ANIMATED_SPRITE_ID, TT_UNIT_ANIMATED_SPRITE_ID, TT_WEAPON_ANIMATED_SPRITE_ID,
-        build_animated_sprite_to_atlas_layout,
+        FLAME_VFX_ANIMATED_SPRITE_ID, POISON_VFX_ANIMATED_SPRITE_ID, TT_UNIT_ANIMATED_SPRITE_ID,
+        TT_WEAPON_ANIMATED_SPRITE_ID, build_animated_sprite_to_atlas_layout,
     };
 
     use super::*;
@@ -998,6 +998,25 @@ pub mod animation_db {
                 ]),
             },
             &[(None, 0)],
+        )?
+        .register_animation(
+            "poison_effect",
+            AnimationKey {
+                animated_sprite_id: POISON_VFX_ANIMATED_SPRITE_ID,
+                animation_id: RegisteredAnimationId {
+                    id: 1,
+                    priority: AnimationPriority::Combat,
+                },
+            },
+            UnitAnimationDataInner {
+                frame_duration: (1.0 / 16.),
+                frame_count: 16,
+                animation_offset_markers: HashMap::from([
+                    (10, AnimationMarker::HitFrame),
+                    (16, AnimationMarker::Complete),
+                ]),
+            },
+            &[(None, 0)],
         )?;
 
         Ok(db)
@@ -1142,6 +1161,7 @@ pub mod animation_db {
         pub const TT_WEAPON_ANIMATED_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(2);
         pub const BATTLE_TACTICS_TILESHEET: AnimatedSpriteId = AnimatedSpriteId(3);
         pub const FLAME_VFX_ANIMATED_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(4);
+        pub const POISON_VFX_ANIMATED_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(5);
 
         pub fn build_animated_sprite_to_atlas_layout()
         -> HashMap<AnimatedSpriteId, TextureAtlasLayout> {
@@ -1182,6 +1202,10 @@ pub mod animation_db {
                 (
                     FLAME_VFX_ANIMATED_SPRITE_ID,
                     TextureAtlasLayout::from_grid(UVec2::new(48, 48), 18, 1, None, None),
+                ),
+                (
+                    POISON_VFX_ANIMATED_SPRITE_ID,
+                    TextureAtlasLayout::from_grid(UVec2::new(32, 32), 16, 1, None, None),
                 ),
             ])
         }

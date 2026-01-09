@@ -8,8 +8,14 @@ use bevy::prelude::*;
 use crate::{
     battle::Enemy,
     battle_phase::phase_ui::{BattlePhaseMessageComplete, ShowBattleBannerMessage},
+    combat::{
+        AttackExecution, CombatTimeline,
+        skills::{SkillDBResource, SkillId},
+    },
+    gameplay_effects::{ActiveEffects, EffectDuration, StatusTag},
+    grid::GridPosition,
     player::Player,
-    unit::Unit,
+    unit::{CombatActionMarker, Unit},
 };
 
 /// The Phase Manager keeps track of the current phase globally for the battle.
@@ -25,6 +31,7 @@ pub struct PhaseManager {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhaseState {
     Initializing,
+    HandlingStartOfPhaseEffects,
     Running,
 }
 
@@ -122,9 +129,11 @@ pub fn check_should_advance_phase<T: PhaseSystem<PlayerEnemyPhase>>(
     mut phase_manager: ResMut<PhaseManager>,
     mut message_writer: MessageWriter<PhaseMessage>,
     query: Query<(&UnitPhaseResources, &Unit), With<T::Marker>>,
+    wait_for_no_attacks_ongoing: Query<Entity, With<CombatActionMarker>>,
 ) {
     if phase_manager.current_phase != T::OWNED_PHASE
         || phase_manager.phase_state != PhaseState::Running
+        || !wait_for_no_attacks_ongoing.is_empty()
     {
         return;
     }
@@ -165,15 +174,122 @@ pub fn prepare_for_phase<T: PhaseSystem<PlayerEnemyPhase>>(
     }
 }
 
+// TODO: It feels like I should apply poison damage here right?
+pub fn decrement_turn_count_effects_on_turn_start<T: PhaseSystem<PlayerEnemyPhase>>(
+    mut message_reader: MessageReader<TurnStartMessage>,
+    mut query: Query<&mut ActiveEffects, With<T::Marker>>,
+) {
+    for message in message_reader.read() {
+        if message.phase == T::OWNED_PHASE {
+            for mut active_effects in query.iter_mut() {
+                for effect in active_effects.effects.iter_mut() {
+                    let EffectDuration::TurnCount(turn_count) = &mut effect.data.duration else {
+                        continue;
+                    };
+
+                    *turn_count = turn_count.saturating_sub(1);
+                }
+
+                // TODO: Do we need an event here?
+                active_effects.effects.retain(|t| {
+                    if let EffectDuration::TurnCount(turn_count) = t.data.duration {
+                        return turn_count != 0;
+                    } else {
+                        true
+                    }
+                });
+            }
+        }
+    }
+}
+
+pub fn check_for_active_effect_damage_on_turn_start<T: PhaseSystem<PlayerEnemyPhase>>(
+    mut commands: Commands,
+    mut message_reader: MessageReader<StartOfPhaseEffectsMessage>,
+    skill_db: Res<SkillDBResource>,
+    query: Query<(Entity, &ActiveEffects, &GridPosition), With<T::Marker>>,
+) {
+    for message in message_reader.read() {
+        if message.phase != T::OWNED_PHASE {
+            continue;
+        }
+
+        // Handle Poison Damage
+        let poison_skill = skill_db.skill_db.get_skill(&SkillId(7));
+        for (e, active_effect, grid_position) in query {
+            if active_effect.statuses().contains(&StatusTag::Poisoned) {
+                let mut poison_damage_e = commands.spawn(PoisonDamageEntity);
+                let Ok(poison_timeline) = CombatTimeline::build_without_attacker(
+                    poison_damage_e.id(),
+                    poison_skill.clone(),
+                    e,
+                    grid_position,
+                ) else {
+                    error!("Failed to build Poison Damage Timeline!");
+                    continue;
+                };
+                poison_damage_e.insert((
+                    AttackExecution {
+                        attacker: None,
+                        defender: e,
+                        combat_timeline: poison_timeline,
+                        skill: poison_skill.clone(),
+                    },
+                    CombatActionMarker,
+                    StartOfPhaseEffect,
+                ));
+            }
+        }
+    }
+}
+
+#[derive(Component)]
+struct PoisonDamageEntity;
+
+#[derive(Message)]
+pub struct TurnStartMessage {
+    phase: PlayerEnemyPhase,
+}
+
+#[derive(Message)]
+pub struct StartOfPhaseEffectsMessage {
+    phase: PlayerEnemyPhase,
+}
+
+/// A start of phase effect that needs to be handled
+/// before moving to the "running" portion of the phase
+#[derive(Component)]
+pub struct StartOfPhaseEffect;
+
+pub fn advance_after_start_of_phase_effects(
+    mut phase_manager: ResMut<PhaseManager>,
+    query: Query<Entity, With<StartOfPhaseEffect>>,
+    mut message_writer: MessageWriter<TurnStartMessage>,
+) {
+    if phase_manager.phase_state == PhaseState::HandlingStartOfPhaseEffects {
+        if query.is_empty() {
+            phase_manager.phase_state = PhaseState::Running;
+            message_writer.write(TurnStartMessage {
+                phase: phase_manager.current_phase,
+            });
+        }
+    }
+}
+
 /// Advances the phase after the BattleBanner has been displayed
 pub fn start_phase(
     mut phase_manager: ResMut<PhaseManager>,
     mut message_reader: MessageReader<BattlePhaseMessageComplete>,
+    mut message_writer: MessageWriter<StartOfPhaseEffectsMessage>,
 ) {
     for _message in message_reader.read() {
         if phase_manager.phase_state == PhaseState::Initializing {
-            phase_manager.phase_state = PhaseState::Running;
+            phase_manager.phase_state = PhaseState::HandlingStartOfPhaseEffects;
         }
+
+        message_writer.write(StartOfPhaseEffectsMessage {
+            phase: phase_manager.current_phase,
+        });
     }
 }
 

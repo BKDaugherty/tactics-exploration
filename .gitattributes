@@ -89,3 +89,4 @@ assets/sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert[[:sp
 assets/sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert[[:space:]]-[[:space:]]Pixel[[:space:]]UI[[:space:]]SFX[[:space:]]Pack[[:space:]]-[[:space:]]Popup[[:space:]]Close[[:space:]]1[[:space:]](Sine).ogg filter=lfs diff=lfs merge=lfs -text
 assets/sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert[[:space:]]-[[:space:]]Pixel[[:space:]]UI[[:space:]]SFX[[:space:]]Pack[[:space:]]-[[:space:]]Popup[[:space:]]Open[[:space:]]1[[:space:]](Sine).ogg filter=lfs diff=lfs merge=lfs -text
 assets/sound_assets/music/BattleMusic.ogg filter=lfs diff=lfs merge=lfs -text
+assets/misc_assets/acid-vfx/acid-vfx-1.png filter=lfs diff=lfs merge=lfs -text
