@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use bevy::{input_focus::InputDispatchPlugin, log::tracing_subscriber::field::display, prelude::*};
+use bevy::{input_focus::InputDispatchPlugin, prelude::*};
 
 use crate::{
     GameState,
@@ -387,7 +387,7 @@ fn main_menu_action(
     setting_query: Query<&HorizontalSelector<f64>>,
     fonts: Res<FontResource>,
     mut sound_settings: ResMut<SoundSettings>,
-    mut global_volume: ResMut<GlobalVolume>,
+    global_volume: ResMut<GlobalVolume>,
 ) {
     let button_entity = click.entity;
     if let Ok(menu_button_action) = menu_button.get(button_entity) {

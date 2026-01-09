@@ -11,8 +11,8 @@ use crate::{
     enemy::behaviors::EnemyAiBehavior,
     grid::{GridManagerResource, GridPosition, GridPositionChangeResult, manhattan_distance},
     unit::{
-        DIRECTION_VECS, MovementRequest, Unit, UnitActionCompletedMessage, UnitExecuteAction,
-        UnitExecuteActionMessage, get_valid_moves_for_unit,
+        CombatActionMarker, DIRECTION_VECS, MovementRequest, Unit, UnitActionCompletedMessage,
+        UnitExecuteAction, UnitExecuteActionMessage, get_valid_moves_for_unit,
     },
 };
 
@@ -231,12 +231,18 @@ pub struct EnemyActionInProgress {}
 /// Compute and perform an action
 pub fn execute_enemy_action(
     mut commands: Commands,
+    wait_for_no_attacks_ongoing: Query<Entity, With<CombatActionMarker>>,
     mut query: Query<
         (Entity, &Unit, &mut PlannedEnemyAction),
         (With<ActiveEnemy>, Without<EnemyActionInProgress>),
     >,
     mut writer: MessageWriter<UnitExecuteActionMessage>,
 ) {
+    // Don't execute any actions until all AttackExecutions have been drained.
+    if !wait_for_no_attacks_ongoing.is_empty() {
+        return;
+    }
+
     // There should only be at most one ActiveEnemy but :shrug:
     for (enemy, enemy_unit, mut action) in query.iter_mut() {
         commands.entity(enemy).insert(EnemyActionInProgress {});
