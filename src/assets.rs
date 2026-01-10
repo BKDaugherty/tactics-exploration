@@ -38,7 +38,9 @@ pub mod sprite_db {
 
     use super::*;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(
+        Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Reflect,
+    )]
     pub struct SpriteId(pub u32);
 
     #[derive(Debug, Resource)]
@@ -54,8 +56,57 @@ pub mod sprite_db {
         }
     }
 
+    /// Utility enum to track the TinyTactics specific sprites for now while
+    /// they are still in use.
+    #[derive(Debug, Clone, Copy, Reflect, PartialEq, Eq, Hash)]
+    pub enum TinyTacticsSprites {
+        TtMapSheet,
+        Fighter,
+        Mage,
+        Cleric,
+        IronAxe,
+        Scepter,
+    }
+
+    impl From<TinyTacticsSprites> for SpriteId {
+        fn from(value: TinyTacticsSprites) -> Self {
+            match value {
+                TinyTacticsSprites::TtMapSheet => SpriteId(1),
+                TinyTacticsSprites::Fighter => SpriteId(2),
+                TinyTacticsSprites::Mage => SpriteId(3),
+                TinyTacticsSprites::Cleric => SpriteId(4),
+                TinyTacticsSprites::IronAxe => SpriteId(7),
+                TinyTacticsSprites::Scepter => SpriteId(8),
+            }
+        }
+    }
+
     fn build_sprite_map() -> HashMap<SpriteId, String> {
         HashMap::from([
+            (
+                TinyTacticsSprites::TtMapSheet.into(),
+                BATTLE_TACTICS_TILESHEET.to_string(),
+            ),
+            (
+                TinyTacticsSprites::Fighter.into(),
+                "unit_assets/spritesheets/fighter_spritesheet.png".to_string(),
+            ),
+            (
+                TinyTacticsSprites::Mage.into(),
+                "unit_assets/spritesheets/mage_spritesheet.png".to_string(),
+            ),
+            (
+                TinyTacticsSprites::Cleric.into(),
+                "unit_assets/spritesheets/cleric_spritesheet.png".to_string(),
+            ),
+            (
+                TinyTacticsSprites::IronAxe.into(),
+                "unit_assets/spritesheets/IronAxe_spritesheet.png".to_string(),
+            ),
+            (
+                TinyTacticsSprites::Scepter.into(),
+                "unit_assets/spritesheets/Scepter_spritesheet.png".to_string(),
+            ),
             (
                 SpriteId(5),
                 "misc_assets/fire_effect_2/explosion_2_spritesheet.png".to_string(),

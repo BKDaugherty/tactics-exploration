@@ -1,5 +1,6 @@
 use crate::battle::BattleEntity;
 use crate::grid;
+use crate::menu::menu_navigation::{GameMenuLatch, check_latch_on_axis_move};
 use crate::player;
 
 use bevy::prelude::*;
@@ -44,6 +45,7 @@ pub fn spawn_cursor(
             player,
         },
         BattleEntity {},
+        GameMenuLatch::default(),
     ));
 }
 
@@ -55,16 +57,23 @@ pub fn handle_cursor_movement(
         &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
     )>,
     mut cursor_query: Query<
-        (&player::Player, &mut grid::GridPosition),
+        (&player::Player, &mut grid::GridPosition, &mut GameMenuLatch),
         (With<Cursor>, Without<LockedOn>),
     >,
 ) {
     for (player, action_state) in input_query.iter() {
-        for (cursor_player, mut grid_pos) in cursor_query.iter_mut() {
+        for (cursor_player, mut grid_pos, mut latch) in cursor_query.iter_mut() {
             if player != cursor_player {
                 continue;
             }
             let mut delta = grid::GridVec { x: 0, y: 0 };
+
+            if let Some(axis_delta) = check_latch_on_axis_move(action_state, &latch) {
+                latch.latch = axis_delta;
+                delta.x += axis_delta.x;
+                delta.y -= axis_delta.y;
+            }
+
             if action_state.just_pressed(&player::PlayerInputAction::MoveCursorUp) {
                 delta.y -= 1;
             }

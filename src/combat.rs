@@ -636,6 +636,7 @@ pub fn attack_execution_despawner(
 
 pub mod skills {
     use anyhow::Context;
+    use bevy::reflect::Reflect;
     use std::collections::{HashMap, HashSet};
 
     use crate::{
@@ -649,7 +650,9 @@ pub mod skills {
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
     pub struct SkillCategoryId(pub u32);
 
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+    #[derive(
+        Clone, Copy, PartialEq, Eq, Debug, Hash, Reflect, serde::Serialize, serde::Deserialize,
+    )]
     pub struct SkillId(pub u32);
 
     #[derive(Debug, Clone)]

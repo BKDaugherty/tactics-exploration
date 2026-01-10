@@ -300,26 +300,16 @@ pub fn spawn_unit(
     commands: &mut Commands,
     unit_name: String,
     tt_assets: &Res<TinytacticsAssets>,
-    anim_db: &Res<AnimationDB>,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
+    texture_atlas: TextureAtlas,
     weapon_spritesheet: Handle<Image>,
     skills: UnitSkills,
     player: crate::player::Player,
     team: Team,
+    direction: Direction,
 ) {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
-    let direction = Direction::NE;
-    let animation_start_index = anim_db
-        .get_start_index(&AnimationStartIndexKey {
-            facing_direction: Some(direction.animation_direction()),
-            key: AnimationKey {
-                animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
-                animation_id: UnitAnimationKind::IdleWalk.into(),
-            },
-        })
-        .expect("Must have animation data");
-
     let unit = commands
         .spawn((
             UnitBundle {
@@ -338,10 +328,7 @@ pub fn spawn_unit(
                 grid_position,
                 sprite: Sprite {
                     image: spritesheet,
-                    texture_atlas: Some(TextureAtlas {
-                        layout: tt_assets.tt_unit_layout.clone(),
-                        index: (*animation_start_index).into(),
-                    }),
+                    texture_atlas: Some(texture_atlas),
                     color: Color::linear_rgb(1.0, 1.0, 1.0),
                     flip_x: direction.should_flip_across_y(),
                     custom_size: Some(Vec2::splat(32.)),
@@ -996,6 +983,72 @@ pub enum UnitAction {
 pub struct UnitActionCompletedMessage {
     pub unit: Entity,
     pub action: UnitAction,
+}
+
+pub mod jobs {
+    use crate::assets::sprite_db::{SpriteId, TinyTacticsSprites};
+
+    use super::*;
+
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Reflect)]
+    pub enum UnitJob {
+        Knight,
+        Mage,
+        Archer,
+        Mercenary,
+    }
+
+    impl UnitJob {
+        pub fn name(&self) -> String {
+            match self {
+                UnitJob::Knight => "Knight".to_string(),
+                UnitJob::Mage => "Mage".to_string(),
+                UnitJob::Archer => "Archer".to_string(),
+                UnitJob::Mercenary => "Mercenary".to_string(),
+            }
+        }
+
+        pub fn description(&self) -> String {
+            match self {
+                UnitJob::Knight => {
+                    "A Knight charges their enemies and holds them in place to protect their allies"
+                        .to_string()
+                }
+                UnitJob::Mage => {
+                    "A Mage channels Primal energy to support their allies and devastate their foes"
+                        .to_string()
+                }
+                UnitJob::Archer => {
+                    "An Archer uses a bow to inflict pain and effects upon their enemies from range"
+                        .to_string()
+                }
+                UnitJob::Mercenary => {
+                    "A Mercenary hits their enemies hard, without much regard for their own safety"
+                        .to_string()
+                }
+            }
+        }
+
+        /// I'm not stoked on this function long term, but nice for the
+        /// demo. Job probably shouldn't determine base sprite.
+        pub fn base_sprite_id(&self) -> SpriteId {
+            match self {
+                UnitJob::Knight => TinyTacticsSprites::Cleric.into(),
+                UnitJob::Mage => TinyTacticsSprites::Mage.into(),
+                UnitJob::Archer => TinyTacticsSprites::Fighter.into(),
+                UnitJob::Mercenary => TinyTacticsSprites::Fighter.into(),
+            }
+        }
+
+        /// I'm also not stoked on this long term, but for the demo we aren't doing
+        /// progressions, so Jobs need to determine skills!
+        pub fn base_unit_skills(&self) -> UnitSkills {
+            UnitSkills {
+                learned_skills: HashSet::new(),
+                equipped_skill_categories: Vec::new(),
+            }
+        }
+    }
 }
 
 pub mod overlay {

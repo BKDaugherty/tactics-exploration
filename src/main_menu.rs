@@ -6,18 +6,20 @@ use crate::{
     GameState,
     assets::FontResource,
     menu::{
-        menu_navigation::{self, ActiveMenu, handle_menu_cursor_navigation, highlight_menu_option},
+        menu_navigation::{
+            self, ActiveMenu, GameMenuLatch, handle_menu_cursor_navigation, highlight_menu_option,
+        },
         ui_consts::NORMAL_MENU_BUTTON_COLOR,
     },
-    player::{Player, RegisteredPlayers},
+    player::Player,
 };
-
-#[derive(Component)]
-pub struct OnMainMenuScreen {}
 
 pub fn main_menu_plugin(app: &mut App) {
     app.add_plugins(InputDispatchPlugin)
-        .add_systems(OnEnter(GameState::MainMenu), main_menu_setup)
+        .add_systems(
+            OnEnter(GameState::MainMenu),
+            (main_menu_setup, main_menu_initialized).chain(),
+        )
         .add_systems(
             Update,
             (handle_menu_cursor_navigation, highlight_menu_option)
@@ -26,18 +28,17 @@ pub fn main_menu_plugin(app: &mut App) {
         .add_observer(main_menu_action);
 }
 
-enum GameSelect {
-    Solo,
-    Coop,
-}
-
 #[derive(Component)]
 enum MainMenuButtonAction {
-    PlayDemo(GameSelect),
+    PlayDemo,
     Quit,
 }
 
 const TEXT_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
+
+fn main_menu_initialized(mut game_state: ResMut<NextState<GameState>>) {
+    game_state.set(GameState::MainMenu);
+}
 
 fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
     // Common style for all buttons on the screen
@@ -63,24 +64,9 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
             BorderRadius::all(percent(20)),
             button_node.clone(),
             BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
-            MainMenuButtonAction::PlayDemo(GameSelect::Solo),
+            MainMenuButtonAction::PlayDemo,
             children![(
-                Text::new("Single Player Demo"),
-                button_text_font.clone(),
-                TextColor(TEXT_COLOR),
-            ),],
-        ))
-        .id();
-
-    let coop_button = commands
-        .spawn((
-            Button,
-            BorderRadius::all(percent(20)),
-            button_node.clone(),
-            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
-            MainMenuButtonAction::PlayDemo(GameSelect::Coop),
-            children![(
-                Text::new("Co-Op Demo"),
+                Text::new("Play Demo"),
                 button_text_font.clone(),
                 TextColor(TEXT_COLOR),
             ),],
@@ -128,7 +114,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
         ],
     ));
 
-    menu_column.add_children(&[play_button, coop_button, quit_button]);
+    menu_column.add_children(&[play_button, quit_button]);
     let menu_column_id = menu_column.id();
 
     let mut menu = commands.spawn((
@@ -140,26 +126,30 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
             justify_content: JustifyContent::Center,
             ..default()
         },
-        OnMainMenuScreen {},
     ));
 
     menu.add_child(menu_column_id);
 
     let mut main_menu_grid = menu_navigation::GameMenuGrid::new_vertical();
-    main_menu_grid.push_buttons_to_stack(&[play_button, coop_button, quit_button]);
+    main_menu_grid.push_buttons_to_stack(&[play_button, quit_button]);
 
-    commands.spawn((
-        main_menu_grid,
-        menu_navigation::GameMenuController {
-            players: HashSet::from([Player::One, Player::Two]),
-        },
-        ActiveMenu {},
-    ));
+    let id = commands
+        .spawn((
+            main_menu_grid,
+            menu_navigation::GameMenuController {
+                players: HashSet::from([Player::PrePlayer]),
+            },
+            ActiveMenu {},
+            GameMenuLatch::default(),
+            DespawnOnExit(GameState::MainMenu),
+        ))
+        .id();
+
+    info!("Spawning the MainMenuGrid: {:?}", id);
 }
 
 fn main_menu_action(
     mut click: On<Pointer<Click>>,
-    mut commands: Commands,
     menu_button: Query<&MainMenuButtonAction, With<Button>>,
     mut app_exit_writer: MessageWriter<AppExit>,
     mut game_state: ResMut<NextState<GameState>>,
@@ -171,24 +161,9 @@ fn main_menu_action(
             MainMenuButtonAction::Quit => {
                 app_exit_writer.write(AppExit::Success);
             }
-            MainMenuButtonAction::PlayDemo(g) => {
-                let mut player_setup = RegisteredPlayers {
-                    players: HashSet::new(),
-                };
-
-                match g {
-                    GameSelect::Solo => {
-                        player_setup.players.insert(Player::One);
-                    }
-                    GameSelect::Coop => {
-                        player_setup.players.insert(Player::One);
-                        player_setup.players.insert(Player::Two);
-                    }
-                }
-
-                commands.insert_resource(player_setup);
-
-                game_state.set(GameState::Battle);
+            MainMenuButtonAction::PlayDemo => {
+                info!("Got signal to JoinGame!");
+                game_state.set(GameState::JoinGame);
             }
         }
     }
