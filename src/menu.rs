@@ -17,6 +17,7 @@ pub mod menu_navigation {
         },
         prelude::*,
     };
+    use leafwing_input_manager::prelude::ActionState;
 
     use crate::{
         menu::ui_consts::{FOCUSED_BORDER_BUTTON_COLOR, NORMAL_MENU_BUTTON_COLOR},
@@ -46,6 +47,36 @@ pub mod menu_navigation {
         buttons: HashMap<MenuGridPosition, Entity>,
         column_heights: HashMap<u8, u8>,
         width: u8,
+    }
+
+    pub fn check_latch_on_axis_move(
+        action_state: &ActionState<player::PlayerInputAction>,
+        latch: &GameMenuLatch,
+    ) -> Option<IVec2> {
+        let mut delta = IVec2::ZERO;
+        let axis = action_state.axis_pair(&player::PlayerInputAction::MoveCursor);
+
+        const DEADZONE: f32 = 0.3;
+        let dir = if axis.y > DEADZONE {
+            IVec2::Y
+        } else if axis.y < -DEADZONE {
+            -IVec2::Y
+        } else if axis.x > DEADZONE {
+            IVec2::X
+        } else if axis.x < -DEADZONE {
+            -IVec2::X
+        } else {
+            IVec2::ZERO
+        };
+
+        if latch.latch != dir {
+            delta.x += dir.x;
+            // Y Direction is inverted in menu logic
+            delta.y += dir.y;
+            Some(delta)
+        } else {
+            None
+        }
     }
 
     impl GameMenuGrid {
@@ -130,10 +161,15 @@ pub mod menu_navigation {
         }
     }
 
-    #[derive(Component, Clone)]
+    #[derive(Component, Clone, Reflect)]
     pub struct GameMenuController {
         /// The Vec of players that can control the Game Menu
         pub players: HashSet<Player>,
+    }
+
+    #[derive(Component, Clone, Default)]
+    pub struct GameMenuLatch {
+        pub latch: IVec2,
     }
 
     pub fn handle_menu_cursor_navigation(
@@ -142,15 +178,33 @@ pub mod menu_navigation {
             &player::Player,
             &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
         )>,
-        mut menu_query: Query<(&mut GameMenuGrid, &GameMenuController), With<ActiveMenu>>,
+        mut menu_query: Query<
+            (
+                &mut GameMenuGrid,
+                &GameMenuController,
+                Option<&mut GameMenuLatch>,
+            ),
+            With<ActiveMenu>,
+        >,
     ) {
         for (player, input_action_state) in input_query {
-            for (mut game_menu, controller) in menu_query.iter_mut() {
+            for (mut game_menu, controller, menu_latch) in menu_query.iter_mut() {
                 if !controller.players.contains(player) {
                     continue;
                 }
 
                 let mut delta = MenuVec::default();
+
+                if let Some(mut menu_latch) = menu_latch
+                    && let Some(axis_delta) =
+                        check_latch_on_axis_move(input_action_state, &menu_latch)
+                {
+                    menu_latch.latch = axis_delta;
+                    delta.x += axis_delta.x as i8;
+                    // Y Direction is inverted in menu logic
+                    delta.y -= axis_delta.y as i8;
+                }
+
                 if input_action_state.just_pressed(&player::PlayerInputAction::MoveCursorUp) {
                     delta.y -= 1;
                 }

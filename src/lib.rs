@@ -10,20 +10,23 @@ pub mod combat;
 pub mod enemy;
 pub mod grid;
 pub mod grid_cursor;
+pub mod join_game_menu;
 pub mod main_menu;
 pub mod menu;
 pub mod player;
 pub mod projectile;
+pub mod save_game;
 pub mod unit;
 
 use bevy::prelude::*;
 
 /// The state of the Game
-#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
+#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States, Reflect)]
 pub enum GameState {
     #[default]
     Initializing,
     MainMenu,
+    JoinGame,
     Battle,
     BattleResolution,
 }

@@ -1,7 +1,7 @@
 //! The player module handles player input, controlling units, and moving around the player's cursor.
 //!
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
@@ -9,6 +9,7 @@ use leafwing_input_manager::prelude::*;
 use crate::{
     combat::skills::SkillId,
     grid::GridPosition,
+    save_game::UnitSaveV1,
     unit::{AttackOption, ValidMove},
 };
 
@@ -18,17 +19,21 @@ use crate::{
 pub enum Player {
     One,
     Two,
+    Three,
+    Four,
+    /// This is a catch all player that exists before other players. Meta, I know
+    PrePlayer,
 }
 
 #[derive(Bundle)]
 pub struct PlayerBundle {
     player: Player,
-    input_manager: InputMap<PlayerInputAction>,
+    pub input_manager: InputMap<PlayerInputAction>,
 }
 
 impl PlayerBundle {
     pub fn new(player: Player) -> Self {
-        let input_map = player.get_input_map();
+        let input_map = player.get_keyboard_input_map();
         Self {
             player,
             input_manager: input_map,
@@ -38,10 +43,29 @@ impl PlayerBundle {
 
 /// TODO: Support gamepads
 impl Player {
-    fn get_input_map(&self) -> InputMap<PlayerInputAction> {
+    pub fn get_keyboard_input_map(&self) -> InputMap<PlayerInputAction> {
         match self {
-            Player::One => {
-                let mut input_map = InputMap::new([
+            Player::One => InputMap::new([
+                (PlayerInputAction::MoveCursorUp, KeyCode::KeyW),
+                (PlayerInputAction::MoveCursorDown, KeyCode::KeyS),
+                (PlayerInputAction::MoveCursorLeft, KeyCode::KeyA),
+                (PlayerInputAction::MoveCursorRight, KeyCode::KeyD),
+                (PlayerInputAction::Select, KeyCode::Space),
+                (PlayerInputAction::Deselect, KeyCode::ShiftLeft),
+                (PlayerInputAction::ZoomIn, KeyCode::KeyQ),
+                (PlayerInputAction::ZoomOut, KeyCode::KeyE),
+            ]),
+            Player::Two | Player::Three | Player::Four => InputMap::new([
+                (PlayerInputAction::MoveCursorUp, KeyCode::ArrowUp),
+                (PlayerInputAction::MoveCursorDown, KeyCode::ArrowDown),
+                (PlayerInputAction::MoveCursorLeft, KeyCode::ArrowLeft),
+                (PlayerInputAction::MoveCursorRight, KeyCode::ArrowRight),
+                (PlayerInputAction::Select, KeyCode::Enter),
+                (PlayerInputAction::Deselect, KeyCode::ShiftRight),
+            ]),
+
+            Player::PrePlayer => {
+                let mut base_map = InputMap::new([
                     (PlayerInputAction::MoveCursorUp, KeyCode::KeyW),
                     (PlayerInputAction::MoveCursorDown, KeyCode::KeyS),
                     (PlayerInputAction::MoveCursorLeft, KeyCode::KeyA),
@@ -52,7 +76,7 @@ impl Player {
                     (PlayerInputAction::ZoomOut, KeyCode::KeyE),
                 ]);
 
-                input_map.insert_multiple([
+                base_map.insert_multiple([
                     (PlayerInputAction::MoveCursorUp, GamepadButton::DPadUp),
                     (PlayerInputAction::MoveCursorDown, GamepadButton::DPadDown),
                     (PlayerInputAction::MoveCursorLeft, GamepadButton::DPadLeft),
@@ -61,17 +85,23 @@ impl Player {
                     (PlayerInputAction::Deselect, GamepadButton::East),
                 ]);
 
-                input_map
+                base_map.insert_dual_axis(PlayerInputAction::MoveCursor, GamepadStick::LEFT);
+                base_map
             }
-            Player::Two => InputMap::new([
-                (PlayerInputAction::MoveCursorUp, KeyCode::ArrowUp),
-                (PlayerInputAction::MoveCursorDown, KeyCode::ArrowDown),
-                (PlayerInputAction::MoveCursorLeft, KeyCode::ArrowLeft),
-                (PlayerInputAction::MoveCursorRight, KeyCode::ArrowRight),
-                (PlayerInputAction::Select, KeyCode::Enter),
-                (PlayerInputAction::Deselect, KeyCode::ShiftRight),
-            ]),
         }
+    }
+
+    pub fn get_input_map_with_gamepad(entity: Entity) -> InputMap<PlayerInputAction> {
+        InputMap::new([
+            (PlayerInputAction::MoveCursorUp, GamepadButton::DPadUp),
+            (PlayerInputAction::MoveCursorDown, GamepadButton::DPadDown),
+            (PlayerInputAction::MoveCursorLeft, GamepadButton::DPadLeft),
+            (PlayerInputAction::MoveCursorRight, GamepadButton::DPadRight),
+            (PlayerInputAction::Select, GamepadButton::South),
+            (PlayerInputAction::Deselect, GamepadButton::East),
+        ])
+        .with_gamepad(entity)
+        .with_dual_axis(PlayerInputAction::MoveCursor, GamepadStick::LEFT)
     }
 }
 
@@ -81,6 +111,8 @@ pub enum PlayerInputAction {
     MoveCursorDown,
     MoveCursorLeft,
     MoveCursorRight,
+    #[actionlike(DualAxis)]
+    MoveCursor,
     Select,
     Deselect,
     ZoomIn,
@@ -108,21 +140,8 @@ pub struct PlayerState {
     pub cursor_state: PlayerCursorState,
 }
 
-// TODO: This should be replaced with some system to ask
-// players to join the game by pressing bumpers or something?
-//
-// In general I need to solve my input problem of not having a default handler?
-pub fn spawn_coop_players(mut commands: Commands) {
-    for player in [Player::One, Player::Two] {
-        commands.spawn((
-            Name::new(format!("Player {:?}", player)),
-            PlayerBundle::new(player),
-        ));
-    }
-}
-
 /// I'm not that attached to this yet.
 #[derive(Resource)]
-pub struct RegisteredPlayers {
-    pub players: HashSet<Player>,
+pub struct RegisteredBattlePlayers {
+    pub players: HashMap<Player, UnitSaveV1>,
 }

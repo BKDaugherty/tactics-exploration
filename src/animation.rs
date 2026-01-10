@@ -530,7 +530,7 @@ pub fn update_facing_direction_on_movement(
                 _ => facing_direction.0,
             };
 
-            if (facing_direction.0 != new_direction) {
+            if facing_direction.0 != new_direction {
                 facing_direction.0 = new_direction;
             }
         }
@@ -1150,8 +1150,8 @@ pub mod animation_db {
                     TT_UNIT_ANIMATED_SPRITE_ID,
                     TextureAtlasLayout::from_grid(
                         UVec2::new(tinytactics::FRAME_SIZE_X, tinytactics::FRAME_SIZE_Y),
+                        4,
                         16,
-                        13,
                         None,
                         None,
                     ),

@@ -93,7 +93,7 @@ pub enum UnitMenuAction {
 pub mod battle_menu_ui_definition {
     use std::collections::HashMap;
 
-    use crate::player::RegisteredPlayers;
+    use crate::{menu::menu_navigation::GameMenuLatch, player::RegisteredBattlePlayers};
 
     use super::*;
 
@@ -101,7 +101,7 @@ pub mod battle_menu_ui_definition {
     pub fn battle_ui_setup(
         mut commands: Commands,
         fonts: Res<FontResource>,
-        registered_players: Res<RegisteredPlayers>,
+        registered_players: Res<RegisteredBattlePlayers>,
     ) {
         build_battle_grid_ui(&mut commands, &fonts, &registered_players);
         build_top_ui(&mut commands, &fonts);
@@ -154,7 +154,7 @@ pub mod battle_menu_ui_definition {
     fn build_battle_grid_ui(
         commands: &mut Commands,
         fonts: &FontResource,
-        registered_players: &RegisteredPlayers,
+        registered_players: &RegisteredBattlePlayers,
     ) {
         let top_level_battle_grid_container = commands
             .spawn((
@@ -188,10 +188,10 @@ pub mod battle_menu_ui_definition {
 
         // TODO: Formalize this into some data representation somewhere? Probably dependent on the configuration of players...
         let player_offsets = HashMap::from([(Player::One, (3, 2)), (Player::Two, (3, 4))]);
-        for player in registered_players.players.iter().cloned() {
+        for player in registered_players.players.keys().cloned() {
             let player_offset = player_offsets
                 .get(&player)
-                .expect("Must be a UI value for the player");
+                .expect("Must be a UI value for the player!");
             let player_ui_container = commands
                 .spawn((
                     Name::new("PlayerUiContainer"),
@@ -297,6 +297,7 @@ pub mod battle_menu_ui_definition {
                     ZIndex(1),
                     BoxShadow::new(Color::BLACK, percent(-2), px(0), percent(0), percent(2)),
                     SkillMenu {},
+                    GameMenuLatch::default(),
                 ))
                 .id();
 
@@ -362,6 +363,7 @@ pub mod battle_menu_ui_definition {
                     GameMenuController {
                         players: HashSet::from([player]),
                     },
+                    GameMenuLatch::default(),
                     menu,
                     BattlePlayerUI {},
                     Visibility::Hidden,
@@ -393,6 +395,7 @@ pub mod battle_menu_ui_definition {
                     player,
                     ZIndex(2),
                     SkillsFilteredByCategoryMenu {},
+                    GameMenuLatch::default(),
                 ))
                 .id();
 
@@ -607,7 +610,7 @@ pub mod player_battle_ui_systems {
     /// battle ui system be fairly general.
     #[derive(Component)]
     pub struct NestedDynamicMenu {
-        parent: Entity,
+        pub parent: Entity,
     }
 
     /// If the player has selected a terminal node in the BattleUi, but then clicks back

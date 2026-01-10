@@ -8,7 +8,7 @@ use bevy_common_assets::json::JsonAssetPlugin;
 use crate::{
     GameState,
     animation::{
-        AnimationMarkerMessage, TinytacticsAssets,
+        AnimationMarkerMessage, Direction, TinytacticsAssets,
         animation_db::{AnimationDB, load_animation_data},
         animation_follower_system, animation_tick_system,
         combat::update_facing_direction_on_attack,
@@ -18,7 +18,7 @@ use crate::{
     },
     assets::{
         CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH,
-        sprite_db::build_sprite_db,
+        sprite_db::{SpriteDB, build_sprite_db},
     },
     battle_menu::{
         UI_BACKGROUND,
@@ -45,7 +45,7 @@ use crate::{
         CombatStageComplete, ImpactEvent, attack_execution_despawner, attack_intent_system,
         check_combat_timeline_should_advance, cleanup_vfx_on_animation_complete,
         handle_combat_stage_enter, impact_event_handler, listen_for_combat_conditions,
-        skills::{SkillCategoryId, SkillId, UnitSkills, setup_skill_system},
+        skills::{SkillId, UnitSkills, setup_skill_system},
     },
     enemy::{
         begin_enemy_phase, execute_enemy_action, init_enemy_ai_system, plan_enemy_action,
@@ -53,11 +53,14 @@ use crate::{
     },
     grid::{self, GridManager, GridPosition},
     grid_cursor,
+    join_game_menu::get_sprite_resources_for_job,
     menu::{
-        menu_navigation::{self, ActiveMenu, handle_menu_cursor_navigation, highlight_menu_option},
+        menu_navigation::{
+            self, ActiveMenu, GameMenuLatch, handle_menu_cursor_navigation, highlight_menu_option,
+        },
         ui_consts::NORMAL_MENU_BUTTON_COLOR,
     },
-    player::{self, Player, RegisteredPlayers},
+    player::{self, Player, RegisteredBattlePlayers},
     projectile::{ProjectileArrived, projectile_arrival_system, projectile_bezier_system},
     unit::{
         ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit, UnitActionCompletedMessage,
@@ -448,6 +451,7 @@ pub fn spawn_battle_resolution_ui(
                 players: HashSet::from([Player::One, Player::Two]),
             },
             ActiveMenu {},
+            GameMenuLatch::default(),
         ))
         .id();
 
@@ -571,9 +575,10 @@ use bevy_ecs_tilemap::prelude::*;
 pub fn load_demo_battle_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    registered_players: Res<RegisteredPlayers>,
+    registered_players: Res<RegisteredBattlePlayers>,
     tt_assets: Res<TinytacticsAssets>,
     anim_db: Res<AnimationDB>,
+    sprite_db: Res<SpriteDB>,
 ) {
     let map_handle =
         bevy_ecs_tilemap_example::tiled::TiledMapHandle(asset_server.load(EXAMPLE_MAP_2_PATH));
@@ -612,49 +617,56 @@ pub fn load_demo_battle_scene(
     // Spawn players and player cursors
     let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
-    // TODO: Make Player Positions generic
-    let player_1_grid_pos = GridPosition { x: 0, y: 1 };
-    let player_2_grid_pos = GridPosition { x: 0, y: 5 };
+    let mut valid_player_positions = vec![
+        GridPosition { x: 0, y: 1 },
+        GridPosition { x: 0, y: 2 },
+        GridPosition { x: 0, y: 3 },
+        GridPosition { x: 0, y: 4 },
+        GridPosition { x: 0, y: 5 },
+    ];
+
     let enemy_1_grid_pos = GridPosition { x: 7, y: 3 };
     let enemy_2_grid_pos = GridPosition { x: 4, y: 2 };
     let enemy_3_grid_pos = GridPosition { x: 4, y: 4 };
 
-    // TODO: Make players depend on resource
     load_demo_battle_players(&mut commands, &registered_players);
 
-    spawn_unit(
-        &mut commands,
-        "Brond".to_string(),
-        &tt_assets,
-        &anim_db,
-        player_1_grid_pos,
-        tt_assets.fighter_spritesheet.clone(),
-        tt_assets.iron_axe_spritesheet.clone(),
-        UnitSkills {
-            learned_skills: HashSet::from([SkillId(4), SkillId(3), SkillId(2)]),
-            equipped_skill_categories: Vec::from([SkillCategoryId(1), SkillCategoryId(3)]),
-        },
-        Player::One,
-        PLAYER_TEAM,
-    );
+    for (player, player_unit_info) in registered_players.players.iter() {
+        let Some(position) = valid_player_positions.pop() else {
+            log::warn!("Not enough valid player positions for all registered players!");
+            break;
+        };
 
-    if registered_players.players.len() > 1 {
+        let Ok((image, texture_atlas)) =
+            get_sprite_resources_for_job(&anim_db, &sprite_db, player_unit_info, Direction::NE)
+        else {
+            error!(
+                "Something went wrong while getting the sprite resources for the Unit's save file"
+            );
+            continue;
+        };
+
+        // TODO: Support equipment for a given player!
+        let weapon_sheet = tt_assets.iron_axe_spritesheet.clone();
+
         spawn_unit(
             &mut commands,
-            "Coral".to_string(),
+            player_unit_info.save_file_key.name.to_string(),
             &tt_assets,
-            &anim_db,
-            player_2_grid_pos,
-            tt_assets.mage_spritesheet.clone(),
-            tt_assets.scepter_spritesheet.clone(),
-            UnitSkills {
-                learned_skills: HashSet::from([SkillId(2)]),
-                equipped_skill_categories: Vec::from([SkillCategoryId(1)]),
-            },
-            Player::Two,
+            position,
+            image,
+            texture_atlas,
+            weapon_sheet,
+            player_unit_info.job.base_unit_skills(),
+            *player,
             PLAYER_TEAM,
+            Direction::NE,
         );
 
+        grid_cursor::spawn_cursor(&mut commands, cursor_image.clone(), *player, position);
+    }
+
+    if registered_players.players.len() > 1 {
         spawn_enemy(
             &mut commands,
             "Deege".to_string(),
@@ -667,13 +679,6 @@ pub fn load_demo_battle_scene(
                 equipped_skill_categories: Vec::new(),
             },
             ENEMY_TEAM,
-        );
-
-        grid_cursor::spawn_cursor(
-            &mut commands,
-            cursor_image.clone(),
-            player::Player::Two,
-            player_2_grid_pos,
         );
 
         spawn_enemy(
@@ -705,13 +710,6 @@ pub fn load_demo_battle_scene(
         ENEMY_TEAM,
     );
 
-    grid_cursor::spawn_cursor(
-        &mut commands,
-        cursor_image.clone(),
-        player::Player::One,
-        player_1_grid_pos,
-    );
-
     // Spawn Obstacles
     let obstacle_locations = [
         (GridPosition { x: 2, y: 0 }, ObstacleSprite::Bush),
@@ -729,12 +727,10 @@ pub fn load_demo_battle_scene(
     }
 }
 
-// TODO: This should be based on how many players have joined game,
-// and likely should happen on some form of Player Join Screen
-fn load_demo_battle_players(commands: &mut Commands, players: &RegisteredPlayers) {
+fn load_demo_battle_players(commands: &mut Commands, players: &RegisteredBattlePlayers) {
     let mut player_game_state_map = HashMap::new();
 
-    for player in &players.players {
+    for player in players.players.keys() {
         player_game_state_map.insert(*player, player::PlayerState::default());
     }
 
