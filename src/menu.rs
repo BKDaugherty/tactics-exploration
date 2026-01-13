@@ -20,6 +20,7 @@ pub mod menu_navigation {
     use leafwing_input_manager::prelude::ActionState;
 
     use crate::{
+        assets::sounds::{UiSound, UiSoundResource},
         menu::ui_consts::{FOCUSED_BORDER_BUTTON_COLOR, NORMAL_MENU_BUTTON_COLOR},
         player::{self, Player},
     };
@@ -90,7 +91,8 @@ pub mod menu_navigation {
             }
         }
 
-        pub fn apply_menu_vec_to_cursor(&mut self, menu_vec: MenuVec) {
+        /// Returns true if the MenuVec resulted in a change to the original position
+        pub fn apply_menu_vec_to_cursor(&mut self, menu_vec: MenuVec) -> bool {
             let mut x = self.active_position.x as i8 + menu_vec.x;
             let mut y = self.active_position.y as i8 + menu_vec.y;
 
@@ -108,7 +110,7 @@ pub mod menu_navigation {
             // Let's err instead cause I'm a coward.
             let Some(height_new) = height_new else {
                 error!("No registered height for destination. Skipping application of MenuVec");
-                return;
+                return false;
             };
 
             if y > *height_new as i8 {
@@ -117,10 +119,14 @@ pub mod menu_navigation {
                 y = *height_new as i8;
             }
 
-            self.active_position = MenuGridPosition {
+            let new_pos = MenuGridPosition {
                 x: x as u8,
                 y: y as u8,
             };
+
+            let changed = self.active_position != new_pos;
+            self.active_position = new_pos;
+            changed
         }
 
         pub fn get_active_menu_option(&self) -> Option<&Entity> {
@@ -174,6 +180,7 @@ pub mod menu_navigation {
 
     pub fn handle_menu_cursor_navigation(
         mut commands: Commands,
+        sounds: Res<UiSoundResource>,
         input_query: Query<(
             &player::Player,
             &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
@@ -213,12 +220,22 @@ pub mod menu_navigation {
                 }
 
                 if delta != MenuVec::default() {
-                    game_menu.apply_menu_vec_to_cursor(delta);
+                    let changed = game_menu.apply_menu_vec_to_cursor(delta);
+                    if changed {
+                        commands.spawn((
+                            AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
+                            PlaybackSettings::DESPAWN,
+                        ));
+                    }
                 }
 
                 if input_action_state.just_pressed(&player::PlayerInputAction::Select)
                     && let Some(entity) = game_menu.get_active_menu_option()
                 {
+                    commands.spawn((
+                        AudioPlayer::new(sounds.get_sound(UiSound::Select)),
+                        PlaybackSettings::DESPAWN,
+                    ));
                     click_entity_with_fake_mouse(&mut commands, *entity);
                 }
             }
