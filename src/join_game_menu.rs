@@ -13,7 +13,10 @@ use crate::{
             registered_sprite_ids::TT_UNIT_ANIMATED_SPRITE_ID,
         },
     },
-    assets::sprite_db::SpriteDB,
+    assets::{
+        sounds::{UiSound, UiSoundResource},
+        sprite_db::SpriteDB,
+    },
     battle_menu::player_battle_ui_systems::NestedDynamicMenu,
     menu::menu_navigation::{
         ActiveMenu, GameMenuController, GameMenuGrid, GameMenuLatch, check_latch_on_axis_move,
@@ -470,6 +473,7 @@ pub struct JoinedPlayerSpecificInputManager;
 fn wait_for_joining_player(
     mut commands: Commands,
     mut joined_players: ResMut<JoinedPlayers>,
+    sounds: Res<UiSoundResource>,
     gamepads: Query<(Entity, &Gamepad)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     players_ui_container: Single<Entity, With<PlayersUIContainer>>,
@@ -493,6 +497,11 @@ fn wait_for_joining_player(
                 PlayerController::Gamepad(gamepad_entity),
             ) {
                 error!("Failed to add player: {:?}", e);
+            } else {
+                commands.spawn((
+                    AudioPlayer::new(sounds.get_sound(UiSound::OpenMenu)),
+                    PlaybackSettings::DESPAWN,
+                ));
             }
         }
     }
@@ -562,6 +571,7 @@ fn handle_button_commands(
     sprite_db: Res<SpriteDB>,
     mut registered_players: ResMut<RegisteredBattlePlayers>,
     mut next_state: ResMut<NextState<GameState>>,
+    sounds: Res<UiSoundResource>,
 ) {
     for (player, controlled_ui_block, action_state) in input_query {
         for (menu_e, controller, menu, nested) in query {
@@ -749,6 +759,11 @@ fn handle_button_commands(
                     // TODO: This leaves some dangling menus!
                     commands.entity(menu_e).remove::<ActiveMenu>();
                     commands.entity(parent).insert(ActiveMenu {});
+
+                    commands.spawn((
+                        AudioPlayer::new(sounds.get_sound(UiSound::Cancel)),
+                        PlaybackSettings::DESPAWN,
+                    ));
                 } else {
                     // Despawn the players UI
                     commands.entity(controlled_ui_block.entity).despawn();
@@ -756,6 +771,11 @@ fn handle_button_commands(
                     if let Some(t) = joined_players.0.remove(player) {
                         commands.entity(t.input_entity).despawn();
                     }
+
+                    commands.spawn((
+                        AudioPlayer::new(sounds.get_sound(UiSound::CloseMenu)),
+                        PlaybackSettings::DESPAWN,
+                    ));
                 }
             }
         }
@@ -1086,6 +1106,7 @@ fn display_job_info_horizontal_selector(
 }
 
 fn handle_unload_unit(
+    mut commands: Commands,
     mut state: ResMut<JoinedPlayers>,
     input_query: Query<(
         &player::Player,
@@ -1099,6 +1120,7 @@ fn handle_unload_unit(
             Without<JoinGameMenuPlayerReady>,
         ),
     >,
+    sounds: Res<UiSoundResource>,
 ) {
     for controller in ui {
         for (player, input) in input_query {
@@ -1115,6 +1137,11 @@ fn handle_unload_unit(
                     );
                     player_data.unit_state = LoadedUnitState::NoUnit;
                 }
+
+                commands.spawn((
+                    AudioPlayer::new(sounds.get_sound(UiSound::Cancel)),
+                    PlaybackSettings::DESPAWN,
+                ));
             }
         }
     }
@@ -1180,6 +1207,8 @@ fn display_colors_for_horizontal_selector(
 /// TODO: I feel like I'm abusing the GameMenuGrid a bit here and this
 /// feels really inefficient
 fn handle_horizontal_selection<T: Send + Sync + 'static>(
+    mut commands: Commands,
+    sounds: Res<UiSoundResource>,
     query: Query<(&GameMenuController, &GameMenuGrid, &GameMenuLatch), With<ActiveMenu>>,
     // I could put the latch here and then just have one system be in charge of updating the latch,
     // and others could read it?
@@ -1205,18 +1234,34 @@ fn handle_horizontal_selection<T: Send + Sync + 'static>(
             // Don't update the latch here, as menu_cursor_navigation owns the latch
             if let Some(dir) = check_latch_on_axis_move(action_state, latch) {
                 if dir == IVec2::X {
-                    hort_selector.apply_index(HortDirection::East)
+                    hort_selector.apply_index(HortDirection::East);
+                    commands.spawn((
+                        AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
+                        PlaybackSettings::DESPAWN,
+                    ));
                 } else if dir == -IVec2::X {
-                    hort_selector.apply_index(HortDirection::West)
+                    hort_selector.apply_index(HortDirection::West);
+                    commands.spawn((
+                        AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
+                        PlaybackSettings::DESPAWN,
+                    ));
                 }
             }
 
             if action_state.just_pressed(&player::PlayerInputAction::MoveCursorLeft) {
                 hort_selector.apply_index(HortDirection::West);
+                commands.spawn((
+                    AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
+                    PlaybackSettings::DESPAWN,
+                ));
             }
 
             if action_state.just_pressed(&player::PlayerInputAction::MoveCursorRight) {
                 hort_selector.apply_index(HortDirection::East);
+                commands.spawn((
+                    AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
+                    PlaybackSettings::DESPAWN,
+                ));
             }
         }
     }

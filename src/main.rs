@@ -8,6 +8,7 @@ use tactics_exploration::GameState;
 use tactics_exploration::animation::animation_db::load_animation_data;
 use tactics_exploration::args::Cli;
 use tactics_exploration::assets::setup_fonts;
+use tactics_exploration::assets::sounds::setup_sounds;
 use tactics_exploration::assets::sprite_db::build_sprite_db;
 use tactics_exploration::battle::{battle_plugin, god_mode_plugin};
 use tactics_exploration::camera::setup_camera;
@@ -31,6 +32,7 @@ fn main() {
             Startup,
             (
                 setup_camera,
+                setup_sounds,
                 boot_game,
                 setup_fonts,
                 load_animation_data,

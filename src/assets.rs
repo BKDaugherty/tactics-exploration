@@ -126,3 +126,79 @@ pub mod sprite_db {
         commands.insert_resource(db);
     }
 }
+
+pub mod sounds {
+    use std::collections::HashMap;
+
+    use anyhow::Context;
+    use bevy::prelude::*;
+
+    use crate::assets::sounds::jdsherbert_pixel_ui_sfx::{
+        CANCEL_SOUND_PATH, CLOSE_MENU_PATH, ERROR_SOUND_PATH, MOVE_CURSOR_SOUND_PATH,
+        OPEN_MENU_PATH, SELECT_SOUND_PATH,
+    };
+
+    /// JD Sherbert holding down the fort on these ui sounds
+    pub mod jdsherbert_pixel_ui_sfx {
+        pub const OPEN_MENU_PATH: &str = "sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert - Pixel UI SFX Pack - Popup Open 1 (Sine).ogg";
+        pub const CLOSE_MENU_PATH: &str = "sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert - Pixel UI SFX Pack - Popup Close 1 (Sine).ogg";
+        pub const SELECT_SOUND_PATH: &str = "sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert - Pixel UI SFX Pack - Select 2 (Sine).ogg";
+        pub const CANCEL_SOUND_PATH: &str = CLOSE_MENU_PATH;
+        pub const ERROR_SOUND_PATH: &str = "sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert - Pixel UI SFX Pack - Error 1 (Sine).ogg";
+        pub const MOVE_CURSOR_SOUND_PATH: &str = "sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert - Pixel UI SFX Pack - Cursor 2 (Sine).ogg";
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
+    pub enum UiSound {
+        OpenMenu,
+        CloseMenu,
+        Select,
+        Cancel,
+        Error,
+        MoveCursor,
+    }
+
+    #[derive(Resource)]
+    /// Resource holding all of our UI SFX
+    pub struct UiSoundResource {
+        map: HashMap<UiSound, Handle<AudioSource>>,
+    }
+
+    impl UiSoundResource {
+        pub fn initialize(asset_server: &AssetServer) -> Self {
+            Self {
+                map: HashMap::from([
+                    (UiSound::OpenMenu, asset_server.load(OPEN_MENU_PATH)),
+                    (UiSound::CloseMenu, asset_server.load(CLOSE_MENU_PATH)),
+                    (UiSound::Select, asset_server.load(SELECT_SOUND_PATH)),
+                    (UiSound::Cancel, asset_server.load(CANCEL_SOUND_PATH)),
+                    (UiSound::Error, asset_server.load(ERROR_SOUND_PATH)),
+                    (
+                        UiSound::MoveCursor,
+                        asset_server.load(MOVE_CURSOR_SOUND_PATH),
+                    ),
+                ]),
+            }
+        }
+
+        /// Back at it again with they dynamic, but static set of resources
+        ///
+        /// Same choice here.
+        pub fn get_sound(&self, sound: UiSound) -> Handle<AudioSource> {
+            self.map
+                .get(&sound)
+                .cloned()
+                .with_context(|| {
+                    format!(
+                        "Why do we have an enum for a sound if it doesn't exist: {:?}",
+                        sound
+                    )
+                })
+                .unwrap()
+        }
+    }
+
+    pub fn setup_sounds(mut commands: Commands, asset_server: Res<AssetServer>) {
+        commands.insert_resource(UiSoundResource::initialize(&asset_server));
+    }
+}

@@ -4,7 +4,10 @@ use bevy::{input_focus::InputDispatchPlugin, prelude::*};
 
 use crate::{
     GameState,
-    assets::FontResource,
+    assets::{
+        FontResource,
+        sounds::{UiSound, UiSoundResource},
+    },
     menu::{
         menu_navigation::{
             self, ActiveMenu, GameMenuLatch, handle_menu_cursor_navigation, highlight_menu_option,
@@ -150,12 +153,19 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
 
 fn main_menu_action(
     mut click: On<Pointer<Click>>,
+    mut commands: Commands,
     menu_button: Query<&MainMenuButtonAction, With<Button>>,
+    sounds: Res<UiSoundResource>,
     mut app_exit_writer: MessageWriter<AppExit>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     let button_entity = click.entity;
     if let Ok(menu_button_action) = menu_button.get(button_entity) {
+        commands.spawn((
+            AudioPlayer::new(sounds.get_sound(UiSound::Select)),
+            PlaybackSettings::DESPAWN,
+        ));
+
         click.propagate(false);
         match menu_button_action {
             MainMenuButtonAction::Quit => {
