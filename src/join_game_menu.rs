@@ -44,13 +44,13 @@ pub fn join_game_plugin(app: &mut App) {
                 highlight_menu_option,
                 wait_for_joining_player,
                 show_the_active_player_game_menu_only,
+                handle_unload_unit,
                 handle_button_commands,
                 handle_horizontal_selection::<UnitJob>,
                 handle_horizontal_selection::<SaveFileColor>,
                 display_job_info_horizontal_selector,
                 display_colors_for_horizontal_selector,
                 handle_deselect_join_game_ready,
-                handle_unload_unit,
             )
                 .run_if(in_state(GameState::JoinGame)),
         )
@@ -720,17 +720,17 @@ fn handle_button_commands(
                         commands.entity(menu_e).remove::<ActiveMenu>();
                         commands.entity(menu_e).insert(JoinGameMenuPlayerReady);
 
-                        if let Some(t) = registered_players
-                            .players
-                            .insert(*player, save_info.clone())
-                        {
-                            error!("Whoa, player was somehow already registered??: {:?}", t);
-                        }
+                        let Some(player_state) = joined_players.0.get_mut(player) else {
+                            error!("No player state for registered player: {:?}", player);
+                            continue;
+                        };
+
+                        player_state.unit_state = LoadedUnitState::ReadyUnit(save_info.clone());
 
                         if joined_players
                             .0
                             .values()
-                            .all(|t| matches!(t.unit_state, LoadedUnitState::LoadedUnit(..)))
+                            .all(|t| matches!(t.unit_state, LoadedUnitState::ReadyUnit(..)))
                         {
                             for (k, value) in &joined_players.0 {
                                 if let LoadedUnitState::ReadyUnit(t) = &value.unit_state {
@@ -764,7 +764,7 @@ fn handle_button_commands(
 
 fn handle_deselect_join_game_ready(
     mut commands: Commands,
-    mut registered_battle_players: ResMut<RegisteredBattlePlayers>,
+    mut joined_players: ResMut<JoinedPlayers>,
     query: Query<(Entity, &GameMenuController), With<JoinGameMenuPlayerReady>>,
     input_query: Query<(
         &player::Player,
@@ -778,7 +778,22 @@ fn handle_deselect_join_game_ready(
             }
 
             if action_state.just_pressed(&player::PlayerInputAction::Deselect) {
-                registered_battle_players.players.remove(player);
+                let Some(t) = joined_players.0.get_mut(player) else {
+                    error!("No player data for {:?}", player);
+                    continue;
+                };
+
+                // Runtime state invariants are bad :(
+                let LoadedUnitState::ReadyUnit(unit) = &t.unit_state else {
+                    error!(
+                        "UnitState invalid during DeselectJoinGameReady: {:?}",
+                        t.unit_state
+                    );
+                    continue;
+                };
+
+                t.unit_state = LoadedUnitState::LoadedUnit(unit.clone());
+
                 commands
                     .entity(e)
                     .insert(ActiveMenu {})
@@ -1076,7 +1091,14 @@ fn handle_unload_unit(
         &player::Player,
         &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
     )>,
-    ui: Query<&GameMenuController, (With<UnitPreviewScreen>, Without<JoinGameMenuPlayerReady>)>,
+    ui: Query<
+        &GameMenuController,
+        (
+            With<UnitPreviewScreen>,
+            With<ActiveMenu>,
+            Without<JoinGameMenuPlayerReady>,
+        ),
+    >,
 ) {
     for controller in ui {
         for (player, input) in input_query {
