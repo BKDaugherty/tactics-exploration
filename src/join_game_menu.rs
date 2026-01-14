@@ -14,7 +14,7 @@ use crate::{
         },
     },
     assets::{
-        sounds::{UiSound, UiSoundResource},
+        sounds::{SoundManager, UiSound},
         sprite_db::SpriteDB,
     },
     battle_menu::player_battle_ui_systems::NestedDynamicMenu,
@@ -473,7 +473,7 @@ pub struct JoinedPlayerSpecificInputManager;
 fn wait_for_joining_player(
     mut commands: Commands,
     mut joined_players: ResMut<JoinedPlayers>,
-    sounds: Res<UiSoundResource>,
+    sounds: Res<SoundManager>,
     gamepads: Query<(Entity, &Gamepad)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     players_ui_container: Single<Entity, With<PlayersUIContainer>>,
@@ -498,10 +498,7 @@ fn wait_for_joining_player(
             ) {
                 error!("Failed to add player: {:?}", e);
             } else {
-                commands.spawn((
-                    AudioPlayer::new(sounds.get_sound(UiSound::OpenMenu)),
-                    PlaybackSettings::DESPAWN,
-                ));
+                sounds.play_sound(&mut commands, UiSound::OpenMenu);
             }
         }
     }
@@ -571,7 +568,7 @@ fn handle_button_commands(
     sprite_db: Res<SpriteDB>,
     mut registered_players: ResMut<RegisteredBattlePlayers>,
     mut next_state: ResMut<NextState<GameState>>,
-    sounds: Res<UiSoundResource>,
+    sounds: Res<SoundManager>,
 ) {
     for (player, controlled_ui_block, action_state) in input_query {
         for (menu_e, controller, menu, nested) in query {
@@ -760,10 +757,7 @@ fn handle_button_commands(
                     commands.entity(menu_e).remove::<ActiveMenu>();
                     commands.entity(parent).insert(ActiveMenu {});
 
-                    commands.spawn((
-                        AudioPlayer::new(sounds.get_sound(UiSound::Cancel)),
-                        PlaybackSettings::DESPAWN,
-                    ));
+                    sounds.play_sound(&mut commands, UiSound::Cancel);
                 } else {
                     // Despawn the players UI
                     commands.entity(controlled_ui_block.entity).despawn();
@@ -772,10 +766,7 @@ fn handle_button_commands(
                         commands.entity(t.input_entity).despawn();
                     }
 
-                    commands.spawn((
-                        AudioPlayer::new(sounds.get_sound(UiSound::CloseMenu)),
-                        PlaybackSettings::DESPAWN,
-                    ));
+                    sounds.play_sound(&mut commands, UiSound::CloseMenu);
                 }
             }
         }
@@ -1120,7 +1111,7 @@ fn handle_unload_unit(
             Without<JoinGameMenuPlayerReady>,
         ),
     >,
-    sounds: Res<UiSoundResource>,
+    sounds: Res<SoundManager>,
 ) {
     for controller in ui {
         for (player, input) in input_query {
@@ -1138,10 +1129,7 @@ fn handle_unload_unit(
                     player_data.unit_state = LoadedUnitState::NoUnit;
                 }
 
-                commands.spawn((
-                    AudioPlayer::new(sounds.get_sound(UiSound::Cancel)),
-                    PlaybackSettings::DESPAWN,
-                ));
+                sounds.play_sound(&mut commands, UiSound::Cancel);
             }
         }
     }
@@ -1208,7 +1196,7 @@ fn display_colors_for_horizontal_selector(
 /// feels really inefficient
 fn handle_horizontal_selection<T: Send + Sync + 'static>(
     mut commands: Commands,
-    sounds: Res<UiSoundResource>,
+    sounds: Res<SoundManager>,
     query: Query<(&GameMenuController, &GameMenuGrid, &GameMenuLatch), With<ActiveMenu>>,
     // I could put the latch here and then just have one system be in charge of updating the latch,
     // and others could read it?
@@ -1235,33 +1223,21 @@ fn handle_horizontal_selection<T: Send + Sync + 'static>(
             if let Some(dir) = check_latch_on_axis_move(action_state, latch) {
                 if dir == IVec2::X {
                     hort_selector.apply_index(HortDirection::East);
-                    commands.spawn((
-                        AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
-                        PlaybackSettings::DESPAWN,
-                    ));
+                    sounds.play_sound(&mut commands, UiSound::MoveCursor);
                 } else if dir == -IVec2::X {
                     hort_selector.apply_index(HortDirection::West);
-                    commands.spawn((
-                        AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
-                        PlaybackSettings::DESPAWN,
-                    ));
+                    sounds.play_sound(&mut commands, UiSound::MoveCursor);
                 }
             }
 
             if action_state.just_pressed(&player::PlayerInputAction::MoveCursorLeft) {
                 hort_selector.apply_index(HortDirection::West);
-                commands.spawn((
-                    AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
-                    PlaybackSettings::DESPAWN,
-                ));
+                sounds.play_sound(&mut commands, UiSound::MoveCursor);
             }
 
             if action_state.just_pressed(&player::PlayerInputAction::MoveCursorRight) {
                 hort_selector.apply_index(HortDirection::East);
-                commands.spawn((
-                    AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
-                    PlaybackSettings::DESPAWN,
-                ));
+                sounds.play_sound(&mut commands, UiSound::MoveCursor);
             }
         }
     }

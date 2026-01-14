@@ -20,7 +20,7 @@ pub mod menu_navigation {
     use leafwing_input_manager::prelude::ActionState;
 
     use crate::{
-        assets::sounds::{UiSound, UiSoundResource},
+        assets::sounds::{SoundManager, UiSound},
         menu::ui_consts::{FOCUSED_BORDER_BUTTON_COLOR, NORMAL_MENU_BUTTON_COLOR},
         player::{self, Player},
     };
@@ -180,7 +180,7 @@ pub mod menu_navigation {
 
     pub fn handle_menu_cursor_navigation(
         mut commands: Commands,
-        sounds: Res<UiSoundResource>,
+        sounds: Res<SoundManager>,
         input_query: Query<(
             &player::Player,
             &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
@@ -222,20 +222,14 @@ pub mod menu_navigation {
                 if delta != MenuVec::default() {
                     let changed = game_menu.apply_menu_vec_to_cursor(delta);
                     if changed {
-                        commands.spawn((
-                            AudioPlayer::new(sounds.get_sound(UiSound::MoveCursor)),
-                            PlaybackSettings::DESPAWN,
-                        ));
+                        sounds.play_sound(&mut commands, UiSound::MoveCursor);
                     }
                 }
 
                 if input_action_state.just_pressed(&player::PlayerInputAction::Select)
                     && let Some(entity) = game_menu.get_active_menu_option()
                 {
-                    commands.spawn((
-                        AudioPlayer::new(sounds.get_sound(UiSound::Select)),
-                        PlaybackSettings::DESPAWN,
-                    ));
+                    sounds.play_sound(&mut commands, UiSound::Select);
                     click_entity_with_fake_mouse(&mut commands, *entity);
                 }
             }

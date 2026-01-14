@@ -133,9 +133,12 @@ pub mod sounds {
     use anyhow::Context;
     use bevy::prelude::*;
 
-    use crate::assets::sounds::jdsherbert_pixel_ui_sfx::{
-        CANCEL_SOUND_PATH, CLOSE_MENU_PATH, ERROR_SOUND_PATH, MOVE_CURSOR_SOUND_PATH,
-        OPEN_MENU_PATH, SELECT_SOUND_PATH,
+    use crate::assets::sounds::{
+        jdsherbert_pixel_ui_sfx::{
+            CANCEL_SOUND_PATH, CLOSE_MENU_PATH, ERROR_SOUND_PATH, MOVE_CURSOR_SOUND_PATH,
+            OPEN_MENU_PATH, SELECT_SOUND_PATH,
+        },
+        music::BATTLE_MUSIC_PATH,
     };
 
     /// JD Sherbert holding down the fort on these ui sounds
@@ -148,6 +151,15 @@ pub mod sounds {
         pub const MOVE_CURSOR_SOUND_PATH: &str = "sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert - Pixel UI SFX Pack - Cursor 2 (Sine).ogg";
     }
 
+    pub mod music {
+        pub const BATTLE_MUSIC_PATH: &str = "sound_assets/music/BattleMusic.ogg";
+    }
+
+    #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+    pub enum Music {
+        BattleMusic,
+    }
+
     #[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
     pub enum UiSound {
         OpenMenu,
@@ -158,16 +170,24 @@ pub mod sounds {
         MoveCursor,
     }
 
-    #[derive(Resource)]
-    /// Resource holding all of our UI SFX
-    pub struct UiSoundResource {
-        map: HashMap<UiSound, Handle<AudioSource>>,
+    pub struct SoundSettings {
+        music_volume: f32,
     }
 
-    impl UiSoundResource {
+    #[derive(Resource)]
+    /// Resource holding all of our UI SFX
+    pub struct SoundManager {
+        ui_sounds: HashMap<UiSound, Handle<AudioSource>>,
+        music: HashMap<Music, Handle<AudioSource>>,
+    }
+
+    #[derive(Component)]
+    pub struct BackgroundMusicPlayer;
+
+    impl SoundManager {
         pub fn initialize(asset_server: &AssetServer) -> Self {
             Self {
-                map: HashMap::from([
+                ui_sounds: HashMap::from([
                     (UiSound::OpenMenu, asset_server.load(OPEN_MENU_PATH)),
                     (UiSound::CloseMenu, asset_server.load(CLOSE_MENU_PATH)),
                     (UiSound::Select, asset_server.load(SELECT_SOUND_PATH)),
@@ -178,6 +198,7 @@ pub mod sounds {
                         asset_server.load(MOVE_CURSOR_SOUND_PATH),
                     ),
                 ]),
+                music: HashMap::from([(Music::BattleMusic, asset_server.load(BATTLE_MUSIC_PATH))]),
             }
         }
 
@@ -185,7 +206,7 @@ pub mod sounds {
         ///
         /// Same choice here.
         pub fn get_sound(&self, sound: UiSound) -> Handle<AudioSource> {
-            self.map
+            self.ui_sounds
                 .get(&sound)
                 .cloned()
                 .with_context(|| {
@@ -196,9 +217,37 @@ pub mod sounds {
                 })
                 .unwrap()
         }
+
+        pub fn get_music(&self, music: Music) -> Handle<AudioSource> {
+            self.music
+                .get(&music)
+                .cloned()
+                .with_context(|| {
+                    format!(
+                        "Why do we have an enum for music if it doesn't exist: {:?}",
+                        music
+                    )
+                })
+                .unwrap()
+        }
+
+        pub fn play_sound(&self, commands: &mut Commands, sound: UiSound) {
+            commands.spawn((
+                AudioPlayer::new(self.get_sound(sound)),
+                PlaybackSettings::DESPAWN,
+            ));
+        }
+
+        pub fn start_music(&self, commands: &mut Commands, music: Music) {
+            commands.spawn((
+                AudioPlayer::new(self.get_music(music)),
+                PlaybackSettings::LOOP,
+                BackgroundMusicPlayer,
+            ));
+        }
     }
 
     pub fn setup_sounds(mut commands: Commands, asset_server: Res<AssetServer>) {
-        commands.insert_resource(UiSoundResource::initialize(&asset_server));
+        commands.insert_resource(SoundManager::initialize(&asset_server));
     }
 }
