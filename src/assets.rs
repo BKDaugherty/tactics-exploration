@@ -131,7 +131,7 @@ pub mod sounds {
     use std::collections::HashMap;
 
     use anyhow::Context;
-    use bevy::{audio::Volume, prelude::*};
+    use bevy::{audio::Volume, ecs::system::SystemParam, prelude::*};
 
     use crate::assets::sounds::{
         jdsherbert_pixel_ui_sfx::{
@@ -289,6 +289,18 @@ pub mod sounds {
             sink.set_volume(Volume::Linear(
                 (sound_settings.global_volume * sound_settings.music_volume) as f32,
             ));
+        }
+    }
+
+    #[derive(SystemParam)]
+    pub struct SoundManagerParam<'w> {
+        settings: Res<'w, SoundSettings>,
+        manager: Res<'w, SoundManager>,
+    }
+
+    impl<'s> SoundManagerParam<'s> {
+        pub fn play_sound(&self, commands: &mut Commands, sound: UiSound) {
+            self.manager.play_sound(commands, &self.settings, sound);
         }
     }
 }
