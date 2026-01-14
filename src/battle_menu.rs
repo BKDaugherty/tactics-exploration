@@ -592,6 +592,7 @@ pub mod player_info_ui_systems {
 pub mod player_battle_ui_systems {
 
     use crate::{
+        assets::sounds::{SoundManagerParam, UiSound},
         combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills},
         menu::NestedDynamicMenu,
     };
@@ -810,6 +811,7 @@ pub mod player_battle_ui_systems {
         >,
         unit_skills_query: Query<&UnitSkills>,
         mut battle_command_writer: MessageWriter<UnitUiCommandMessage>,
+        sounds: SoundManagerParam,
     ) {
         for (player, input_actions) in player_input_query.iter() {
             let Some((battle_menu_e, battle_menu, menu, controller, mut visibility, nested)) =
@@ -832,6 +834,8 @@ pub mod player_battle_ui_systems {
                     warn!("Somehow le gamer clicked a button that doesn't have a menu option");
                     continue;
                 };
+
+                sounds.play_sound(&mut commands, UiSound::Select);
 
                 // Spawn a ChildMenu with Menu Options? Set that as the ActiveMenu with a Reference for this Player?
                 // So then a Cancel goes back to
@@ -963,10 +967,12 @@ pub mod player_battle_ui_systems {
                 }
             } else if input_actions.just_pressed(&PlayerInputAction::Deselect) {
                 if let Some(dynamic_menu) = nested {
+                    sounds.play_sound(&mut commands, UiSound::Cancel);
                     let parent = dynamic_menu.parent;
                     clean_stale_menu(&mut commands, battle_menu_e, &mut visibility);
                     commands.entity(parent).insert(ActiveMenu {});
                 } else {
+                    sounds.play_sound(&mut commands, UiSound::CloseMenu);
                     // Turn off the Battle Menu, and unlock the unit's cursor
                     battle_command_writer.write(UnitUiCommandMessage {
                         player: *player,

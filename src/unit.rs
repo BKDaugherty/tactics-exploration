@@ -10,6 +10,7 @@ use crate::animation::{
     AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKind,
     UnitAnimationPlayer,
 };
+use crate::assets::sounds::{SoundManagerParam, UiSound};
 use crate::battle::{
     BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
 };
@@ -833,6 +834,7 @@ pub fn handle_unit_cursor_actions(
     mut unit_selection_message: MessageWriter<UnitSelectionMessage>,
     mut unit_selection_back_message: MessageWriter<UnitSelectionBackMessage>,
     mut execute_action_writer: MessageWriter<UnitExecuteActionMessage>,
+    sounds: SoundManagerParam,
 ) {
     for (player, action_state) in player_query.iter() {
         for (cursor_entity, cursor_player, mut cursor_grid_pos) in cursor_query.iter_mut() {
@@ -871,8 +873,10 @@ pub fn handle_unit_cursor_actions(
                         });
 
                         commands.entity(cursor_entity).insert(LockedOn {});
+                        sounds.play_sound(&mut commands, UiSound::OpenMenu);
                     }
                     UnitMovementSelection::NoPlayerUnitOnTile => {
+                        sounds.play_sound(&mut commands, UiSound::Error);
                         warn!("Selected tile with no player unit");
                     }
                 }
@@ -888,6 +892,7 @@ pub fn handle_unit_cursor_actions(
                     // TODO: What to do if this changes between start and end of movement?
                     let Some(valid_move) = valid_moves.remove(&cursor_grid_pos) else {
                         log::warn!("Attempting to move to invalid position");
+                        sounds.play_sound(&mut commands, UiSound::Error);
                         continue;
                     };
 
@@ -908,9 +913,11 @@ pub fn handle_unit_cursor_actions(
                             "Cannot move unit to position {:?} because it is occupied",
                             cursor_grid_pos
                         );
+                        sounds.play_sound(&mut commands, UiSound::Error);
                         continue;
                     }
 
+                    sounds.play_sound(&mut commands, UiSound::Select);
                     execute_action_writer.write(UnitExecuteActionMessage {
                         entity: unit_entity,
                         action: UnitExecuteAction::Move(valid_move),
@@ -926,6 +933,8 @@ pub fn handle_unit_cursor_actions(
                     unit_selection_back_message.write(UnitSelectionBackMessage { player: *player });
 
                     commands.entity(cursor_entity).insert(LockedOn {});
+
+                    sounds.play_sound(&mut commands, UiSound::Cancel);
                 }
             } else if let PlayerCursorState::LookingForTargetWithAttack(
                 unit_entity,
@@ -938,6 +947,7 @@ pub fn handle_unit_cursor_actions(
                     // based on state, and then have some other system take over?
                     let Some(valid_move) = valid_attack_moves.remove(&cursor_grid_pos) else {
                         log::warn!("Attempting to attack an invalid position");
+                        sounds.play_sound(&mut commands, UiSound::Error);
                         continue;
                     };
 
@@ -949,6 +959,8 @@ pub fn handle_unit_cursor_actions(
                             skill: skill_id,
                         }),
                     });
+
+                    sounds.play_sound(&mut commands, UiSound::Select);
 
                     end_move(&mut overlay_message_writer, player, player_state);
                 } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
@@ -966,6 +978,8 @@ pub fn handle_unit_cursor_actions(
                     unit_selection_back_message.write(UnitSelectionBackMessage { player: *player });
 
                     commands.entity(cursor_entity).insert(LockedOn {});
+
+                    sounds.play_sound(&mut commands, UiSound::Cancel);
                 }
             }
         }

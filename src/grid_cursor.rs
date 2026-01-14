@@ -1,3 +1,4 @@
+use crate::assets::sounds::{SoundManagerParam, UiSound};
 use crate::battle::BattleEntity;
 use crate::grid;
 use crate::menu::menu_navigation::{GameMenuLatch, check_latch_on_axis_move};
@@ -51,6 +52,7 @@ pub fn spawn_cursor(
 
 /// Translates Input Actions to grid movement for the cursor
 pub fn handle_cursor_movement(
+    mut commands: Commands,
     grid_manager: Res<grid::GridManagerResource>,
     input_query: Query<(
         &player::Player,
@@ -60,6 +62,7 @@ pub fn handle_cursor_movement(
         (&player::Player, &mut grid::GridPosition, &mut GameMenuLatch),
         (With<Cursor>, Without<LockedOn>),
     >,
+    sounds: SoundManagerParam,
 ) {
     for (player, action_state) in input_query.iter() {
         for (cursor_player, mut grid_pos, mut latch) in cursor_query.iter_mut() {
@@ -86,10 +89,23 @@ pub fn handle_cursor_movement(
             if action_state.just_pressed(&player::PlayerInputAction::MoveCursorRight) {
                 delta.x += 1;
             }
-            *grid_pos = grid_manager
+
+            let new_pos = grid_manager
                 .grid_manager
-                .change_position_with_bounds(*grid_pos, delta)
-                .position();
+                .change_position_with_bounds(*grid_pos, delta);
+
+            *grid_pos = new_pos.position();
+
+            if delta != (grid::GridVec { x: 0, y: 0 }) {
+                match new_pos {
+                    grid::GridPositionChangeResult::Moved(..) => {
+                        sounds.play_sound(&mut commands, UiSound::MoveCursor);
+                    }
+                    grid::GridPositionChangeResult::OutOfBounds(..) => {
+                        sounds.play_sound(&mut commands, UiSound::Error);
+                    }
+                }
+            }
         }
     }
 }

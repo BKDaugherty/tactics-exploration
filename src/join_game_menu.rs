@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Context;
-use bevy::prelude::*;
+use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_pkv::PkvStore;
 
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
         },
     },
     assets::{
-        sounds::{SoundManager, SoundSettings, UiSound},
+        sounds::{SoundManager, SoundManagerParam, SoundSettings, UiSound},
         sprite_db::SpriteDB,
     },
     menu::{
@@ -60,7 +60,7 @@ pub fn join_game_plugin(app: &mut App) {
                 wait_for_joining_player,
                 show_active_game_menu_only::<InactiveGameMenuFilter, ActiveGameMenuFilter>,
                 handle_unload_unit,
-                // handle_button_commands, (TODO: Have we run up against the end of bevy lol)
+                handle_button_commands,
                 handle_horizontal_selection::<UnitJob>,
                 handle_horizontal_selection::<SaveFileColor>,
                 display_job_info_horizontal_selector,
@@ -524,6 +524,13 @@ pub struct HasReadyButton {
 #[derive(Component)]
 pub struct ReadyButtonMarker;
 
+pub struct JoinGameButtonEvent {
+    /// The player that pressed the event
+    player: Player,
+    /// The command that was clicked
+    command: UiCommands,
+}
+
 // TODO: This should probably just emit events with the Command tied to this Entity or something
 // and then each system can handle the commands individually?
 fn handle_button_commands(
@@ -554,8 +561,7 @@ fn handle_button_commands(
     sprite_db: Res<SpriteDB>,
     mut registered_players: ResMut<RegisteredBattlePlayers>,
     mut next_state: ResMut<NextState<GameState>>,
-    sounds: Res<SoundManager>,
-    sound_settings: Res<SoundSettings>,
+    sounds: SoundManagerParam,
 ) {
     for (player, controlled_ui_block, action_state) in input_query {
         for (menu_e, controller, menu, nested) in query {
@@ -744,7 +750,7 @@ fn handle_button_commands(
                     commands.entity(menu_e).remove::<ActiveMenu>();
                     commands.entity(parent).insert(ActiveMenu {});
 
-                    sounds.play_sound(&mut commands, &sound_settings, UiSound::Cancel);
+                    sounds.play_sound(&mut commands, UiSound::Cancel);
                 } else {
                     // Despawn the players UI
                     commands.entity(controlled_ui_block.entity).despawn();
@@ -753,7 +759,7 @@ fn handle_button_commands(
                         commands.entity(t.input_entity).despawn();
                     }
 
-                    sounds.play_sound(&mut commands, &sound_settings, UiSound::CloseMenu);
+                    sounds.play_sound(&mut commands, UiSound::CloseMenu);
                 }
             }
         }

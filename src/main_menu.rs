@@ -127,15 +127,15 @@ fn build_settings_menu(
     let button_node = Node {
         width: percent(60),
         height: percent(20),
-        margin: UiRect::all(px(20)),
+        margin: UiRect::all(percent(0.5)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
-        border: UiRect::all(px(4)),
+        border: UiRect::all(percent(0.5)),
         ..default()
     };
 
     let button_text_font = TextFont {
-        font_size: 33.0,
+        font_size: 25.0,
         font: font_resource.fine_fantasy.clone(),
         ..default()
     };
@@ -218,6 +218,8 @@ fn build_settings_menu(
                 display: Display::None,
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
+                width: percent(40),
+                height: percent(85),
                 ..default()
             },
             BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2)),
@@ -227,13 +229,13 @@ fn build_settings_menu(
                 (
                     Text::new("Settings"),
                     TextFont {
-                        font_size: 67.0,
+                        font_size: 40.0,
                         font: font_resource.badge.clone(),
                         ..default()
                     },
                     TextColor(TEXT_COLOR),
                     Node {
-                        margin: UiRect::all(percent(10)),
+                        margin: UiRect::all(percent(7.5)),
                         ..default()
                     },
                 )
