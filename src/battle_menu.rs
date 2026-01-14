@@ -591,7 +591,10 @@ pub mod player_info_ui_systems {
 /// This UI allows the user to pick what they want a unit to do.
 pub mod player_battle_ui_systems {
 
-    use crate::combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills};
+    use crate::{
+        combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills},
+        menu::NestedDynamicMenu,
+    };
 
     use super::*;
 
@@ -601,16 +604,6 @@ pub mod player_battle_ui_systems {
     #[derive(Component, Clone)]
     pub struct ActiveBattleMenu {
         selected_unit: Entity,
-    }
-
-    /// Marker component for whether or not this menu has an open "child" menu.
-    ///
-    /// While our level of nesting in the BattleUI is currently fixed, this
-    /// marker component gives us a way of referencing our parent, and let's things in the
-    /// battle ui system be fairly general.
-    #[derive(Component)]
-    pub struct NestedDynamicMenu {
-        pub parent: Entity,
     }
 
     /// If the player has selected a terminal node in the BattleUi, but then clicks back

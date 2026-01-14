@@ -131,7 +131,7 @@ pub mod sounds {
     use std::collections::HashMap;
 
     use anyhow::Context;
-    use bevy::prelude::*;
+    use bevy::{audio::Volume, prelude::*};
 
     use crate::assets::sounds::{
         jdsherbert_pixel_ui_sfx::{
@@ -170,8 +170,21 @@ pub mod sounds {
         MoveCursor,
     }
 
+    #[derive(Resource, Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct SoundSettings {
-        music_volume: f32,
+        pub global_volume: f64,
+        pub sfx_volume: f64,
+        pub music_volume: f64,
+    }
+
+    impl Default for SoundSettings {
+        fn default() -> Self {
+            Self {
+                global_volume: 1.0,
+                sfx_volume: 1.0,
+                music_volume: 1.0,
+            }
+        }
     }
 
     #[derive(Resource)]
@@ -231,17 +244,31 @@ pub mod sounds {
                 .unwrap()
         }
 
-        pub fn play_sound(&self, commands: &mut Commands, sound: UiSound) {
+        pub fn play_sound(
+            &self,
+            commands: &mut Commands,
+            settings: &SoundSettings,
+            sound: UiSound,
+        ) {
             commands.spawn((
                 AudioPlayer::new(self.get_sound(sound)),
-                PlaybackSettings::DESPAWN,
+                PlaybackSettings::DESPAWN.with_volume(Volume::Linear(
+                    (settings.global_volume * settings.sfx_volume) as f32,
+                )),
             ));
         }
 
-        pub fn start_music(&self, commands: &mut Commands, music: Music) {
+        pub fn start_music(
+            &self,
+            commands: &mut Commands,
+            sound_settings: &SoundSettings,
+            music: Music,
+        ) {
             commands.spawn((
                 AudioPlayer::new(self.get_music(music)),
-                PlaybackSettings::LOOP,
+                PlaybackSettings::LOOP.with_volume(Volume::Linear(
+                    (sound_settings.global_volume * sound_settings.music_volume) as f32,
+                )),
                 BackgroundMusicPlayer,
             ));
         }
@@ -249,5 +276,19 @@ pub mod sounds {
 
     pub fn setup_sounds(mut commands: Commands, asset_server: Res<AssetServer>) {
         commands.insert_resource(SoundManager::initialize(&asset_server));
+    }
+
+    pub fn apply_volume_settings(
+        sound_settings: Res<SoundSettings>,
+        mut global_volume: ResMut<GlobalVolume>,
+        mut audio_query: Query<&mut AudioSink, With<BackgroundMusicPlayer>>,
+    ) {
+        global_volume.volume = Volume::Linear(sound_settings.global_volume as f32);
+
+        for mut sink in audio_query.iter_mut() {
+            sink.set_volume(Volume::Linear(
+                (sound_settings.global_volume * sound_settings.music_volume) as f32,
+            ));
+        }
     }
 }

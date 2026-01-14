@@ -8,7 +8,9 @@ use tactics_exploration::GameState;
 use tactics_exploration::animation::animation_db::load_animation_data;
 use tactics_exploration::args::Cli;
 use tactics_exploration::assets::setup_fonts;
-use tactics_exploration::assets::sounds::{Music, SoundManager, setup_sounds};
+use tactics_exploration::assets::sounds::{
+    Music, SoundManager, SoundSettings, apply_volume_settings, setup_sounds,
+};
 use tactics_exploration::assets::sprite_db::build_sprite_db;
 use tactics_exploration::battle::{battle_plugin, god_mode_plugin};
 use tactics_exploration::camera::setup_camera;
@@ -27,6 +29,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .insert_resource(PkvStore::new("bkdaugherty", "tactics-exploration"))
         .init_persistent_resource::<SaveFiles>()
+        .init_persistent_resource::<SoundSettings>()
         .init_state::<GameState>()
         .add_systems(
             Startup,
@@ -39,6 +42,10 @@ fn main() {
                 build_sprite_db,
                 start_music.after(setup_sounds),
             ),
+        )
+        .add_systems(
+            Update,
+            (apply_volume_settings.run_if(resource_changed::<SoundSettings>),),
         )
         .add_plugins(InputManagerPlugin::<PlayerInputAction>::default())
         .add_plugins(join_game_plugin)
@@ -56,8 +63,12 @@ fn main() {
     runner.run();
 }
 
-fn start_music(mut commands: Commands, sounds: Res<SoundManager>) {
-    sounds.start_music(&mut commands, Music::BattleMusic);
+fn start_music(
+    mut commands: Commands,
+    sounds: Res<SoundManager>,
+    sound_settings: Res<SoundSettings>,
+) {
+    sounds.start_music(&mut commands, &sound_settings, Music::BattleMusic);
 }
 
 fn boot_game(mut commands: Commands, mut game_state: ResMut<NextState<GameState>>) {

@@ -20,7 +20,7 @@ pub mod menu_navigation {
     use leafwing_input_manager::prelude::ActionState;
 
     use crate::{
-        assets::sounds::{SoundManager, UiSound},
+        assets::sounds::{SoundManager, SoundSettings, UiSound},
         menu::ui_consts::{FOCUSED_BORDER_BUTTON_COLOR, NORMAL_MENU_BUTTON_COLOR},
         player::{self, Player},
     };
@@ -181,6 +181,7 @@ pub mod menu_navigation {
     pub fn handle_menu_cursor_navigation(
         mut commands: Commands,
         sounds: Res<SoundManager>,
+        sound_settings: Res<SoundSettings>,
         input_query: Query<(
             &player::Player,
             &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
@@ -222,14 +223,14 @@ pub mod menu_navigation {
                 if delta != MenuVec::default() {
                     let changed = game_menu.apply_menu_vec_to_cursor(delta);
                     if changed {
-                        sounds.play_sound(&mut commands, UiSound::MoveCursor);
+                        sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
                     }
                 }
 
                 if input_action_state.just_pressed(&player::PlayerInputAction::Select)
                     && let Some(entity) = game_menu.get_active_menu_option()
                 {
-                    sounds.play_sound(&mut commands, UiSound::Select);
+                    sounds.play_sound(&mut commands, &sound_settings, UiSound::Select);
                     click_entity_with_fake_mouse(&mut commands, *entity);
                 }
             }
@@ -286,5 +287,188 @@ pub mod menu_navigation {
                 duration: Duration::from_secs_f32(0.1),
             },
         });
+    }
+}
+
+pub mod menu_horizontal_selector {
+    use bevy::prelude::*;
+
+    use crate::{
+        assets::sounds::{SoundManager, SoundSettings, UiSound},
+        menu::menu_navigation::{
+            ActiveMenu, GameMenuController, GameMenuGrid, GameMenuLatch, check_latch_on_axis_move,
+        },
+        player,
+    };
+
+    #[derive(Component)]
+    pub struct HorizontalSelector<T> {
+        options: Vec<T>,
+        current_index: u32,
+    }
+
+    pub enum HortDirection {
+        East,
+        West,
+    }
+
+    impl<T: Clone> HorizontalSelector<T> {
+        pub fn apply_index(&mut self, h: HortDirection) {
+            let mut current_index = self.current_index as i32;
+            match h {
+                HortDirection::East => current_index += 1,
+                HortDirection::West => current_index -= 1,
+            };
+
+            let len = self.options.len();
+            if current_index >= len as i32 {
+                current_index = 0;
+            } else if current_index < 0 {
+                current_index = len as i32 - 1;
+            }
+            self.current_index = current_index as u32;
+        }
+
+        pub fn new(options: &[T]) -> Self {
+            Self {
+                options: Vec::from(options),
+                current_index: 0,
+            }
+        }
+
+        pub fn get_current(&self) -> Option<T> {
+            self.options.get(self.current_index as usize).cloned()
+        }
+    }
+
+    impl<T: PartialEq + std::fmt::Debug> HorizontalSelector<T> {
+        /// TODO: Silent failures should feel bad
+        pub fn set_index(&mut self, v: T) {
+            let index = self.options.iter().position(|t| t == &v);
+            if let Some(index) = index {
+                self.current_index = index as u32;
+            } else {
+                error!(
+                    "Silent failure makes u sad: {:?} not found in {:?}",
+                    v, self.options
+                );
+            }
+        }
+    }
+
+    /// TODO: I feel like I'm abusing the GameMenuGrid a bit here and this
+    /// feels really inefficient
+    ///
+    /// I think the right thing to do here will be to
+    ///
+    /// Note that we could also consider removing the generic here and
+    /// tracking just the index in this component and then having a paired component in the bundle
+    /// that houses the options.
+    pub fn handle_horizontal_selection<T: Send + Sync + 'static + Clone>(
+        mut commands: Commands,
+        sounds: Res<SoundManager>,
+        sound_settings: Res<SoundSettings>,
+        query: Query<(&GameMenuController, &GameMenuGrid, &GameMenuLatch), With<ActiveMenu>>,
+        // I could put the latch here and then just have one system be in charge of updating the latch,
+        // and others could read it?
+        input_query: Query<(
+            &player::Player,
+            &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
+        )>,
+        mut hort_selector: Query<&mut HorizontalSelector<T>>,
+    ) {
+        for (controller, menu, latch) in query {
+            let Some(mut hort_selector) = menu
+                .get_active_menu_option()
+                .and_then(|t| hort_selector.get_mut(*t).ok())
+            else {
+                continue;
+            };
+
+            for (player, action_state) in input_query {
+                if !controller.players.contains(player) {
+                    continue;
+                }
+
+                // Don't update the latch here, as menu_cursor_navigation owns the latch
+                if let Some(dir) = check_latch_on_axis_move(action_state, latch) {
+                    if dir == IVec2::X {
+                        hort_selector.apply_index(HortDirection::East);
+                        sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                    } else if dir == -IVec2::X {
+                        hort_selector.apply_index(HortDirection::West);
+                        sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                    }
+                }
+
+                if action_state.just_pressed(&player::PlayerInputAction::MoveCursorLeft) {
+                    hort_selector.apply_index(HortDirection::West);
+                    sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                }
+
+                if action_state.just_pressed(&player::PlayerInputAction::MoveCursorRight) {
+                    hort_selector.apply_index(HortDirection::East);
+                    sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                }
+            }
+        }
+    }
+}
+
+use bevy::{ecs::query::QueryFilter, prelude::*};
+use leafwing_input_manager::prelude::ActionState;
+
+use crate::{
+    assets::sounds::{SoundManager, SoundSettings, UiSound},
+    menu::menu_navigation::{ActiveMenu, GameMenuController},
+    player::{Player, PlayerInputAction},
+};
+
+/// Marker component for whether or not this menu has an open "child" menu.
+///
+/// While our level of nesting in the BattleUI is currently fixed, this
+/// marker component gives us a way of referencing our parent, and let's things in the
+/// battle ui system be fairly general.
+#[derive(Component)]
+pub struct NestedDynamicMenu {
+    pub parent: Entity,
+}
+
+pub fn deselect_nested_menu(
+    mut commands: Commands,
+    sounds: Res<SoundManager>,
+    sound_settings: Res<SoundSettings>,
+    menu: Query<(Entity, &NestedDynamicMenu, &GameMenuController), With<ActiveMenu>>,
+    player_input_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
+) {
+    // I have this in so many places. We could have the UI just store the entity of the
+    // controlling player (s) instead of an enum when applicable
+    //
+    // Maybe like an owned menu component or something
+    for (player, action) in player_input_query {
+        if action.just_pressed(&PlayerInputAction::Deselect) {
+            for (menu_e, nested, controller) in menu {
+                if !controller.players.contains(player) {
+                    continue;
+                }
+
+                commands.entity(menu_e).remove::<ActiveMenu>();
+                commands.entity(nested.parent).insert(ActiveMenu {});
+                sounds.play_sound(&mut commands, &sound_settings, UiSound::CloseMenu);
+            }
+        }
+    }
+}
+
+pub fn show_active_game_menu_only<Inactive: QueryFilter, Active: QueryFilter>(
+    mut inactive_menu: Query<&mut Node, Inactive>,
+    mut active_menu: Query<&mut Node, Active>,
+) {
+    for mut node in active_menu.iter_mut() {
+        node.display = Display::Flex;
+    }
+
+    for mut node in inactive_menu.iter_mut() {
+        node.display = Display::None;
     }
 }
