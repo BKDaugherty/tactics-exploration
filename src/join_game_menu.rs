@@ -14,13 +14,17 @@ use crate::{
         },
     },
     assets::{
-        sounds::{SoundManager, UiSound},
+        sounds::{SoundManager, SoundSettings, UiSound},
         sprite_db::SpriteDB,
     },
-    battle_menu::player_battle_ui_systems::NestedDynamicMenu,
-    menu::menu_navigation::{
-        ActiveMenu, GameMenuController, GameMenuGrid, GameMenuLatch, check_latch_on_axis_move,
-        handle_menu_cursor_navigation, highlight_menu_option,
+    menu::{
+        NestedDynamicMenu,
+        menu_horizontal_selector::{HorizontalSelector, handle_horizontal_selection},
+        menu_navigation::{
+            ActiveMenu, GameMenuController, GameMenuGrid, GameMenuLatch,
+            handle_menu_cursor_navigation, highlight_menu_option,
+        },
+        show_active_game_menu_only,
     },
     player::{self, Player, RegisteredBattlePlayers},
     save_game::{
@@ -34,6 +38,14 @@ use bevy_simple_text_input::{
     TextInputTextFont, TextInputValue,
 };
 
+type InactiveGameMenuFilter = (
+    With<PlayerGameMenu>,
+    Without<ActiveMenu>,
+    // Don't make the Game Menu disappear if we have JoinGameMenuPlayerReady!
+    Without<JoinGameMenuPlayerReady>,
+);
+type ActiveGameMenuFilter = (With<PlayerGameMenu>, With<ActiveMenu>);
+
 pub fn join_game_plugin(app: &mut App) {
     app.add_plugins(TextInputPlugin)
         .add_systems(
@@ -46,9 +58,9 @@ pub fn join_game_plugin(app: &mut App) {
                 handle_menu_cursor_navigation,
                 highlight_menu_option,
                 wait_for_joining_player,
-                show_the_active_player_game_menu_only,
+                show_active_game_menu_only::<InactiveGameMenuFilter, ActiveGameMenuFilter>,
                 handle_unload_unit,
-                handle_button_commands,
+                // handle_button_commands, (TODO: Have we run up against the end of bevy lol)
                 handle_horizontal_selection::<UnitJob>,
                 handle_horizontal_selection::<SaveFileColor>,
                 display_job_info_horizontal_selector,
@@ -140,27 +152,6 @@ fn build_ui(commands: &mut Commands) {
 #[derive(Component)]
 pub struct PlayerGameMenu;
 
-/// Maybe this should be an observer or something?
-fn show_the_active_player_game_menu_only(
-    mut inactive_menu: Query<
-        &mut Node,
-        (
-            With<PlayerGameMenu>,
-            Without<ActiveMenu>,
-            Without<JoinGameMenuPlayerReady>,
-        ),
-    >,
-    mut active_menu: Query<&mut Node, (With<PlayerGameMenu>, With<ActiveMenu>)>,
-) {
-    for mut node in active_menu.iter_mut() {
-        node.display = Display::Flex;
-    }
-
-    for mut node in inactive_menu.iter_mut() {
-        node.display = Display::None;
-    }
-}
-
 fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Entity {
     let player_block_container = commands
         .spawn((
@@ -214,15 +205,12 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
                 flex_direction: FlexDirection::Column,
                 ..Default::default()
             },
-            HorizontalSelector {
-                current_index: 0,
-                options: vec![
-                    UnitJob::Archer,
-                    UnitJob::Knight,
-                    UnitJob::Mercenary,
-                    UnitJob::Mage,
-                ],
-            },
+            HorizontalSelector::new(&[
+                UnitJob::Archer,
+                UnitJob::Knight,
+                UnitJob::Mercenary,
+                UnitJob::Mage,
+            ]),
             children![
                 (Text("Placeholder".to_string()), JobNameDisplay),
                 (Text("Placeholder".to_string()), JobDescriptionDisplay)
@@ -249,14 +237,11 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
                 flex_direction: FlexDirection::Column,
                 ..Default::default()
             },
-            HorizontalSelector {
-                current_index: 0,
-                options: vec![
-                    SaveFileColor::Red,
-                    SaveFileColor::Blue,
-                    SaveFileColor::Green,
-                ],
-            },
+            HorizontalSelector::new(&[
+                SaveFileColor::Red,
+                SaveFileColor::Blue,
+                SaveFileColor::Green,
+            ]),
             children![(Text("Save Color".to_string()), SaveFileColorText),],
         ))
         .id();
@@ -474,6 +459,7 @@ fn wait_for_joining_player(
     mut commands: Commands,
     mut joined_players: ResMut<JoinedPlayers>,
     sounds: Res<SoundManager>,
+    sound_settings: Res<SoundSettings>,
     gamepads: Query<(Entity, &Gamepad)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     players_ui_container: Single<Entity, With<PlayersUIContainer>>,
@@ -498,7 +484,7 @@ fn wait_for_joining_player(
             ) {
                 error!("Failed to add player: {:?}", e);
             } else {
-                sounds.play_sound(&mut commands, UiSound::OpenMenu);
+                sounds.play_sound(&mut commands, &sound_settings, UiSound::OpenMenu);
             }
         }
     }
@@ -569,6 +555,7 @@ fn handle_button_commands(
     mut registered_players: ResMut<RegisteredBattlePlayers>,
     mut next_state: ResMut<NextState<GameState>>,
     sounds: Res<SoundManager>,
+    sound_settings: Res<SoundSettings>,
 ) {
     for (player, controlled_ui_block, action_state) in input_query {
         for (menu_e, controller, menu, nested) in query {
@@ -757,7 +744,7 @@ fn handle_button_commands(
                     commands.entity(menu_e).remove::<ActiveMenu>();
                     commands.entity(parent).insert(ActiveMenu {});
 
-                    sounds.play_sound(&mut commands, UiSound::Cancel);
+                    sounds.play_sound(&mut commands, &sound_settings, UiSound::Cancel);
                 } else {
                     // Despawn the players UI
                     commands.entity(controlled_ui_block.entity).despawn();
@@ -766,7 +753,7 @@ fn handle_button_commands(
                         commands.entity(t.input_entity).despawn();
                     }
 
-                    sounds.play_sound(&mut commands, UiSound::CloseMenu);
+                    sounds.play_sound(&mut commands, &sound_settings, UiSound::CloseMenu);
                 }
             }
         }
@@ -1038,41 +1025,6 @@ fn build_load_file_screen(
 }
 
 #[derive(Component)]
-pub struct HorizontalSelector<T> {
-    options: Vec<T>,
-    current_index: u32,
-}
-
-pub enum HortDirection {
-    East,
-    West,
-}
-
-impl<T> HorizontalSelector<T> {
-    pub fn apply_index(&mut self, h: HortDirection) {
-        let mut current_index = self.current_index as i32;
-        match h {
-            HortDirection::East => current_index += 1,
-            HortDirection::West => current_index -= 1,
-        };
-
-        let len = self.options.len();
-        if current_index >= len as i32 {
-            current_index = 0;
-        } else if current_index < 0 {
-            current_index = len as i32 - 1;
-        }
-        self.current_index = current_index as u32;
-    }
-}
-
-impl<T: Clone> HorizontalSelector<T> {
-    pub fn get_current(&self) -> Option<T> {
-        self.options.get(self.current_index as usize).cloned()
-    }
-}
-
-#[derive(Component)]
 struct JobNameDisplay;
 #[derive(Component)]
 struct JobDescriptionDisplay;
@@ -1112,6 +1064,7 @@ fn handle_unload_unit(
         ),
     >,
     sounds: Res<SoundManager>,
+    sound_settings: Res<SoundSettings>,
 ) {
     for controller in ui {
         for (player, input) in input_query {
@@ -1129,7 +1082,7 @@ fn handle_unload_unit(
                     player_data.unit_state = LoadedUnitState::NoUnit;
                 }
 
-                sounds.play_sound(&mut commands, UiSound::Cancel);
+                sounds.play_sound(&mut commands, &sound_settings, UiSound::Cancel);
             }
         }
     }
@@ -1187,57 +1140,6 @@ fn display_colors_for_horizontal_selector(
                 if let Ok(mut text) = name_query.get_mut(*child) {
                     text.0 = format!("<- {} ->", value.name());
                 }
-            }
-        }
-    }
-}
-
-/// TODO: I feel like I'm abusing the GameMenuGrid a bit here and this
-/// feels really inefficient
-fn handle_horizontal_selection<T: Send + Sync + 'static>(
-    mut commands: Commands,
-    sounds: Res<SoundManager>,
-    query: Query<(&GameMenuController, &GameMenuGrid, &GameMenuLatch), With<ActiveMenu>>,
-    // I could put the latch here and then just have one system be in charge of updating the latch,
-    // and others could read it?
-    input_query: Query<(
-        &player::Player,
-        &leafwing_input_manager::prelude::ActionState<player::PlayerInputAction>,
-    )>,
-    mut hort_selector: Query<&mut HorizontalSelector<T>>,
-) {
-    for (controller, menu, latch) in query {
-        let Some(mut hort_selector) = menu
-            .get_active_menu_option()
-            .and_then(|t| hort_selector.get_mut(*t).ok())
-        else {
-            continue;
-        };
-
-        for (player, action_state) in input_query {
-            if !controller.players.contains(player) {
-                continue;
-            }
-
-            // Don't update the latch here, as menu_cursor_navigation owns the latch
-            if let Some(dir) = check_latch_on_axis_move(action_state, latch) {
-                if dir == IVec2::X {
-                    hort_selector.apply_index(HortDirection::East);
-                    sounds.play_sound(&mut commands, UiSound::MoveCursor);
-                } else if dir == -IVec2::X {
-                    hort_selector.apply_index(HortDirection::West);
-                    sounds.play_sound(&mut commands, UiSound::MoveCursor);
-                }
-            }
-
-            if action_state.just_pressed(&player::PlayerInputAction::MoveCursorLeft) {
-                hort_selector.apply_index(HortDirection::West);
-                sounds.play_sound(&mut commands, UiSound::MoveCursor);
-            }
-
-            if action_state.just_pressed(&player::PlayerInputAction::MoveCursorRight) {
-                hort_selector.apply_index(HortDirection::East);
-                sounds.play_sound(&mut commands, UiSound::MoveCursor);
             }
         }
     }
