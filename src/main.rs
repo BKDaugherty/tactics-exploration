@@ -8,7 +8,7 @@ use tactics_exploration::GameState;
 use tactics_exploration::animation::animation_db::load_animation_data;
 use tactics_exploration::args::Cli;
 use tactics_exploration::assets::setup_fonts;
-use tactics_exploration::assets::sounds::setup_sounds;
+use tactics_exploration::assets::sounds::{Music, SoundManager, setup_sounds};
 use tactics_exploration::assets::sprite_db::build_sprite_db;
 use tactics_exploration::battle::{battle_plugin, god_mode_plugin};
 use tactics_exploration::camera::setup_camera;
@@ -37,6 +37,7 @@ fn main() {
                 setup_fonts,
                 load_animation_data,
                 build_sprite_db,
+                start_music.after(setup_sounds),
             ),
         )
         .add_plugins(InputManagerPlugin::<PlayerInputAction>::default())
@@ -53,6 +54,10 @@ fn main() {
     }
 
     runner.run();
+}
+
+fn start_music(mut commands: Commands, sounds: Res<SoundManager>) {
+    sounds.start_music(&mut commands, Music::BattleMusic);
 }
 
 fn boot_game(mut commands: Commands, mut game_state: ResMut<NextState<GameState>>) {
