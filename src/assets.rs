@@ -19,15 +19,33 @@ use bevy::prelude::*;
 pub struct FontResource {
     pub fine_fantasy: Handle<Font>,
     pub badge: Handle<Font>,
+    // Bevy doesn't support variable fonts
+    // https://github.com/bevyengine/bevy/issues/19854
+    pub pixelify_sans_regular: Handle<Font>,
+    pub pixelify_sans_medium: Handle<Font>,
+    pub pixelify_sans_bold: Handle<Font>,
+    pub pixelify_sans_semi_bold: Handle<Font>,
 }
 
 pub fn setup_fonts(mut commands: Commands, asset_loader: Res<AssetServer>) {
     let badge = asset_loader.load("font_assets/tinyRPGFontKit01_v1_2/TinyRPG-BadgeFont.ttf");
     let fine_fantasy =
         asset_loader.load("font_assets/tinyRPGFontKit01_v1_2/TinyRPG-FineFantasyStrategies.ttf");
+    let pixelify_sans_regular =
+        asset_loader.load("font_assets/pixelify-sans/static/PixelifySans-Regular.ttf");
+    let pixelify_sans_bold =
+        asset_loader.load("font_assets/pixelify-sans/static/PixelifySans-Bold.ttf");
+    let pixelify_sans_medium =
+        asset_loader.load("font_assets/pixelify-sans/static/PixelifySans-Medium.ttf");
+    let pixelify_sans_semi_bold =
+        asset_loader.load("font_assets/pixelify-sans/static/PixelifySans-SemiBold.ttf");
     commands.insert_resource(FontResource {
         fine_fantasy,
         badge,
+        pixelify_sans_regular,
+        pixelify_sans_medium,
+        pixelify_sans_bold,
+        pixelify_sans_semi_bold,
     });
 }
 

@@ -136,7 +136,7 @@ fn build_settings_menu(
 
     let button_text_font = TextFont {
         font_size: 25.0,
-        font: font_resource.fine_fantasy.clone(),
+        font: font_resource.pixelify_sans_regular.clone(),
         ..default()
     };
 
@@ -224,22 +224,19 @@ fn build_settings_menu(
             },
             BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2)),
             BorderRadius::all(percent(20)),
-            children![
-                // Display the game name
-                (
-                    Text::new("Settings"),
-                    TextFont {
-                        font_size: 40.0,
-                        font: font_resource.badge.clone(),
-                        ..default()
-                    },
-                    TextColor(TEXT_COLOR),
-                    Node {
-                        margin: UiRect::all(percent(7.5)),
-                        ..default()
-                    },
-                )
-            ],
+            children![(
+                Text::new("Settings"),
+                TextFont {
+                    font_size: 40.0,
+                    font: font_resource.pixelify_sans_medium.clone(),
+                    ..default()
+                },
+                TextColor(TEXT_COLOR),
+                Node {
+                    margin: UiRect::all(percent(7.5)),
+                    ..default()
+                },
+            )],
             settings_grid,
             menu_navigation::GameMenuController {
                 players: HashSet::from([Player::PrePlayer]),
@@ -284,7 +281,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
 
     let button_text_font = TextFont {
         font_size: 33.0,
-        font: font_resource.fine_fantasy.clone(),
+        font: font_resource.pixelify_sans_regular.clone(),
         ..default()
     };
 
@@ -344,22 +341,19 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
         },
         BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2)),
         BorderRadius::all(percent(20)),
-        children![
-            // Display the game name
-            (
-                Text::new("Tactics Exploration"),
-                TextFont {
-                    font_size: 67.0,
-                    font: font_resource.badge.clone(),
-                    ..default()
-                },
-                TextColor(TEXT_COLOR),
-                Node {
-                    margin: UiRect::all(px(50)),
-                    ..default()
-                },
-            )
-        ],
+        children![(
+            Text::new("Couch Tactics"),
+            TextFont {
+                font_size: 67.0,
+                font: font_resource.pixelify_sans_medium.clone(),
+                ..default()
+            },
+            TextColor(TEXT_COLOR),
+            Node {
+                margin: UiRect::all(px(50)),
+                ..default()
+            },
+        )],
         main_menu_grid,
         menu_navigation::GameMenuController {
             players: HashSet::from([Player::PrePlayer]),
@@ -387,7 +381,6 @@ fn main_menu_action(
     setting_query: Query<&HorizontalSelector<f64>>,
     fonts: Res<FontResource>,
     mut sound_settings: ResMut<SoundSettings>,
-    global_volume: ResMut<GlobalVolume>,
 ) {
     let button_entity = click.entity;
     if let Ok(menu_button_action) = menu_button.get(button_entity) {
