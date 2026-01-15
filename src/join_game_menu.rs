@@ -9,13 +9,14 @@ use crate::{
     animation::{
         Direction, UnitAnimationKind,
         animation_db::{
-            AnimationDB, AnimationKey, AnimationStartIndexKey,
-            registered_sprite_ids::TT_UNIT_ANIMATED_SPRITE_ID,
+            AnimatedSpriteId, AnimationDB, AnimationKey, AnimationStartIndexKey,
+            RegisteredAnimationId,
+            registered_sprite_ids::{TT_UNIT_ANIMATED_SPRITE_ID, UNIT_DEMO_SPRITE_ID},
         },
     },
     assets::{
         sounds::{SoundManager, SoundManagerParam, SoundSettings, UiSound},
-        sprite_db::SpriteDB,
+        sprite_db::{SpriteDB, SpriteId},
     },
     menu::{
         NestedDynamicMenu,
@@ -646,16 +647,19 @@ fn handle_button_commands(
                             continue;
                         };
 
-                        let Ok(unit_preview_screen) = build_unit_preview_screen(
+                        let unit_preview_screen = match build_unit_preview_screen(
                             &mut commands,
                             &sprite_db,
                             &anim_db,
                             save_info,
                             controlled_ui_block.entity,
                             *player,
-                        ) else {
-                            error!("Failed building unit preview screen");
-                            continue;
+                        ) {
+                            Ok(screen) => screen,
+                            Err(e) => {
+                                error!("Failed building unit preview screen: {:?}", e);
+                                continue;
+                            }
                         };
 
                         commands.entity(menu_e).remove::<ActiveMenu>();
@@ -828,37 +832,23 @@ fn handle_deselect_join_game_ready(
     }
 }
 
-/// TODO: Not stoked on this being derived from Job, but :shrug:
-pub fn get_sprite_resources_for_job(
+pub fn get_sprite_resources(
     anim_db: &AnimationDB,
     sprite_db: &SpriteDB,
-    unit_save: &UnitSaveV1,
-    direction: Direction,
+    sprite_id: SpriteId,
+    animation_key: AnimationStartIndexKey,
 ) -> anyhow::Result<(Handle<Image>, TextureAtlas)> {
-    let sprite_id = unit_save.job.base_sprite_id();
-
     let Some(image) = sprite_db.sprite_id_to_handle.get(&sprite_id).cloned() else {
         anyhow::bail!("No image found for SpriteId: {:?}", sprite_id);
     };
 
-    let Some(start_index) = anim_db.get_start_index(&AnimationStartIndexKey {
-        facing_direction: Some(direction.animation_direction()),
-        key: AnimationKey {
-            animated_sprite_id: TT_UNIT_ANIMATED_SPRITE_ID,
-            animation_id: UnitAnimationKind::IdleWalk.into(),
-        },
-    }) else {
-        anyhow::bail!(
-            "No Start index found for TT_UNIT_ANIMATED_SPRITE_ID: {:?}",
-            TT_UNIT_ANIMATED_SPRITE_ID
-        );
+    let Some(start_index) = anim_db.get_start_index(&animation_key) else {
+        anyhow::bail!("No Start index found for: {:?}", animation_key);
     };
 
-    let Some(texture_atlas_handle) = anim_db.get_atlas(&TT_UNIT_ANIMATED_SPRITE_ID) else {
-        anyhow::bail!(
-            "No texture atlas found for AnimatedSpriteId: {:?}",
-            TT_UNIT_ANIMATED_SPRITE_ID
-        );
+    let Some(texture_atlas_handle) = anim_db.get_atlas(&animation_key.key.animated_sprite_id)
+    else {
+        anyhow::bail!("No texture atlas found for: {:?}", animation_key);
     };
     Ok((
         image,
@@ -867,6 +857,33 @@ pub fn get_sprite_resources_for_job(
             index: *start_index as usize,
         },
     ))
+}
+
+/// TODO: Not stoked on this being derived from Job, but :shrug:
+pub fn get_sprite_resources_for_job(
+    anim_db: &AnimationDB,
+    sprite_db: &SpriteDB,
+    unit_save: &UnitSaveV1,
+    direction: Direction,
+    // Bit of a hack, but we don't want to use caroline's sprites in battle until we
+    // have animated versions, but also I don't want two copies of this lookup table
+    // since it's all gonna be the same eventually.
+    use_caros_sprites: bool,
+) -> anyhow::Result<(Handle<Image>, TextureAtlas)> {
+    let (sprite_id, animated_sprite_id) = match use_caros_sprites {
+        true => (unit_save.job.demo_sprite_id(), UNIT_DEMO_SPRITE_ID),
+        false => (unit_save.job.base_sprite_id(), TT_UNIT_ANIMATED_SPRITE_ID),
+    };
+
+    let key = AnimationStartIndexKey {
+        facing_direction: Some(direction),
+        key: AnimationKey {
+            animated_sprite_id,
+            animation_id: UnitAnimationKind::IdleWalk.into(),
+        },
+    };
+
+    get_sprite_resources(anim_db, sprite_db, sprite_id, key)
 }
 
 #[derive(Component)]
@@ -899,7 +916,7 @@ fn build_unit_preview_screen(
         .id();
 
     let (image, texture_atlas) =
-        get_sprite_resources_for_job(anim_db, sprite_db, &unit_save, Direction::SE)
+        get_sprite_resources_for_job(anim_db, sprite_db, &unit_save, Direction::SE, true)
             .context("Getting Sprite resources for Unit Job")?;
 
     let unit_preview_image = commands
