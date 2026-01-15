@@ -172,13 +172,12 @@ pub mod battle_menu_ui_definition {
                         GridTrack::flex(0.2),
                     ],
                     grid_template_columns: vec![
-                        GridTrack::flex(0.1),
-                        // User Menu 1
-                        GridTrack::flex(0.35),
-                        GridTrack::flex(0.1),
-                        // User Menu 2
-                        GridTrack::flex(0.35),
-                        GridTrack::flex(0.1),
+                        GridTrack::flex(0.02),
+                        GridTrack::flex(0.24),
+                        GridTrack::flex(0.24),
+                        GridTrack::flex(0.24),
+                        GridTrack::flex(0.24),
+                        GridTrack::flex(0.02),
                     ],
                     ..Default::default()
                 },
@@ -187,7 +186,12 @@ pub mod battle_menu_ui_definition {
             .id();
 
         // TODO: Formalize this into some data representation somewhere? Probably dependent on the configuration of players...
-        let player_offsets = HashMap::from([(Player::One, (3, 2)), (Player::Two, (3, 4))]);
+        let player_offsets = HashMap::from([
+            (Player::One, (3, 2)),
+            (Player::Two, (3, 3)),
+            (Player::Three, (3, 4)),
+            (Player::Four, (3, 5)),
+        ]);
         for player in registered_players.players.keys().cloned() {
             let player_offset = player_offsets
                 .get(&player)
