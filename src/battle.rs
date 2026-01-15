@@ -653,9 +653,13 @@ pub fn load_demo_battle_scene(
             break;
         };
 
-        let Ok((image, texture_atlas)) =
-            get_sprite_resources_for_job(&anim_db, &sprite_db, player_unit_info, Direction::NE)
-        else {
+        let Ok((image, texture_atlas)) = get_sprite_resources_for_job(
+            &anim_db,
+            &sprite_db,
+            player_unit_info,
+            Direction::NE,
+            false,
+        ) else {
             error!(
                 "Something went wrong while getting the sprite resources for the Unit's save file"
             );

@@ -831,6 +831,8 @@ pub mod tinytactics {
 }
 
 pub mod animation_db {
+    use registered_sprite_ids::UNIT_DEMO_SPRITE_ID;
+
     use crate::animation::animation_db::registered_sprite_ids::{
         FLAME_VFX_ANIMATED_SPRITE_ID, POISON_VFX_ANIMATED_SPRITE_ID, TT_UNIT_ANIMATED_SPRITE_ID,
         TT_WEAPON_ANIMATED_SPRITE_ID, build_animated_sprite_to_atlas_layout,
@@ -1017,6 +1019,19 @@ pub mod animation_db {
                 ]),
             },
             &[(None, 0)],
+        )?
+        .register_animation(
+            "demo_unit_idle",
+            AnimationKey {
+                animated_sprite_id: UNIT_DEMO_SPRITE_ID,
+                animation_id: UnitAnimationKind::IdleWalk.into(),
+            },
+            UnitAnimationDataInner {
+                frame_duration: 1.0,
+                frame_count: 1,
+                animation_offset_markers: HashMap::new(),
+            },
+            &[(None, 0), (Some(Direction::SE), 0)],
         )?;
 
         Ok(db)
@@ -1162,6 +1177,7 @@ pub mod animation_db {
         pub const BATTLE_TACTICS_TILESHEET: AnimatedSpriteId = AnimatedSpriteId(3);
         pub const FLAME_VFX_ANIMATED_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(4);
         pub const POISON_VFX_ANIMATED_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(5);
+        pub const UNIT_DEMO_SPRITE_ID: AnimatedSpriteId = AnimatedSpriteId(6);
 
         pub fn build_animated_sprite_to_atlas_layout()
         -> HashMap<AnimatedSpriteId, TextureAtlasLayout> {
@@ -1206,6 +1222,10 @@ pub mod animation_db {
                 (
                     POISON_VFX_ANIMATED_SPRITE_ID,
                     TextureAtlasLayout::from_grid(UVec2::new(32, 32), 16, 1, None, None),
+                ),
+                (
+                    UNIT_DEMO_SPRITE_ID,
+                    TextureAtlasLayout::from_grid(UVec2::new(32, 32), 1, 1, None, None),
                 ),
             ])
         }

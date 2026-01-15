@@ -36,6 +36,8 @@ pub fn setup_fonts(mut commands: Commands, asset_loader: Res<AssetServer>) {
 pub mod sprite_db {
     use std::collections::HashMap;
 
+    use crate::unit::jobs::UnitJob;
+
     use super::*;
 
     #[derive(
@@ -115,6 +117,22 @@ pub mod sprite_db {
             (
                 SpriteId(7),
                 "misc_assets/acid-vfx/acid-vfx-1.png".to_string(),
+            ),
+            (
+                UnitJob::Knight.demo_sprite_id(),
+                "unit_assets/spritesheets/cgcarter/knight.png".to_string(),
+            ),
+            (
+                UnitJob::Mage.demo_sprite_id(),
+                "unit_assets/spritesheets/cgcarter/mage.png".to_string(),
+            ),
+            (
+                UnitJob::Archer.demo_sprite_id(),
+                "unit_assets/spritesheets/cgcarter/archer.png".to_string(),
+            ),
+            (
+                UnitJob::Mercenary.demo_sprite_id(),
+                "unit_assets/spritesheets/cgcarter/mercenary.png".to_string(),
             ),
         ])
     }

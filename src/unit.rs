@@ -1055,20 +1055,18 @@ pub mod jobs {
         pub fn description(&self) -> String {
             match self {
                 UnitJob::Knight => {
-                    "A Knight charges their enemies and holds them in place to protect their allies"
-                        .to_string()
+                    "Charge your enemies and hold them in place to protect your allies".to_string()
                 }
                 UnitJob::Mage => {
-                    "A Mage channels Primal energy to support their allies and devastate their foes"
+                    "Channel primal energy to support your allies and devastate your foes"
                         .to_string()
                 }
                 UnitJob::Archer => {
-                    "An Archer uses a bow to inflict pain and effects upon their enemies from range"
+                    "Use your bow to inflict pain and effects upon your enemies from range"
                         .to_string()
                 }
                 UnitJob::Mercenary => {
-                    "A Mercenary hits their enemies hard, without much regard for their own safety"
-                        .to_string()
+                    "Hit your enemies hard. Don't worry about \"playing it safe\"".to_string()
                 }
             }
         }
@@ -1104,6 +1102,15 @@ pub mod jobs {
                     learned_skills: HashSet::from([SkillId(3)]),
                     equipped_skill_categories: Vec::from(&[SkillCategoryId(6)]),
                 },
+            }
+        }
+
+        pub fn demo_sprite_id(&self) -> SpriteId {
+            match self {
+                UnitJob::Knight => SpriteId(11),
+                UnitJob::Mage => SpriteId(8),
+                UnitJob::Archer => SpriteId(9),
+                UnitJob::Mercenary => SpriteId(10),
             }
         }
     }
