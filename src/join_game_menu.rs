@@ -15,6 +15,7 @@ use crate::{
         },
     },
     assets::{
+        FontResource,
         sounds::{SoundManager, SoundManagerParam, SoundSettings, UiSound},
         sprite_db::{SpriteDB, SpriteId},
     },
@@ -111,15 +112,15 @@ pub fn join_game_cleanup(
     }
 }
 
-pub fn join_game_menu_setup(mut commands: Commands) {
+pub fn join_game_menu_setup(mut commands: Commands, fonts: Res<FontResource>) {
     commands.insert_resource(JoinedPlayers::default());
     commands.insert_resource(RegisteredBattlePlayers {
         players: HashMap::new(),
     });
-    build_ui(&mut commands);
+    build_ui(&mut commands, &fonts);
 }
 
-fn build_ui(commands: &mut Commands) {
+fn build_ui(commands: &mut Commands, fonts: &FontResource) {
     let screen_space = commands
         .spawn((
             Node {
@@ -144,9 +145,13 @@ fn build_ui(commands: &mut Commands) {
                 justify_items: JustifyItems::Center,
                 ..Default::default()
             },
-            children![Text(
-                "Press \"J\" or LB and RB together to join the game".to_string()
-            ),],
+            children![(
+                Text("Press \"J\" or LB and RB together to join the game".to_string()),
+                TextFont {
+                    font: fonts.pixelify_sans_regular.clone(),
+                    ..Default::default()
+                }
+            )],
         ))
         .id();
 
@@ -174,7 +179,16 @@ fn build_ui(commands: &mut Commands) {
 #[derive(Component)]
 pub struct PlayerGameMenu;
 
-fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Entity {
+fn add_player_ui(
+    commands: &mut Commands,
+    fonts: &FontResource,
+    parent: Entity,
+    player: Player,
+) -> Entity {
+    let font_settings = TextFont {
+        font: fonts.pixelify_sans_regular.clone(),
+        ..Default::default()
+    };
     let player_block_container = commands
         .spawn((
             Node {
@@ -198,7 +212,7 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
             TextInput,
             TextInputTextFont(TextFont {
                 font_size: 34.,
-                ..default()
+                ..font_settings.clone()
             }),
             TextInputPlaceholder {
                 value: "Enter Name".to_string(),
@@ -234,8 +248,16 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
                 UnitJob::Mage,
             ]),
             children![
-                (Text("Placeholder".to_string()), JobNameDisplay),
-                (Text("Placeholder".to_string()), JobDescriptionDisplay)
+                (
+                    Text("Placeholder".to_string()),
+                    JobNameDisplay,
+                    font_settings.clone()
+                ),
+                (
+                    Text("Placeholder".to_string()),
+                    JobDescriptionDisplay,
+                    font_settings.clone()
+                )
             ],
         ))
         .id();
@@ -264,7 +286,11 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
                 SaveFileColor::Blue,
                 SaveFileColor::Green,
             ]),
-            children![(Text("Save Color".to_string()), SaveFileColorText),],
+            children![(
+                Text("Save Color".to_string()),
+                SaveFileColorText,
+                font_settings.clone()
+            ),],
         ))
         .id();
 
@@ -282,7 +308,7 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
                 border: UiRect::all(percent(0.5)),
                 ..Default::default()
             },
-            children![Text::new("Create Character")],
+            children![(Text::new("Create Character"), font_settings.clone())],
             BackgroundColor(Color::BLACK),
             BorderColor::all(Color::NONE),
             UiCommands::CreateCharacter(CreateCharacterCommand {
@@ -343,7 +369,7 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
                 border: UiRect::all(percent(0.5)),
                 ..Default::default()
             },
-            children![Text::new("New Character")],
+            children![(Text::new("New Character"), font_settings.clone())],
             BackgroundColor(Color::BLACK),
             BorderColor::all(Color::NONE),
             UiCommands::OpenNestedScreen(new_character_screen),
@@ -363,7 +389,7 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
                 border: UiRect::all(percent(0.5)),
                 ..Default::default()
             },
-            children![Text::new("Load Character")],
+            children![(Text::new("Load Character"), font_settings.clone())],
             BackgroundColor(Color::BLACK),
             BorderColor::all(Color::NONE),
             UiCommands::OpenLoadCharacterScreen,
@@ -383,7 +409,7 @@ fn add_player_ui(commands: &mut Commands, parent: Entity, player: Player) -> Ent
                 border: UiRect::all(percent(0.5)),
                 ..Default::default()
             },
-            children![Text::new("(DEV) Delete All Data")],
+            children![(Text::new("(DEV) Delete All Data"), font_settings.clone())],
             BackgroundColor(Color::BLACK),
             BorderColor::all(Color::NONE),
             UiCommands::ErasePkvData,
@@ -452,7 +478,7 @@ fn join_game(
         PlayerController::Keyboard => player.get_keyboard_input_map(),
     };
 
-    let e = add_player_ui(commands, player_ui_parent, player);
+    let e = add_player_ui(commands, &fonts, player_ui_parent, player);
     let player_input = commands
         .spawn((
             input_map,
@@ -479,6 +505,7 @@ pub struct JoinedPlayerSpecificInputManager;
 /// Wait for specific inputs from a Gamepad or Controller to allow a player to join the game.
 fn wait_for_joining_player(
     mut commands: Commands,
+    fonts: Res<FontResource>,
     mut joined_players: ResMut<JoinedPlayers>,
     sounds: Res<SoundManager>,
     sound_settings: Res<SoundSettings>,
@@ -500,6 +527,7 @@ fn wait_for_joining_player(
 
             if let Err(e) = join_game(
                 &mut commands,
+                &fonts,
                 &mut joined_players,
                 players_ui_container.entity(),
                 PlayerController::Gamepad(gamepad_entity),
@@ -518,6 +546,7 @@ fn wait_for_joining_player(
         }) {
             if let Err(e) = join_game(
                 &mut commands,
+                &fonts,
                 &mut joined_players,
                 players_ui_container.entity(),
                 PlayerController::Keyboard,
@@ -574,9 +603,11 @@ fn handle_button_commands(
     ui_command_query: Query<&UiCommands>,
     mut text_input_query: Query<(Entity, &mut TextInputInactive)>,
     mut joined_players: ResMut<JoinedPlayers>,
-    text_input_value_query: Query<&TextInputValue>,
-    job_selector: Query<&HorizontalSelector<UnitJob>>,
-    color_selector: Query<&HorizontalSelector<SaveFileColor>>,
+    character_creator_queries: (
+        Query<&TextInputValue>,
+        Query<&HorizontalSelector<UnitJob>>,
+        Query<&HorizontalSelector<SaveFileColor>>,
+    ),
     mut save_files: ResMut<SaveFiles>,
     mut pkv_store: ResMut<PkvStore>,
     anim_db: Res<AnimationDB>,
@@ -584,6 +615,7 @@ fn handle_button_commands(
     mut registered_players: ResMut<RegisteredBattlePlayers>,
     mut next_state: ResMut<NextState<GameState>>,
     sounds: SoundManagerParam,
+    fonts: Res<FontResource>,
 ) {
     for (player, controlled_ui_block, action_state) in input_query {
         for (menu_e, controller, menu, nested) in query {
@@ -619,9 +651,9 @@ fn handle_button_commands(
                         let save_info = match handle_create_character_command(
                             &mut save_files,
                             &mut pkv_store,
-                            text_input_value_query,
-                            job_selector,
-                            color_selector,
+                            character_creator_queries.0,
+                            character_creator_queries.1,
+                            character_creator_queries.2,
                             command,
                         ) {
                             Err(e) => {
@@ -649,6 +681,7 @@ fn handle_button_commands(
 
                         let unit_preview_screen = match build_unit_preview_screen(
                             &mut commands,
+                            &fonts,
                             &sprite_db,
                             &anim_db,
                             save_info,
@@ -673,6 +706,7 @@ fn handle_button_commands(
                     UiCommands::OpenLoadCharacterScreen => {
                         let load_file_screen = build_load_file_screen(
                             &mut commands,
+                            &fonts,
                             &joined_players,
                             &save_files,
                             controlled_ui_block.entity,
@@ -726,6 +760,7 @@ fn handle_button_commands(
 
                         let Ok(unit_preview_screen) = build_unit_preview_screen(
                             &mut commands,
+                            &fonts,
                             &sprite_db,
                             &anim_db,
                             v1_save,
@@ -891,6 +926,7 @@ struct UnitPreviewScreen;
 
 fn build_unit_preview_screen(
     commands: &mut Commands,
+    fonts: &FontResource,
     sprite_db: &SpriteDB,
     anim_db: &AnimationDB,
     unit_save: UnitSaveV1,
@@ -911,7 +947,13 @@ fn build_unit_preview_screen(
                 ..Default::default()
             },
             BackgroundColor(unit_save.save_file_key.color.color()),
-            children![Text(unit_save.save_file_key.name.clone())],
+            children![(
+                Text(unit_save.save_file_key.name.clone()),
+                TextFont {
+                    font: fonts.pixelify_sans_regular.clone(),
+                    ..Default::default()
+                }
+            )],
         ))
         .id();
 
@@ -950,7 +992,13 @@ fn build_unit_preview_screen(
                 ..Default::default()
             },
             ReadyButtonMarker,
-            children![Text::new("Ready!")],
+            children![(
+                Text::new("Ready!"),
+                TextFont {
+                    font: fonts.pixelify_sans_regular.clone(),
+                    ..Default::default()
+                }
+            )],
         ))
         .id();
 
@@ -995,6 +1043,7 @@ fn build_unit_preview_screen(
 
 fn build_load_file_screen(
     commands: &mut Commands,
+    fonts: &FontResource,
     joined_players: &JoinedPlayers,
     files: &SaveFiles,
     player_ui_parent: Entity,
@@ -1056,7 +1105,13 @@ fn build_load_file_screen(
                 },
                 BackgroundColor(save_file_key.color.color()),
                 UiCommands::LoadCharacter(save_file_key.clone()),
-                children![Text(save_file_key.name.clone())],
+                children![(
+                    Text(save_file_key.name.clone()),
+                    TextFont {
+                        font: fonts.pixelify_sans_regular.clone(),
+                        ..Default::default()
+                    }
+                )],
             ))
             .id();
         load_menu.push_button_to_stack(button);
