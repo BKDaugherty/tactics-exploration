@@ -455,20 +455,21 @@ fn add_player_ui(
 
 fn join_game(
     commands: &mut Commands,
+    fonts: &FontResource,
     joined_players: &mut JoinedPlayers,
     player_ui_parent: Entity,
     controller: PlayerController,
 ) -> anyhow::Result<()> {
     // TODO: This is super stupid lol.
     let players_count = joined_players.0.len();
-    // Limit to 2 as the BattleUI currently panics if Player::Three or Player::Four are
-    // added. Need to define new offsets in `build_battle_grid_ui`
-    let player = if players_count >= 2 {
+    let player = if players_count >= 4 {
         anyhow::bail!("Maximum number of players reached.");
     } else {
         match players_count {
             0 => Player::One,
             1 => Player::Two,
+            2 => Player::Three,
+            3 => Player::Four,
             _ => unreachable!(),
         }
     };
