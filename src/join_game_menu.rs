@@ -124,9 +124,28 @@ fn build_ui(commands: &mut Commands) {
             Node {
                 height: percent(100),
                 width: percent(100),
+                flex_direction: FlexDirection::Column,
                 ..Default::default()
             },
             DespawnOnExit(GameState::JoinGame),
+        ))
+        .id();
+
+    let top_banner = commands
+        .spawn((
+            Node {
+                align_self: AlignSelf::FlexStart,
+                height: percent(10),
+                width: percent(100),
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceEvenly,
+                justify_items: JustifyItems::Center,
+                ..Default::default()
+            },
+            children![Text(
+                "Press \"J\" or LB and RB together to join the game".to_string()
+            ),],
         ))
         .id();
 
@@ -134,7 +153,7 @@ fn build_ui(commands: &mut Commands) {
         .spawn((
             Node {
                 align_self: AlignSelf::FlexEnd,
-                height: percent(100),
+                height: percent(90),
                 width: percent(100),
                 align_items: AlignItems::Center,
                 flex_direction: FlexDirection::Row,
@@ -146,7 +165,9 @@ fn build_ui(commands: &mut Commands) {
         ))
         .id();
 
-    commands.entity(screen_space).add_child(bottom_space);
+    commands
+        .entity(screen_space)
+        .add_children(&[top_banner, bottom_space]);
 }
 
 #[derive(Component)]
