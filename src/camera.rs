@@ -14,10 +14,11 @@ pub struct CameraSettings {
 
 pub fn setup_camera(mut commands: Commands) {
     // Spawn a 2D camera
-    let mut t = init_grid_to_world_transform(&GridPosition { x: 5, y: 3 });
-    t.translation.z = 0.;
-
-    let camera_settings = CameraSettings { zoom_value: 0.4 };
+    // let mut t = init_grid_to_world_transform(&GridPosition { x: 6, y: 4 });
+    // TODO: Come up with some real camera positioning per
+    // level / real positioning for the grid itself / world.
+    let t = Transform::from_translation(Vec3::new(0.0, -42.0, 0.0));
+    let camera_settings = CameraSettings { zoom_value: 0.3 };
 
     commands.spawn((
         Name::new("Main Camera"),
@@ -41,7 +42,7 @@ pub fn change_zoom(
         if action_state.just_pressed(&PlayerInputAction::ZoomIn) {
             match **camera {
                 Projection::Orthographic(ref mut current_projection) => {
-                    current_projection.scale += 0.1;
+                    current_projection.scale += 0.01;
                     camera_settings.zoom_value = current_projection.scale;
                 }
                 _ => return,
@@ -49,7 +50,7 @@ pub fn change_zoom(
         } else if action_state.just_pressed(&PlayerInputAction::ZoomOut) {
             match **camera {
                 Projection::Orthographic(ref mut current_projection) => {
-                    current_projection.scale -= 0.1;
+                    current_projection.scale -= 0.01;
                     camera_settings.zoom_value = current_projection.scale;
                 }
                 _ => return,

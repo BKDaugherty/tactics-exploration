@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::window::WindowResolution;
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_pkv::{PersistentResourceAppExtensions, PkvStore};
@@ -26,7 +27,18 @@ fn main() {
     let mut runner = &mut app;
 
     runner = runner
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(
+            DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        resolution: WindowResolution::new(1920, 1080)
+                            .with_scale_factor_override(1.0),
+                        ..default()
+                    }),
+                    ..Default::default()
+                }),
+        )
         .insert_resource(PkvStore::new("bkdaugherty", "tactics-exploration"))
         .init_persistent_resource::<SaveFiles>()
         .init_persistent_resource::<SoundSettings>()
