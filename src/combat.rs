@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::*;
 
+use crate::assets::FontResource;
 use crate::gameplay_effects::ActiveEffects;
 use crate::gameplay_effects::Effect;
 use crate::gameplay_effects::EffectMetadata;
@@ -583,6 +584,12 @@ pub struct UnitIsAttacking {
     ae_entity: Entity,
 }
 
+#[derive(Message)]
+pub struct UnitHealthChangedEvent {
+    pub unit: Entity,
+    pub health_changed: i32,
+}
+
 /// Given an AttackIntent by a Unit, process it
 /// and spawn an AttackExecution for the engine to drive animations and
 /// changes to the game.
@@ -635,10 +642,84 @@ pub fn attack_intent_system(
     }
 }
 
+#[derive(Component)]
+pub struct DamageText;
+
+pub fn despawn_after_timer_completed<Marker: Component>(
+    mut commands: Commands,
+    time: Res<Time>,
+    query: Query<(Entity, &mut DespawnTimer), With<Marker>>,
+) {
+    let delta = time.delta();
+    for (e, mut t) in query {
+        t.timer.tick(delta);
+
+        if t.timer.is_finished() {
+            commands.entity(e).despawn()
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct DespawnTimer {
+    pub timer: Timer,
+}
+
+pub fn spawn_damage_text(
+    mut commands: Commands,
+    mut message_reader: MessageReader<UnitHealthChangedEvent>,
+    fonts: Res<FontResource>,
+) {
+    for message in message_reader.read() {
+        let health_changed_text = if message.health_changed > 0 {
+            (
+                Text2d(format!("+ {} HP", message.health_changed.abs())),
+                TextColor(Color::linear_rgb(0.0, 1.0, 0.0)),
+                TextFont {
+                    font: fonts.pixelify_sans_regular.clone(),
+                    font_size: 12.,
+                    font_smoothing: bevy::text::FontSmoothing::None,
+                    ..Default::default()
+                },
+                DamageText,
+                DespawnTimer {
+                    timer: Timer::from_seconds(0.5, TimerMode::Once),
+                },
+                Transform::from_translation(Vec3::new(0., 36., 0.)),
+                TextBackgroundColor(Color::WHITE.with_alpha(0.5)),
+            )
+        } else if message.health_changed < 0 {
+            (
+                Text2d(format!("- {} HP", message.health_changed.abs())),
+                TextColor(Color::linear_rgb(1.0, 0.0, 0.0)),
+                TextFont {
+                    font: fonts.pixelify_sans_regular.clone(),
+                    font_size: 12.,
+                    font_smoothing: bevy::text::FontSmoothing::None,
+                    ..Default::default()
+                },
+                DamageText,
+                DespawnTimer {
+                    timer: Timer::from_seconds(0.5, TimerMode::Once),
+                },
+                Transform::from_translation(Vec3::new(0., 36., 0.)),
+                TextBackgroundColor(Color::WHITE.with_alpha(0.5)),
+            )
+        } else {
+            error!("0 damage reached spawn_damage_text");
+            continue;
+        };
+        commands
+            .entity(message.unit)
+            .with_child(health_changed_text);
+    }
+}
+
 // TODO: Should Attacker be Optional here?
 pub fn impact_event_handler(
     mut impact_events: MessageReader<ImpactEvent>,
     mut unit_query: Query<(&mut Unit, &mut UnitAnimationPlayer, &mut ActiveEffects)>,
+    mut message_writer: MessageWriter<UnitHealthChangedEvent>,
 ) {
     for impact in impact_events.read() {
         let attacker = impact
@@ -653,6 +734,13 @@ pub fn impact_event_handler(
         let damage = calculate_damage(attacker, defender, &impact.skill_actions);
 
         if let Ok((mut defender, mut animation_player, _)) = unit_query.get_mut(impact.defender) {
+            if damage != 0 {
+                message_writer.write(UnitHealthChangedEvent {
+                    unit: impact.defender,
+                    health_changed: damage,
+                });
+            }
+
             if damage < 0 {
                 defender.stats.health = defender.stats.health.saturating_sub(damage.unsigned_abs());
                 animation_player.play(AnimToPlay {

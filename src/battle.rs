@@ -42,10 +42,12 @@ use crate::{
     bevy_ecs_tilemap_example,
     camera::change_zoom,
     combat::{
-        CombatStageComplete, ImpactEvent, attack_execution_despawner, attack_intent_system,
-        check_combat_timeline_should_advance, cleanup_vfx_on_animation_complete,
+        CombatStageComplete, DamageText, ImpactEvent, UnitHealthChangedEvent,
+        attack_execution_despawner, attack_intent_system, check_combat_timeline_should_advance,
+        cleanup_vfx_on_animation_complete, despawn_after_timer_completed,
         handle_combat_stage_enter, impact_event_handler, listen_for_combat_conditions,
         skills::{SkillId, UnitSkills, setup_skill_system},
+        spawn_damage_text,
     },
     enemy::{
         begin_enemy_phase, execute_enemy_action, init_enemy_ai_system, plan_enemy_action,
@@ -154,6 +156,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<ProjectileArrived>()
         .add_message::<TurnStartMessage>()
         .add_message::<StartOfPhaseEffectsMessage>()
+        .add_message::<UnitHealthChangedEvent>()
         // .add_plugins(TiledPlugin::default())
         // .add_plugins(TiledDebugPluginGroup)
         .add_plugins((
@@ -298,6 +301,13 @@ pub fn battle_plugin(app: &mut App) {
             Update,
             (handle_menu_cursor_navigation, highlight_menu_option)
                 .run_if(in_state(GameState::BattleResolution)),
+        )
+        .add_systems(
+            Update,
+            (
+                spawn_damage_text,
+                despawn_after_timer_completed::<DamageText>,
+            ),
         )
         .add_observer(handle_battle_resolution_ui_buttons)
         .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);
