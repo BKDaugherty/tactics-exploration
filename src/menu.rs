@@ -1,8 +1,30 @@
 pub mod ui_consts {
     use bevy::color::Color;
 
-    pub const NORMAL_MENU_BUTTON_COLOR: Color = Color::srgb(0.15, 0.15, 0.15);
-    pub const FOCUSED_BORDER_BUTTON_COLOR: Color = Color::srgb(1.0, 1.0, 1.0);
+    // pub const NORMAL_MENU_BUTTON_COLOR: Color = Color::srgb(0.15, 0.15, 0.15);
+    // pub const FOCUSED_BORDER_BUTTON_COLOR: Color = Color::srgb(1.0, 1.0, 1.0);
+
+    /// Base UI Background
+    /// rgb(5.5%,8.2%,22.7%)
+    /// #0e153a
+    pub const UI_MENU_BACKGROUND: Color = Color::linear_rgba(0.055, 0.082, 0.227, 1.0);
+    /// Highlighted Button
+    /// #464E7F
+    /// rgb(27.5%,30.6%,49.8%)
+    pub const HIGHLIGHTED_BUTTON_BACKGROUND: Color = Color::linear_rgba(0.275, 0.306, 0.498, 1.0);
+    pub const SELECTABLE_BUTTON_BACKGROUND: Color = Color::linear_rgba(0.15, 0.14, 0.26, 1.0);
+
+    /// Borders between the different UI components
+    /// #949393
+    pub const UI_BORDER_COLOR: Color = Color::linear_rgb(0.58, 0.576, 0.576);
+    pub const UI_TEXT_COLOR: Color = Color::WHITE;
+
+    /// Confirmed button
+    /// #70A649
+    pub const UI_CONFIRMED_BUTTON_COLOR: Color = Color::linear_rgb(0.439, 0.651, 0.286);
+
+    pub const UI_BUTTON_BACKGROUND: Color = Color::linear_rgba(0.74, 0.69, 0.62, 1.0);
+    pub const UI_HEADER_BACKGROUND: Color = Color::linear_rgba(0.64, 0.59, 0.52, 1.0);
 }
 
 // UI Navigation
@@ -21,7 +43,7 @@ pub mod menu_navigation {
 
     use crate::{
         assets::sounds::{SoundManager, SoundSettings, UiSound},
-        menu::ui_consts::{FOCUSED_BORDER_BUTTON_COLOR, NORMAL_MENU_BUTTON_COLOR},
+        menu::ui_consts::{HIGHLIGHTED_BUTTON_BACKGROUND, SELECTABLE_BUTTON_BACKGROUND},
         player::{self, Player},
     };
 
@@ -241,22 +263,26 @@ pub mod menu_navigation {
     pub struct ActiveMenu {}
 
     // Highlight the current menu option for each player
+    //
+    // You probably need to be able to inject some form of theme into this for it to work okay
     pub fn highlight_menu_option(
         menu_query: Query<&GameMenuGrid, With<ActiveMenu>>,
-        mut border_color_query: Query<(Entity, &mut BorderColor)>,
+        mut background_color_query: Query<(Entity, &mut BackgroundColor)>,
     ) {
         for menu in menu_query.iter() {
             let mut buttons: Vec<&Entity> = menu.buttons.values().collect();
             if let Some(active_button) = menu.get_active_menu_option() {
                 buttons.retain(|e| *e != active_button);
-                if let Ok((_, mut border_color)) = border_color_query.get_mut(*active_button) {
-                    *border_color = BorderColor::all(FOCUSED_BORDER_BUTTON_COLOR)
+                if let Ok((_, mut background_color)) =
+                    background_color_query.get_mut(*active_button)
+                {
+                    background_color.0 = HIGHLIGHTED_BUTTON_BACKGROUND;
                 }
             }
 
             for button in buttons {
-                if let Ok((_, mut border_color)) = border_color_query.get_mut(*button) {
-                    *border_color = BorderColor::all(NORMAL_MENU_BUTTON_COLOR)
+                if let Ok((_, mut background_color)) = background_color_query.get_mut(*button) {
+                    background_color.0 = SELECTABLE_BUTTON_BACKGROUND
                 }
             }
         }

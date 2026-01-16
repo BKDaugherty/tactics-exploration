@@ -21,12 +21,10 @@ use crate::{
         sprite_db::{SpriteDB, build_sprite_db},
     },
     battle_menu::{
-        UI_BACKGROUND,
-        battle_menu_ui_definition::battle_ui_setup,
+        battle_menu_ui_definition::{PlayerBattleMenu, battle_ui_setup},
         player_battle_ui_systems::{
             activate_battle_ui, clear_stale_battle_menus_on_activate,
-            handle_battle_ui_interactions, hide_battle_ui_on_unit_ui_command,
-            reactivate_ui_on_back_message,
+            handle_battle_ui_interactions, reactivate_ui_on_back_message,
         },
         player_info_ui_systems::update_player_ui_info,
     },
@@ -60,7 +58,8 @@ use crate::{
         menu_navigation::{
             self, ActiveMenu, GameMenuLatch, handle_menu_cursor_navigation, highlight_menu_option,
         },
-        ui_consts::NORMAL_MENU_BUTTON_COLOR,
+        show_active_game_menu_only,
+        ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_MENU_BACKGROUND, UI_TEXT_COLOR},
     },
     player::{self, Player, RegisteredBattlePlayers},
     projectile::{ProjectileArrived, projectile_arrival_system, projectile_bezier_system},
@@ -219,7 +218,7 @@ pub fn battle_plugin(app: &mut App) {
                 activate_battle_ui.run_if(is_running_player_phase),
                 clear_stale_battle_menus_on_activate.run_if(is_running_player_phase),
                 handle_battle_ui_interactions.run_if(is_running_player_phase),
-                hide_battle_ui_on_unit_ui_command.run_if(is_running_player_phase),
+                // hide_battle_ui_on_unit_ui_command.run_if(is_running_player_phase),
                 unlock_cursor_after_unit_ui_command.after(handle_battle_ui_interactions),
                 // Player UI System
                 handle_unit_cursor_actions.run_if(is_running_player_phase),
@@ -290,6 +289,13 @@ pub fn battle_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
+            show_active_game_menu_only::<
+                (Without<ActiveMenu>, With<PlayerBattleMenu>),
+                (With<ActiveMenu>, With<PlayerBattleMenu>),
+            >,
+        )
+        .add_systems(
+            Update,
             (handle_menu_cursor_navigation, highlight_menu_option)
                 .run_if(in_state(GameState::BattleResolution)),
         )
@@ -354,7 +360,7 @@ pub fn spawn_battle_resolution_ui(
                 padding: UiRect::horizontal(percent(2)),
                 ..Default::default()
             },
-            BackgroundColor(UI_BACKGROUND),
+            BackgroundColor(UI_MENU_BACKGROUND),
             BorderRadius::all(percent(20)),
         ))
         .id();
@@ -392,21 +398,21 @@ pub fn spawn_battle_resolution_ui(
                 ..Default::default()
             },
             BorderRadius::all(percent(20)),
-            BackgroundColor(UI_BACKGROUND),
+            BackgroundColor(UI_MENU_BACKGROUND),
             children![
                 (
                     TextColor(color),
                     TextFont {
-                        font: fonts.badge.clone(),
+                        font: fonts.pixelify_sans_medium.clone(),
                         font_size: 65.,
                         ..Default::default()
                     },
                     Text(condition_text.to_string()),
                 ),
                 (
-                    TextColor(Color::WHITE),
+                    TextColor(UI_TEXT_COLOR),
                     TextFont {
-                        font: fonts.badge.clone(),
+                        font: fonts.pixelify_sans_regular.clone(),
                         font_size: 32.,
                         ..Default::default()
                     },
@@ -421,9 +427,8 @@ pub fn spawn_battle_resolution_ui(
             Name::new("MainMenuButton"),
             Button,
             BorderRadius::all(percent(20)),
-            BorderColor::all(NORMAL_MENU_BUTTON_COLOR),
             button_node.clone(),
-            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BattleResolutionMenuAction::MainMenu,
             children![(
                 Text::new("Main Menu"),
@@ -438,9 +443,8 @@ pub fn spawn_battle_resolution_ui(
             Name::new("QuitButton"),
             Button,
             BorderRadius::all(percent(20)),
-            BorderColor::all(NORMAL_MENU_BUTTON_COLOR),
             button_node.clone(),
-            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BattleResolutionMenuAction::Quit,
             children![(
                 Text::new("Quit"),
@@ -588,6 +592,19 @@ pub fn load_battle_asset_resources(
 
 use bevy_ecs_tilemap::prelude::*;
 
+pub fn spawn_background_gradient(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let background_image = asset_server.load(GRADIENT_PATH);
+    commands.spawn((
+        Sprite {
+            image: background_image,
+            texture_atlas: None,
+            color: Color::linear_rgb(1.0, 1.0, 1.0),
+            ..Default::default()
+        },
+        Transform::from_translation(Vec3::new(0.0, 0.0, -10.0)),
+    ));
+}
+
 pub fn load_demo_battle_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -598,19 +615,6 @@ pub fn load_demo_battle_scene(
 ) {
     let map_handle =
         bevy_ecs_tilemap_example::tiled::TiledMapHandle(asset_server.load(EXAMPLE_MAP_2_PATH));
-
-    // Spawn "Background Sprite"
-    let background_image = asset_server.load(GRADIENT_PATH);
-    commands.spawn((
-        Sprite {
-            image: background_image,
-            texture_atlas: None,
-            color: Color::linear_rgb(1.0, 1.0, 1.0),
-            ..Default::default()
-        },
-        Transform::from_translation(Vec3::new(0.0, 0.0, -10.0)),
-        BattleEntity {},
-    ));
 
     commands.spawn((
         bevy_ecs_tilemap_example::tiled::TiledMapBundle {

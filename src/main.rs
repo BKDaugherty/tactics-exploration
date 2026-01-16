@@ -13,7 +13,7 @@ use tactics_exploration::assets::sounds::{
     Music, SoundManager, SoundSettings, apply_volume_settings, setup_sounds,
 };
 use tactics_exploration::assets::sprite_db::build_sprite_db;
-use tactics_exploration::battle::{battle_plugin, god_mode_plugin};
+use tactics_exploration::battle::{battle_plugin, god_mode_plugin, spawn_background_gradient};
 use tactics_exploration::camera::setup_camera;
 use tactics_exploration::join_game_menu::join_game_plugin;
 use tactics_exploration::main_menu::main_menu_plugin;
@@ -53,6 +53,7 @@ fn main() {
                 load_animation_data,
                 build_sprite_db,
                 start_music.after(setup_sounds),
+                spawn_background_gradient,
             ),
         )
         .add_systems(
