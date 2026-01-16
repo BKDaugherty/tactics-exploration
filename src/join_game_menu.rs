@@ -27,6 +27,7 @@ use crate::{
             handle_menu_cursor_navigation, highlight_menu_option,
         },
         show_active_game_menu_only,
+        ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_CONFIRMED_BUTTON_COLOR, UI_MENU_BACKGROUND},
     },
     player::{self, Player, RegisteredBattlePlayers},
     save_game::{
@@ -179,9 +180,14 @@ fn build_ui(commands: &mut Commands, fonts: &FontResource) {
 #[derive(Component)]
 pub struct PlayerGameMenu;
 
+#[derive(Component)]
+pub struct JobImageDisplay;
+
 fn add_player_ui(
     commands: &mut Commands,
     fonts: &FontResource,
+    anim_db: &AnimationDB,
+    sprite_db: &SpriteDB,
     parent: Entity,
     player: Player,
 ) -> Entity {
@@ -196,7 +202,8 @@ fn add_player_ui(
                 width: percent(24.),
                 ..Default::default()
             },
-            BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2)),
+            BackgroundColor(UI_MENU_BACKGROUND),
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -204,8 +211,8 @@ fn add_player_ui(
         .spawn((
             Button,
             Node {
-                width: percent(100),
-                height: percent(20),
+                width: percent(80),
+                height: percent(10),
                 border: UiRect::all(percent(0.5)),
                 ..default()
             },
@@ -223,16 +230,30 @@ fn add_player_ui(
                 retain_on_submit: true,
                 ..default()
             },
+            BorderRadius::all(percent(20)),
         ))
         .id();
+
+    let placeholder_save = UnitSaveV1 {
+        save_file_key: SaveFileKey {
+            uid: 0,
+            name: "lol".to_string(),
+            color: SaveFileColor::Red,
+        },
+        job: UnitJob::Archer,
+    };
+
+    let (image, texture_atlas) =
+        get_sprite_resources_for_job(anim_db, sprite_db, &placeholder_save, Direction::SE, true)
+            .expect("Failed getting Sprite resources for hardcoded unit job");
 
     let character_job_selector = commands
         .spawn((
             Button,
             BorderColor::all(Color::NONE),
             Node {
-                width: percent(100),
-                height: percent(40),
+                width: percent(80),
+                height: percent(50),
                 border: UiRect::all(percent(0.5)),
                 justify_items: JustifyItems::Center,
                 justify_content: JustifyContent::SpaceEvenly,
@@ -254,11 +275,24 @@ fn add_player_ui(
                     font_settings.clone()
                 ),
                 (
+                    JobImageDisplay,
+                    Node {
+                        width: Val::Px(128.),
+                        height: Val::Px(128.),
+                        justify_content: JustifyContent::Center,
+                        align_content: AlignContent::Center,
+
+                        ..Default::default()
+                    },
+                    ImageNode::from_atlas_image(image, texture_atlas)
+                ),
+                (
                     Text("Placeholder".to_string()),
                     JobDescriptionDisplay,
                     font_settings.clone()
                 )
             ],
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -271,8 +305,8 @@ fn add_player_ui(
             Button,
             BorderColor::all(Color::NONE),
             Node {
-                width: percent(100),
-                height: percent(40),
+                width: percent(80),
+                height: percent(15),
                 border: UiRect::all(percent(0.5)),
                 justify_items: JustifyItems::Center,
                 justify_content: JustifyContent::SpaceEvenly,
@@ -291,6 +325,7 @@ fn add_player_ui(
                 SaveFileColorText,
                 font_settings.clone()
             ),],
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -298,8 +333,8 @@ fn add_player_ui(
         .spawn((
             Button,
             Node {
-                width: percent(100),
-                height: percent(20),
+                width: percent(80),
+                height: percent(10),
                 justify_content: JustifyContent::Center,
                 justify_items: JustifyItems::Center,
                 align_content: AlignContent::Center,
@@ -309,13 +344,13 @@ fn add_player_ui(
                 ..Default::default()
             },
             children![(Text::new("Create Character"), font_settings.clone())],
-            BackgroundColor(Color::BLACK),
-            BorderColor::all(Color::NONE),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             UiCommands::CreateCharacter(CreateCharacterCommand {
                 text_input_entity: name_input_id,
                 job_selector_entity: character_job_selector,
                 color_selector_entity: character_color_selector,
             }),
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -346,6 +381,8 @@ fn add_player_ui(
             GameMenuLatch::default(),
             PlayerGameMenu,
             new_character_menu,
+            BackgroundColor(UI_MENU_BACKGROUND),
+            BorderRadius::all(percent(20)),
         ))
         .add_children(&[
             name_input_id,
@@ -360,7 +397,7 @@ fn add_player_ui(
         .spawn((
             Button,
             Node {
-                width: percent(100),
+                width: percent(80),
                 height: percent(20),
                 justify_content: JustifyContent::Center,
                 justify_items: JustifyItems::Center,
@@ -370,9 +407,10 @@ fn add_player_ui(
                 ..Default::default()
             },
             children![(Text::new("New Character"), font_settings.clone())],
-            BackgroundColor(Color::BLACK),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BorderColor::all(Color::NONE),
             UiCommands::OpenNestedScreen(new_character_screen),
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -380,7 +418,7 @@ fn add_player_ui(
         .spawn((
             Button,
             Node {
-                width: percent(100),
+                width: percent(80),
                 height: percent(20),
                 justify_content: JustifyContent::Center,
                 justify_items: JustifyItems::Center,
@@ -390,9 +428,10 @@ fn add_player_ui(
                 ..Default::default()
             },
             children![(Text::new("Load Character"), font_settings.clone())],
-            BackgroundColor(Color::BLACK),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BorderColor::all(Color::NONE),
             UiCommands::OpenLoadCharacterScreen,
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -400,7 +439,7 @@ fn add_player_ui(
         .spawn((
             Button,
             Node {
-                width: percent(100),
+                width: percent(80),
                 height: percent(20),
                 justify_content: JustifyContent::Center,
                 justify_items: JustifyItems::Center,
@@ -410,9 +449,10 @@ fn add_player_ui(
                 ..Default::default()
             },
             children![(Text::new("(DEV) Delete All Data"), font_settings.clone())],
-            BackgroundColor(Color::BLACK),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BorderColor::all(Color::NONE),
             UiCommands::ErasePkvData,
+            BorderRadius::all(percent(20)),
         ))
         .id();
     menu.push_buttons_to_stack(&[
@@ -428,6 +468,7 @@ fn add_player_ui(
                 height: percent(100),
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::SpaceEvenly,
+                align_items: AlignItems::Center,
                 ..Default::default()
             },
             GameMenuController {
@@ -456,6 +497,8 @@ fn add_player_ui(
 fn join_game(
     commands: &mut Commands,
     fonts: &FontResource,
+    anim_db: &AnimationDB,
+    sprite_db: &SpriteDB,
     joined_players: &mut JoinedPlayers,
     player_ui_parent: Entity,
     controller: PlayerController,
@@ -479,7 +522,14 @@ fn join_game(
         PlayerController::Keyboard => player.get_keyboard_input_map(),
     };
 
-    let e = add_player_ui(commands, &fonts, player_ui_parent, player);
+    let e = add_player_ui(
+        commands,
+        &fonts,
+        anim_db,
+        sprite_db,
+        player_ui_parent,
+        player,
+    );
     let player_input = commands
         .spawn((
             input_map,
@@ -507,6 +557,8 @@ pub struct JoinedPlayerSpecificInputManager;
 fn wait_for_joining_player(
     mut commands: Commands,
     fonts: Res<FontResource>,
+    anim_db: Res<AnimationDB>,
+    sprite_db: Res<SpriteDB>,
     mut joined_players: ResMut<JoinedPlayers>,
     sounds: Res<SoundManager>,
     sound_settings: Res<SoundSettings>,
@@ -529,6 +581,8 @@ fn wait_for_joining_player(
             if let Err(e) = join_game(
                 &mut commands,
                 &fonts,
+                &anim_db,
+                &sprite_db,
                 &mut joined_players,
                 players_ui_container.entity(),
                 PlayerController::Gamepad(gamepad_entity),
@@ -548,6 +602,8 @@ fn wait_for_joining_player(
             if let Err(e) = join_game(
                 &mut commands,
                 &fonts,
+                &anim_db,
+                &sprite_db,
                 &mut joined_players,
                 players_ui_container.entity(),
                 PlayerController::Keyboard,
@@ -937,7 +993,7 @@ fn build_unit_preview_screen(
     let unit_name = commands
         .spawn((
             Node {
-                width: percent(100),
+                width: percent(80),
                 height: percent(10),
                 border: UiRect::all(percent(0.5)),
                 justify_items: JustifyItems::Center,
@@ -955,6 +1011,7 @@ fn build_unit_preview_screen(
                     ..Default::default()
                 }
             )],
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -978,11 +1035,10 @@ fn build_unit_preview_screen(
     let ready_button = commands
         .spawn((
             Button,
-            BackgroundColor(Color::BLACK),
-            BorderColor::all(Color::NONE),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             UiCommands::PlayerReadyForBattle(player, unit_save),
             Node {
-                width: percent(100),
+                width: percent(80),
                 height: percent(10),
                 border: UiRect::all(percent(0.5)),
                 justify_items: JustifyItems::Center,
@@ -1000,6 +1056,7 @@ fn build_unit_preview_screen(
                     ..Default::default()
                 }
             )],
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -1019,7 +1076,7 @@ fn build_unit_preview_screen(
                 display: Display::None,
                 ..Default::default()
             },
-            BackgroundColor(Color::BLACK),
+            BackgroundColor(UI_MENU_BACKGROUND),
             PlayerGameMenu,
             ActiveMenu {},
             GameMenuController {
@@ -1031,6 +1088,7 @@ fn build_unit_preview_screen(
             },
             menu,
             UnitPreviewScreen,
+            BorderRadius::all(percent(20)),
         ))
         .add_children(&[unit_name, unit_preview_image, ready_button])
         .id();
@@ -1065,13 +1123,14 @@ fn build_load_file_screen(
                 padding: UiRect::top(percent(1.)),
                 ..Default::default()
             },
-            BackgroundColor(Color::BLACK),
+            BackgroundColor(UI_MENU_BACKGROUND),
             PlayerGameMenu,
             ActiveMenu {},
             GameMenuController {
                 players: HashSet::from([player]),
             },
             GameMenuLatch::default(),
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -1093,15 +1152,13 @@ fn build_load_file_screen(
                 Button,
                 BorderColor::all(Color::NONE),
                 Node {
-                    width: percent(100),
+                    width: percent(80),
                     height: percent(10),
-                    border: UiRect::all(percent(0.5)),
                     justify_items: JustifyItems::Center,
                     justify_content: JustifyContent::SpaceEvenly,
                     align_items: AlignItems::Center,
                     align_content: AlignContent::SpaceEvenly,
                     flex_direction: FlexDirection::Column,
-                    margin: UiRect::top(percent(0.5)).with_bottom(percent(0.5)),
                     ..Default::default()
                 },
                 BackgroundColor(save_file_key.color.color()),
@@ -1113,6 +1170,7 @@ fn build_load_file_screen(
                         ..Default::default()
                     }
                 )],
+                BorderRadius::all(percent(20)),
             ))
             .id();
         load_menu.push_button_to_stack(button);
@@ -1131,9 +1189,11 @@ struct JobDescriptionDisplay;
 
 fn display_job_info_horizontal_selector(
     query: Query<(&HorizontalSelector<UnitJob>, &Children), Changed<HorizontalSelector<UnitJob>>>,
+    sprite_db: Res<SpriteDB>,
     // TODO: Performance? Should I put some marker on here?
     mut name_query: Query<&mut Text, With<JobNameDisplay>>,
     mut desc_query: Query<&mut Text, (With<JobDescriptionDisplay>, Without<JobNameDisplay>)>,
+    mut image_query: Query<&mut ImageNode, With<JobImageDisplay>>,
 ) {
     for (selector, children) in query {
         if let Some(value) = selector.get_current() {
@@ -1142,6 +1202,11 @@ fn display_job_info_horizontal_selector(
                     text.0 = value.name();
                 } else if let Ok(mut text) = desc_query.get_mut(*child) {
                     text.0 = value.description();
+                } else if let Ok(mut ui_image) = image_query.get_mut(*child) {
+                    if let Some(image) = sprite_db.sprite_id_to_handle.get(&value.demo_sprite_id())
+                    {
+                        ui_image.image = image.clone();
+                    }
                 }
             }
         }
@@ -1199,7 +1264,7 @@ fn highlight_button_on_join_game_added(
         .map(|t| background_color.get_mut(t.entity).ok())
         .flatten()
     {
-        background_color.0 = Color::linear_rgb(0.0, 0.5, 0.0);
+        background_color.0 = UI_CONFIRMED_BUTTON_COLOR;
     }
 }
 
@@ -1214,7 +1279,7 @@ fn highlight_button_on_join_game_removed(
         .map(|t| background_color.get_mut(t.entity).ok())
         .flatten()
     {
-        background_color.0 = Color::BLACK
+        background_color.0 = SELECTABLE_BUTTON_BACKGROUND;
     }
 }
 

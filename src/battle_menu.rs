@@ -15,14 +15,13 @@ use crate::{
     combat::skills,
     grid::{self, GridManagerResource},
     grid_cursor::Cursor,
-    menu::menu_navigation::{ActiveMenu, GameMenuController, GameMenuGrid},
+    menu::{
+        menu_navigation::{ActiveMenu, GameMenuController, GameMenuGrid},
+        ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_MENU_BACKGROUND, UI_TEXT_COLOR},
+    },
     player::{self, Player, PlayerInputAction},
     unit::Unit,
 };
-
-pub const UI_BACKGROUND: Color = Color::linear_rgba(0.84, 0.79, 0.72, 1.0);
-pub const UI_BUTTON_BACKGROUND: Color = Color::linear_rgba(0.74, 0.69, 0.62, 1.0);
-pub const UI_HEADER_BACKGROUND: Color = Color::linear_rgba(0.64, 0.59, 0.52, 1.0);
 
 /// A marker component for the "Standard Battle UI", or the first menu of the Player's battle menu
 #[derive(Component)]
@@ -93,7 +92,13 @@ pub enum UnitMenuAction {
 pub mod battle_menu_ui_definition {
     use std::collections::HashMap;
 
-    use crate::{menu::menu_navigation::GameMenuLatch, player::RegisteredBattlePlayers};
+    use crate::{
+        menu::{
+            menu_navigation::GameMenuLatch,
+            ui_consts::{UI_MENU_BACKGROUND, UI_TEXT_COLOR},
+        },
+        player::RegisteredBattlePlayers,
+    };
 
     use super::*;
 
@@ -114,9 +119,9 @@ pub mod battle_menu_ui_definition {
                     align_self: AlignSelf::FlexStart,
                     height: percent(15),
                     width: percent(100),
-                    align_items: AlignItems::FlexEnd,
+                    align_items: AlignItems::FlexStart,
                     flex_direction: FlexDirection::Column,
-                    padding: UiRect::top(percent(5)).with_right(percent(5)),
+                    padding: UiRect::top(percent(5)).with_left(percent(5)),
                     ..Default::default()
                 },
                 BattleEntity {},
@@ -133,15 +138,16 @@ pub mod battle_menu_ui_definition {
                     justify_content: JustifyContent::Center,
                     ..Default::default()
                 },
-                BackgroundColor(UI_BACKGROUND),
+                BackgroundColor(UI_MENU_BACKGROUND),
                 ObjectiveUi {},
                 BorderRadius::all(percent(20)),
                 children![(
-                    Text("Defeat all Enemies".to_string()),
-                    TextColor(Color::BLACK),
+                    // Lol
+                    Text("Objective:    Defeat all Enemies".to_string()),
+                    TextColor(UI_TEXT_COLOR),
                     ObjectiveText {},
                     TextFont {
-                        font: fonts.badge.clone(),
+                        font: fonts.pixelify_sans_regular.clone(),
                         ..Default::default()
                     }
                 )],
@@ -151,97 +157,77 @@ pub mod battle_menu_ui_definition {
         commands.entity(ui_top_space).add_child(objective_ui);
     }
 
+    #[derive(Component)]
+    pub struct PlayerBattleMenu;
+
     fn build_battle_grid_ui(
         commands: &mut Commands,
         fonts: &FontResource,
         registered_players: &RegisteredBattlePlayers,
     ) {
-        let top_level_battle_grid_container = commands
+        let top_level_battle_ui = commands
             .spawn((
                 Name::new("BattleUI"),
                 Node {
-                    display: Display::Grid,
+                    display: Display::Flex,
+                    align_self: AlignSelf::FlexEnd,
                     width: percent(100),
-                    height: percent(100),
-                    grid_template_rows: vec![
-                        // Top Menu
-                        GridTrack::flex(0.2),
-                        // Battle Space
-                        GridTrack::flex(0.6),
-                        // Bottom Menu
-                        GridTrack::flex(0.2),
-                    ],
-                    grid_template_columns: vec![
-                        GridTrack::flex(0.02),
-                        GridTrack::flex(0.24),
-                        GridTrack::flex(0.24),
-                        GridTrack::flex(0.24),
-                        GridTrack::flex(0.24),
-                        GridTrack::flex(0.02),
-                    ],
+                    height: percent(40),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::SpaceEvenly,
+                    justify_items: JustifyItems::Center,
+                    align_items: AlignItems::Center,
+                    align_content: AlignContent::SpaceEvenly,
                     ..Default::default()
                 },
                 BattleEntity {},
             ))
             .id();
 
-        // TODO: Formalize this into some data representation somewhere? Probably dependent on the configuration of players...
-        let player_offsets = HashMap::from([
-            (Player::One, (3, 2)),
-            (Player::Two, (3, 3)),
-            (Player::Three, (3, 4)),
-            (Player::Four, (3, 5)),
-        ]);
         for player in registered_players.players.keys().cloned() {
-            let player_offset = player_offsets
-                .get(&player)
-                .expect("Must be a UI value for the player!");
             let player_ui_container = commands
                 .spawn((
-                    Name::new("PlayerUiContainer"),
+                    Name::new(format!("PlayerUiContainer {:?}", player)),
                     Node {
-                        display: Display::Grid,
-                        width: percent(100),
+                        display: Display::Flex,
+                        width: percent(25),
                         height: percent(100),
-                        grid_template_rows: vec![
-                            // One row in the Battle Menu for now
-                            GridTrack::flex(1.0),
-                        ],
-                        grid_template_columns: vec![GridTrack::flex(0.3), GridTrack::flex(0.7)],
-                        grid_row: GridPlacement::span(1).set_start(player_offset.0),
-                        grid_column: GridPlacement::span(1).set_start(player_offset.1),
                         padding: UiRect::bottom(percent(2)),
+                        justify_content: JustifyContent::SpaceEvenly,
+                        flex_direction: FlexDirection::Column,
                         ..Default::default()
                     },
-                    BorderRadius::all(percent(5)),
+                    BorderRadius::all(percent(20)),
                 ))
                 .id();
 
             // Build Player Unit UI Info
             let player_ui_info = commands
                 .spawn((
-                    PlayerUiInfo {},
-                    BackgroundColor(UI_BACKGROUND),
+                    BackgroundColor(UI_MENU_BACKGROUND),
                     Node {
-                        height: percent(100),
+                        display: Display::Flex,
+                        height: percent(20),
                         width: percent(100),
-                        flex_direction: FlexDirection::Column,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::FlexStart,
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::SpaceEvenly,
+                        justify_items: JustifyItems::Center,
+                        align_items: AlignItems::Center,
+                        align_content: AlignContent::SpaceEvenly,
                         padding: UiRect {
                             left: percent(5),
                             ..Default::default()
                         },
-                        grid_column: GridPlacement::span(1).set_start(1),
                         ..Default::default()
                     },
-                    Visibility::Hidden,
                     player,
+                    PlayerUiInfo {},
+                    BorderRadius::all(percent(20)),
                 ))
                 .id();
 
             let font_style = TextFont {
-                font: fonts.fine_fantasy.clone(),
+                font: fonts.pixelify_sans_regular.clone(),
                 font_size: 24.,
                 font_smoothing: bevy::text::FontSmoothing::None,
                 ..Default::default()
@@ -252,15 +238,17 @@ pub mod battle_menu_ui_definition {
                     Text::new("Health"),
                     PlayerUiHealthText {},
                     font_style.clone(),
-                    TextColor(Color::BLACK),
+                    TextColor(UI_TEXT_COLOR),
                 ))
                 .id();
             let name_text = commands
                 .spawn((
                     Text::new("Unit Name"),
                     PlayerUiNameText {},
-                    font_style.clone().with_font(fonts.badge.clone()),
-                    TextColor(Color::BLACK),
+                    font_style
+                        .clone()
+                        .with_font(fonts.pixelify_sans_regular.clone()),
+                    TextColor(UI_TEXT_COLOR),
                 ))
                 .id();
             let ap_text = commands
@@ -268,7 +256,7 @@ pub mod battle_menu_ui_definition {
                     Text::new("AP"),
                     PlayerUiApText {},
                     font_style.clone(),
-                    TextColor(Color::BLACK),
+                    TextColor(UI_TEXT_COLOR),
                 ))
                 .id();
             let move_text = commands
@@ -276,7 +264,7 @@ pub mod battle_menu_ui_definition {
                     Text::new("Move"),
                     PlayerUiMoveText {},
                     font_style.clone(),
-                    TextColor(Color::BLACK),
+                    TextColor(UI_TEXT_COLOR),
                 ))
                 .id();
 
@@ -284,24 +272,21 @@ pub mod battle_menu_ui_definition {
                 .spawn((
                     Name::new("ActionCategoryMenu"),
                     Node {
+                        display: Display::None,
                         width: percent(100),
                         height: percent(100),
                         flex_direction: FlexDirection::Column,
                         justify_content: JustifyContent::SpaceEvenly,
                         align_items: AlignItems::FlexStart,
-                        grid_column: GridPlacement::start(2).set_end(4),
-                        grid_row: GridPlacement::start(1).set_end(-1),
-                        padding: UiRect::left(percent(1)),
+                        padding: UiRect::all(percent(1)),
                         ..Default::default()
                     },
-                    BackgroundColor(UI_BACKGROUND),
-                    Visibility::Hidden,
-                    BorderRadius::right(percent(5)),
+                    BackgroundColor(UI_MENU_BACKGROUND),
+                    BorderRadius::all(percent(20)),
                     player,
-                    ZIndex(1),
-                    BoxShadow::new(Color::BLACK, percent(-2), px(0), percent(0), percent(2)),
                     SkillMenu {},
                     GameMenuLatch::default(),
+                    PlayerBattleMenu,
                 ))
                 .id();
 
@@ -310,14 +295,11 @@ pub mod battle_menu_ui_definition {
                 .spawn((
                     Name::new("PlayerBattleMenu"),
                     Node {
-                        display: Display::Grid,
+                        display: Display::Flex,
                         width: percent(100),
                         height: percent(100),
-                        grid_column: GridPlacement::span(1).set_start(2),
-                        grid_template_columns: vec![RepeatedGridTrack::flex(4, 0.25)],
                         ..Default::default()
                     },
-                    Visibility::Hidden,
                     BattleUiContainer {},
                     player,
                 ))
@@ -352,16 +334,15 @@ pub mod battle_menu_ui_definition {
 
             let standard_battle_menu_container = commands
                 .spawn((
-                    Name::new("StandardBattleMenuTab"),
+                    Name::new("StandardBattleMenuScreen"),
                     Node {
+                        display: Display::None,
                         width: percent(100),
                         height: percent(100),
                         flex_direction: FlexDirection::Column,
                         justify_content: JustifyContent::SpaceEvenly,
                         align_items: AlignItems::FlexStart,
-                        grid_column: GridPlacement::start(1).set_end(3),
-                        grid_row: GridPlacement::start(1).set_end(-1),
-                        padding: UiRect::left(percent(1)),
+                        padding: UiRect::all(percent(1)),
                         ..Default::default()
                     },
                     GameMenuController {
@@ -370,36 +351,32 @@ pub mod battle_menu_ui_definition {
                     GameMenuLatch::default(),
                     menu,
                     BattlePlayerUI {},
-                    Visibility::Hidden,
-                    BorderRadius::right(percent(5)),
+                    BorderRadius::all(percent(20)),
                     player,
-                    BackgroundColor(UI_BACKGROUND),
-                    BoxShadow::new(Color::BLACK, percent(-0.5), px(0), percent(0), percent(2)),
+                    BackgroundColor(UI_MENU_BACKGROUND),
+                    PlayerBattleMenu,
                 ))
                 .id();
 
             let action_menu = commands
                 .spawn((
-                    Name::new("ActionMenu"),
+                    Name::new("ActionMenuScreen"),
                     Node {
+                        display: Display::None,
                         width: percent(100),
                         height: percent(100),
                         flex_direction: FlexDirection::Column,
                         justify_content: JustifyContent::SpaceEvenly,
                         align_items: AlignItems::FlexStart,
-                        grid_column: GridPlacement::start(3).set_end(-1),
-                        grid_row: GridPlacement::start(1).set_end(-1),
-                        padding: UiRect::left(percent(1)),
+                        padding: UiRect::all(percent(1)),
                         ..Default::default()
                     },
-                    BackgroundColor(UI_BACKGROUND),
-                    BoxShadow::new(Color::BLACK, percent(-2), px(0), percent(0), percent(2)),
-                    Visibility::Hidden,
-                    BorderRadius::right(percent(5)),
+                    BackgroundColor(UI_MENU_BACKGROUND),
+                    BorderRadius::all(percent(20)),
                     player,
-                    ZIndex(2),
                     SkillsFilteredByCategoryMenu {},
                     GameMenuLatch::default(),
+                    PlayerBattleMenu,
                 ))
                 .id();
 
@@ -425,7 +402,7 @@ pub mod battle_menu_ui_definition {
                 .add_children(&[player_ui_info, battle_menu_container]);
 
             commands
-                .entity(top_level_battle_grid_container)
+                .entity(top_level_battle_ui)
                 .add_child(player_ui_container);
         }
     }
@@ -434,16 +411,16 @@ pub mod battle_menu_ui_definition {
 // Returns an opaque Button Bundle to spawn for a BattleUiButton
 fn battle_ui_button(fonts: &FontResource, action: BattleMenuAction, text: &str) -> impl Bundle {
     (
-        BackgroundColor(UI_BACKGROUND),
-        BorderColor::all(Color::BLACK),
-        BorderRadius::all(percent(5)),
+        BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
+        BorderRadius::all(percent(20)),
         Button,
         Node {
-            width: percent(100),
+            width: percent(80),
             height: percent(30),
             justify_content: JustifyContent::FlexStart,
             justify_items: JustifyItems::Center,
             align_items: AlignItems::Center,
+            align_self: AlignSelf::Center,
             border: UiRect::all(percent(0.5)),
             padding: UiRect::left(percent(1)),
             ..Default::default()
@@ -454,11 +431,11 @@ fn battle_ui_button(fonts: &FontResource, action: BattleMenuAction, text: &str) 
             Text::new(text),
             TextFont {
                 font_size: 20.0,
-                font: fonts.badge.clone(),
+                font: fonts.pixelify_sans_regular.clone(),
                 font_smoothing: bevy::text::FontSmoothing::None,
                 ..Default::default()
             },
-            TextColor(Color::BLACK)
+            TextColor(UI_TEXT_COLOR)
         )],
     )
 }
@@ -617,15 +594,15 @@ pub mod player_battle_ui_systems {
         mut commands: Commands,
         mut message_reader: MessageReader<UnitSelectionBackMessage>,
         mut battle_container_ui: Query<
-            (&player::Player, &mut Visibility, &Children),
+            (&player::Player, &Children),
             (With<BattleUiContainer>, Without<BattlePlayerUI>),
         >,
         nested_dynamic: Query<Option<&NestedDynamicMenu>>,
     ) {
         for message in message_reader.read() {
-            let Some((_, mut vis, children)) = battle_container_ui
+            let Some((_, children)) = battle_container_ui
                 .iter_mut()
-                .find(|(p, _, _)| **p == message.player)
+                .find(|(p, _)| **p == message.player)
             else {
                 warn!(
                     "No BattleUiContainer found for player: {:?}",
@@ -634,7 +611,6 @@ pub mod player_battle_ui_systems {
                 continue;
             };
 
-            *vis = Visibility::Visible;
             let mut target = children.first().cloned();
             for child in children.iter().rev() {
                 if nested_dynamic.get(child).ok().flatten().is_some() {
@@ -655,16 +631,12 @@ pub mod player_battle_ui_systems {
         mut unit_selected: MessageReader<UnitSelectionMessage>,
         _grid_manager: Res<GridManagerResource>,
         mut player_battle_menu: Query<
-            (Entity, &player::Player, &mut Visibility, &mut GameMenuGrid),
+            (Entity, &player::Player, &mut GameMenuGrid),
             With<BattlePlayerUI>,
-        >,
-        mut battle_container_ui: Query<
-            (&player::Player, &mut Visibility),
-            (With<BattleUiContainer>, Without<BattlePlayerUI>),
         >,
     ) {
         for message in unit_selected.read() {
-            for (player_grid_menu, player, mut vis, mut menu) in player_battle_menu.iter_mut() {
+            for (player_grid_menu, player, mut menu) in player_battle_menu.iter_mut() {
                 if *player != message.player {
                     continue;
                 }
@@ -677,20 +649,12 @@ pub mod player_battle_ui_systems {
                         selected_unit: message.entity,
                     },
                 ));
-                *vis = Visibility::Inherited;
-            }
-
-            if let Some((_, mut vis)) = battle_container_ui
-                .iter_mut()
-                .find(|(p, _)| **p == message.player)
-            {
-                *vis = Visibility::Visible;
             }
         }
     }
 
     /// Utility function for cleaning up a stale skill menu
-    fn clean_stale_menu(commands: &mut Commands, menu_e: Entity, vis: &mut Visibility) {
+    fn clean_stale_menu(commands: &mut Commands, menu_e: Entity) {
         let mut skill_menu = commands.entity(menu_e);
         skill_menu.despawn_children();
         skill_menu.remove::<(
@@ -699,7 +663,6 @@ pub mod player_battle_ui_systems {
             NestedDynamicMenu,
             ActiveMenu,
         )>();
-        *vis = Visibility::Hidden;
     }
 
     /// Clear out potentially stale skill systems when the Battle UI is activated
@@ -709,38 +672,25 @@ pub mod player_battle_ui_systems {
     pub fn clear_stale_battle_menus_on_activate(
         mut commands: Commands,
         mut unit_selected: MessageReader<UnitSelectionMessage>,
-        mut skill_menu_query: Query<(Entity, &Player, &mut Visibility), With<SkillMenu>>,
+        mut skill_menu_query: Query<(Entity, &Player), With<SkillMenu>>,
         mut skill_menu_category_query: Query<
-            (Entity, &Player, &mut Visibility),
+            (Entity, &Player),
             (With<SkillsFilteredByCategoryMenu>, Without<SkillMenu>),
         >,
     ) {
         for message in unit_selected.read() {
-            for (e, p, mut vis) in skill_menu_query.iter_mut() {
+            for (e, p) in skill_menu_query.iter_mut() {
                 if *p != message.player {
                     continue;
                 }
-                clean_stale_menu(&mut commands, e, &mut vis);
+                clean_stale_menu(&mut commands, e);
             }
 
-            for (e, p, mut vis) in skill_menu_category_query.iter_mut() {
+            for (e, p) in skill_menu_category_query.iter_mut() {
                 if *p != message.player {
                     continue;
                 }
-                clean_stale_menu(&mut commands, e, &mut vis);
-            }
-        }
-    }
-
-    /// If we send a command to the Unit, set the UI to invisible so they can make their pick without the UI
-    /// getting in their way
-    pub fn hide_battle_ui_on_unit_ui_command(
-        mut query: Query<(&Player, &mut Visibility), With<BattleUiContainer>>,
-        mut unit_command_message: MessageReader<UnitUiCommandMessage>,
-    ) {
-        for message in unit_command_message.read() {
-            if let Some((_, mut vis)) = query.iter_mut().find(|(p, _)| **p == message.player) {
-                *vis = Visibility::Hidden;
+                clean_stale_menu(&mut commands, e);
             }
         }
     }
@@ -757,7 +707,6 @@ pub mod player_battle_ui_systems {
         commands: &mut Commands,
         skill_menu_entity: Entity,
         buttons: Vec<Entity>,
-        vis: &mut Visibility,
         hand_me_downs: SkillMenuHandMeDowns,
     ) {
         let mut skill_menu_e = commands.entity(skill_menu_entity);
@@ -765,8 +714,6 @@ pub mod player_battle_ui_systems {
         let mut menu = GameMenuGrid::new_vertical();
         menu.push_buttons_to_stack(buttons.as_slice());
         skill_menu_e.insert((hand_me_downs, menu, ActiveMenu {}));
-
-        *vis = Visibility::Inherited;
     }
 
     /// The chonky function that handles most of the logic here.
@@ -791,14 +738,13 @@ pub mod player_battle_ui_systems {
                 &ActiveBattleMenu,
                 &mut GameMenuGrid,
                 &GameMenuController,
-                &mut Visibility,
                 Option<&NestedDynamicMenu>,
             ),
             With<ActiveMenu>,
         >,
         unit_menu_query: Query<&BattleMenuAction>,
         mut skill_menu_query: Query<
-            (Entity, &Player, &mut Visibility),
+            (Entity, &Player),
             (
                 With<SkillMenu>,
                 Without<SkillsFilteredByCategoryMenu>,
@@ -806,7 +752,7 @@ pub mod player_battle_ui_systems {
             ),
         >,
         mut skill_menu_category_query: Query<
-            (Entity, &Player, &mut Visibility),
+            (Entity, &Player),
             (
                 With<SkillsFilteredByCategoryMenu>,
                 Without<SkillMenu>,
@@ -818,10 +764,9 @@ pub mod player_battle_ui_systems {
         sounds: SoundManagerParam,
     ) {
         for (player, input_actions) in player_input_query.iter() {
-            let Some((battle_menu_e, battle_menu, menu, controller, mut visibility, nested)) =
-                player_battle_menu
-                    .iter_mut()
-                    .find(|(_, _, _, controller, _, _)| controller.players.contains(player))
+            let Some((battle_menu_e, battle_menu, menu, controller, nested)) = player_battle_menu
+                .iter_mut()
+                .find(|(_, _, _, controller, _)| controller.players.contains(player))
             else {
                 continue;
             };
@@ -861,8 +806,8 @@ pub mod player_battle_ui_systems {
                     }
                     BattleMenuAction::OpenSkillMenu => {
                         // Should only be one Menu per player
-                        let Some((skill_menu, _, mut vis)) =
-                            skill_menu_query.iter_mut().find(|(_, p, _)| *p == player)
+                        let Some((skill_menu, _)) =
+                            skill_menu_query.iter_mut().find(|(_, p)| *p == player)
                         else {
                             continue;
                         };
@@ -905,7 +850,6 @@ pub mod player_battle_ui_systems {
                             &mut commands,
                             skill_menu,
                             buttons,
-                            &mut vis,
                             SkillMenuHandMeDowns {
                                 battle_menu: battle_menu.to_owned(),
                                 controller: controller.to_owned(),
@@ -918,9 +862,9 @@ pub mod player_battle_ui_systems {
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                     }
                     BattleMenuAction::OpenSkillsFilteredByCategoryMenu(selected_category) => {
-                        let Some((skill_menu_category, _, mut vis)) = skill_menu_category_query
+                        let Some((skill_menu_category, _)) = skill_menu_category_query
                             .iter_mut()
-                            .find(|(_, p, _)| *p == player)
+                            .find(|(_, p)| *p == player)
                         else {
                             continue;
                         };
@@ -956,7 +900,6 @@ pub mod player_battle_ui_systems {
                             &mut commands,
                             skill_menu_category,
                             buttons,
-                            &mut vis,
                             SkillMenuHandMeDowns {
                                 battle_menu: battle_menu.to_owned(),
                                 controller: controller.to_owned(),
@@ -973,7 +916,7 @@ pub mod player_battle_ui_systems {
                 if let Some(dynamic_menu) = nested {
                     sounds.play_sound(&mut commands, UiSound::Cancel);
                     let parent = dynamic_menu.parent;
-                    clean_stale_menu(&mut commands, battle_menu_e, &mut visibility);
+                    clean_stale_menu(&mut commands, battle_menu_e);
                     commands.entity(parent).insert(ActiveMenu {});
                 } else {
                     sounds.play_sound(&mut commands, UiSound::CloseMenu);
@@ -984,7 +927,6 @@ pub mod player_battle_ui_systems {
                         unit: battle_menu.selected_unit,
                     });
 
-                    *visibility = Visibility::Hidden;
                     commands.entity(battle_menu_e).remove::<ActiveMenu>();
                 }
             }

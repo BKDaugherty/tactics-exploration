@@ -16,7 +16,7 @@ use crate::{
             highlight_menu_option,
         },
         show_active_game_menu_only,
-        ui_consts::NORMAL_MENU_BUTTON_COLOR,
+        ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_MENU_BACKGROUND, UI_TEXT_COLOR},
     },
     player::Player,
 };
@@ -64,8 +64,6 @@ enum MainMenuButtonAction {
 
 #[derive(Component)]
 pub struct MainMenuMarker;
-
-const TEXT_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
 
 fn main_menu_initialized(mut game_state: ResMut<NextState<GameState>>) {
     game_state.set(GameState::MainMenu);
@@ -154,6 +152,7 @@ fn build_settings_menu(
                 GlobalVolumeSelector,
                 button_text_font.clone()
             )],
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -170,6 +169,7 @@ fn build_settings_menu(
                 MusicVolumeSelector,
                 button_text_font.clone()
             )],
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -182,6 +182,7 @@ fn build_settings_menu(
             SfxVolumeSelector,
             selector,
             children![(Text::default(), SfxVolumeSelector, button_text_font.clone())],
+            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -191,7 +192,7 @@ fn build_settings_menu(
             Button,
             BorderRadius::all(percent(20)),
             button_node.clone(),
-            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             MainMenuButtonAction::SaveSettings(SaveSettingsSubmit {
                 global_volume_selector,
                 music_volume_selector,
@@ -200,7 +201,7 @@ fn build_settings_menu(
             children![(
                 Text::new("Apply"),
                 button_text_font.clone(),
-                TextColor(TEXT_COLOR),
+                TextColor(UI_TEXT_COLOR),
             ),],
         ))
         .id();
@@ -222,7 +223,7 @@ fn build_settings_menu(
                 height: percent(85),
                 ..default()
             },
-            BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2)),
+            BackgroundColor(UI_MENU_BACKGROUND),
             BorderRadius::all(percent(20)),
             children![(
                 Text::new("Settings"),
@@ -231,7 +232,7 @@ fn build_settings_menu(
                     font: font_resource.pixelify_sans_medium.clone(),
                     ..default()
                 },
-                TextColor(TEXT_COLOR),
+                TextColor(UI_TEXT_COLOR),
                 Node {
                     margin: UiRect::all(percent(7.5)),
                     ..default()
@@ -275,7 +276,6 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
         margin: UiRect::all(px(20)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
-        border: UiRect::all(px(4)),
         ..default()
     };
 
@@ -290,12 +290,12 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
             Button,
             BorderRadius::all(percent(20)),
             button_node.clone(),
-            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             MainMenuButtonAction::PlayDemo,
             children![(
                 Text::new("Play Demo"),
                 button_text_font.clone(),
-                TextColor(TEXT_COLOR),
+                TextColor(UI_TEXT_COLOR),
             ),],
         ))
         .id();
@@ -305,12 +305,12 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
             Button,
             BorderRadius::all(percent(20)),
             button_node.clone(),
-            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             MainMenuButtonAction::OpenSettings,
             children![(
                 Text::new("Settings"),
                 button_text_font.clone(),
-                TextColor(TEXT_COLOR),
+                TextColor(UI_TEXT_COLOR),
             ),],
         ))
         .id();
@@ -320,12 +320,12 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
             Button,
             button_node.clone(),
             BorderRadius::all(percent(20)),
-            BackgroundColor(NORMAL_MENU_BUTTON_COLOR),
+            BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             MainMenuButtonAction::Quit,
             children![(
                 Text::new("Quit"),
                 button_text_font.clone(),
-                TextColor(TEXT_COLOR),
+                TextColor(UI_TEXT_COLOR),
             ),],
         ))
         .id();
@@ -339,7 +339,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(Color::linear_rgb(0.2, 0.2, 0.2)),
+        BackgroundColor(UI_MENU_BACKGROUND),
         BorderRadius::all(percent(20)),
         children![(
             Text::new("Couch Tactics"),
@@ -348,7 +348,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
                 font: font_resource.pixelify_sans_medium.clone(),
                 ..default()
             },
-            TextColor(TEXT_COLOR),
+            TextColor(UI_TEXT_COLOR),
             Node {
                 margin: UiRect::all(px(50)),
                 ..default()
