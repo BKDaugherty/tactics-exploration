@@ -1303,7 +1303,7 @@ mod tests {
         });
         app.insert_resource::<Time>(Time::default());
         app.insert_resource(PlayerGameStates {
-            player_state: HashMap::from([(Player::One, PlayerState::default())]),
+            player_state: HashMap::from([(Player::PlayerId(1), PlayerState::default())]),
         });
         app.add_plugins(InputManagerPlugin::<PlayerInputAction>::default());
         app
@@ -1314,10 +1314,12 @@ mod tests {
         init_logger();
         let mut app = create_test_app();
 
+        let player = Player::PlayerId(1);
+
         // Spawn player to handle movement events
         let player_entity = app
             .world_mut()
-            .spawn(player::PlayerBundle::new(Player::One))
+            .spawn(player::PlayerBundle::new(player))
             .id();
         let unit_entity = app
             .world_mut()
@@ -1329,7 +1331,7 @@ mod tests {
                     obstacle: crate::unit::ObstacleType::Filter(HashSet::from([PLAYER_TEAM])),
                     name: "Bob".to_string(),
                 },
-                Player::One,
+                player,
                 GridPosition { x: 2, y: 2 },
                 Transform::default(),
                 UnitPhaseResources::default(),
@@ -1339,11 +1341,7 @@ mod tests {
         // Spawn a cursor at (2, 2) for Player::One
         let cursor_entity = app
             .world_mut()
-            .spawn((
-                grid_cursor::Cursor {},
-                Player::One,
-                GridPosition { x: 2, y: 2 },
-            ))
+            .spawn((grid_cursor::Cursor {}, player, GridPosition { x: 2, y: 2 }))
             .id();
 
         // Setup the phase system
@@ -1380,7 +1378,7 @@ mod tests {
         // move.
         app.world_mut().write_message(UnitUiCommandMessage {
             unit: unit_entity,
-            player: Player::One,
+            player,
             command: UnitCommand::Move,
         });
 

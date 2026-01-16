@@ -462,7 +462,7 @@ pub fn spawn_battle_resolution_ui(
         .spawn((
             battle_resolution_menu,
             menu_navigation::GameMenuController {
-                players: HashSet::from([Player::One, Player::Two]),
+                players: HashSet::from([Player::PrePlayer]),
             },
             ActiveMenu {},
             GameMenuLatch::default(),

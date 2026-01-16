@@ -13,16 +13,20 @@ use crate::{
     unit::{AttackOption, ValidMove},
 };
 
-// TODO: Probably want this to be more like "PlayerId(u32)"
-// Although we probably could just make it 1, 2, 3, 4...
 #[derive(Component, Reflect, PartialEq, Eq, Hash, Debug, Copy, Clone)]
 pub enum Player {
-    One,
-    Two,
-    Three,
-    Four,
+    PlayerId(u32),
     /// This is a catch all player that exists before other players. Meta, I know
     PrePlayer,
+}
+
+impl Player {
+    pub fn id(&self) -> u32 {
+        match self {
+            Player::PlayerId(id) => *id,
+            Player::PrePlayer => 0,
+        }
+    }
 }
 
 #[derive(Bundle)]
@@ -45,7 +49,7 @@ impl PlayerBundle {
 impl Player {
     pub fn get_keyboard_input_map(&self) -> InputMap<PlayerInputAction> {
         match self {
-            Player::One => InputMap::new([
+            Player::PlayerId(..) => InputMap::new([
                 (PlayerInputAction::MoveCursorUp, KeyCode::KeyW),
                 (PlayerInputAction::MoveCursorDown, KeyCode::KeyS),
                 (PlayerInputAction::MoveCursorLeft, KeyCode::KeyA),
@@ -54,14 +58,6 @@ impl Player {
                 (PlayerInputAction::Deselect, KeyCode::ShiftLeft),
                 (PlayerInputAction::ZoomIn, KeyCode::KeyQ),
                 (PlayerInputAction::ZoomOut, KeyCode::KeyE),
-            ]),
-            Player::Two | Player::Three | Player::Four => InputMap::new([
-                (PlayerInputAction::MoveCursorUp, KeyCode::ArrowUp),
-                (PlayerInputAction::MoveCursorDown, KeyCode::ArrowDown),
-                (PlayerInputAction::MoveCursorLeft, KeyCode::ArrowLeft),
-                (PlayerInputAction::MoveCursorRight, KeyCode::ArrowRight),
-                (PlayerInputAction::Select, KeyCode::Enter),
-                (PlayerInputAction::Deselect, KeyCode::ShiftRight),
             ]),
 
             Player::PrePlayer => {

@@ -508,13 +508,14 @@ fn join_game(
     let player = if players_count >= 4 {
         anyhow::bail!("Maximum number of players reached.");
     } else {
-        match players_count {
-            0 => Player::One,
-            1 => Player::Two,
-            2 => Player::Three,
-            3 => Player::Four,
-            _ => unreachable!(),
-        }
+        let max_player_id = joined_players
+            .0
+            .keys()
+            .map(|t| t.id())
+            .max()
+            .unwrap_or_default();
+
+        Player::PlayerId(max_player_id + 1)
     };
 
     let input_map = match controller {
