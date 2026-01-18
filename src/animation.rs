@@ -225,7 +225,7 @@ pub fn animation_tick_system(
 /// The set of systems and data associated with Combat Animations
 pub mod combat {
     use super::*;
-    use crate::combat::AttackIntent;
+    use crate::combat::{AttackExecution, AttackIntent};
 
     pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 8.;
     pub const HURT_BY_ATTACK_FRAME_DURATION: f32 = ATTACK_FRAME_DURATION * 2.;
@@ -233,17 +233,20 @@ pub mod combat {
     /// How do I ensure that this runs before I despawn the AttackIntent?
     pub fn update_facing_direction_on_attack(
         grid_resource_manager: Res<GridManagerResource>,
-        query: Query<(Entity, &AttackIntent)>,
+        query: Query<(Entity, &AttackExecution)>,
         mut facing_query: Query<&mut FacingDirection>,
     ) {
         for (_, a) in query.iter() {
             let grid = &(grid_resource_manager.grid_manager);
-            let a_pos = grid.get_by_id(&a.attacker);
+            let Some(attacker) = a.attacker else {
+                continue;
+            };
+            let a_pos = grid.get_by_id(&attacker);
             let t_pos = grid.get_by_id(&a.defender);
 
             match (a_pos, t_pos) {
                 (Some(attacker_position), Some(target_position)) => {
-                    let Some(mut facing) = facing_query.get_mut(a.attacker).ok() else {
+                    let Some(mut facing) = facing_query.get_mut(attacker).ok() else {
                         continue;
                     };
 
