@@ -7,12 +7,19 @@ use bevy::prelude::*;
 use crate::{
     battle::Enemy,
     battle_phase::{PhaseMessage, PhaseMessageType, PlayerEnemyPhase, UnitPhaseResources},
-    combat::{AttackIntent, skills::ATTACK_SKILL_ID},
+    combat::{
+        AttackIntent,
+        skills::{ATTACK_SKILL_ID, Targeting},
+    },
     enemy::behaviors::EnemyAiBehavior,
-    grid::{GridManagerResource, GridPosition, GridPositionChangeResult, manhattan_distance},
+    grid::{
+        GridManager, GridManagerResource, GridPosition, GridPositionChangeResult,
+        manhattan_distance,
+    },
     unit::{
         CombatActionMarker, DIRECTION_VECS, MovementRequest, Unit, UnitActionCompletedMessage,
-        UnitExecuteAction, UnitExecuteActionMessage, get_valid_moves_for_unit,
+        UnitExecuteAction, UnitExecuteActionMessage, build_attack_space_options,
+        get_valid_moves_for_unit,
     },
 };
 
@@ -88,6 +95,53 @@ pub struct PlannedAction {
     action: UnitExecuteAction,
 }
 
+fn find_targets_by_distance(
+    enemy_unit: &Unit,
+    enemy_pos: GridPosition,
+    unit_query_with_position: Query<(Entity, &Unit, &GridPosition)>,
+) -> Vec<(Entity, Unit, GridPosition, u32)> {
+    let mut possible_targets = Vec::new();
+    // Some of this could probably be re-used for other behaviors
+    for (e, unit, unit_pos) in unit_query_with_position {
+        // We don't want trappers just randomly attacking walls (or maybe we do?)
+        // so we use "against_me" here.
+        if !enemy_unit.team.against_me(&unit.team) || unit.downed() {
+            continue;
+        }
+
+        let distance = manhattan_distance(unit_pos, &enemy_pos);
+        possible_targets.push((e, unit.clone(), *unit_pos, distance));
+    }
+    possible_targets
+}
+
+/// If there's an enemy in range, target it!
+///
+/// TODO: Would be nice to specify lifetimes here to not clone
+fn target_enemy_in_range(
+    grid_manager: &GridManager,
+    enemy_unit: &Unit,
+    enemy_pos: GridPosition,
+    unit_query_with_position: Query<(Entity, &Unit, &GridPosition)>,
+) -> Option<(Entity, GridPosition)> {
+    let mut target = None;
+
+    let attack_options =
+        build_attack_space_options(grid_manager, &Targeting::TargetInRange(1), &enemy_pos);
+
+    for (e, unit, unit_pos) in unit_query_with_position {
+        if attack_options.contains(&unit_pos)
+            && !unit.downed()
+            && enemy_unit.team.against_me(&unit.team)
+        {
+            target = Some((e, *unit_pos));
+            break;
+        }
+    }
+
+    target
+}
+
 pub fn plan_enemy_action(
     grid_manager: Res<GridManagerResource>,
     mut commands: Commands,
@@ -141,6 +195,112 @@ pub fn plan_enemy_action(
                     action_queue: actions,
                 }
             }
+            behaviors::Behavior::Berserker => {
+                let mut action_queue = VecDeque::new();
+                // Can I attack someone where I am right now?
+                let target = target_enemy_in_range(
+                    &grid_manager.grid_manager,
+                    enemy_unit,
+                    *enemy_pos,
+                    unit_query_with_position,
+                )
+                .map(|t| t.0);
+
+                // Move toward the closest one
+                match target {
+                    Some(t) => {
+                        action_queue.push_front(PlannedAction {
+                            action: UnitExecuteAction::Attack(AttackIntent {
+                                attacker: enemy,
+                                defender: t,
+                                skill: ATTACK_SKILL_ID,
+                            }),
+                        });
+                    }
+                    None => {
+                        let mut possible_targets = find_targets_by_distance(
+                            enemy_unit,
+                            *enemy_pos,
+                            unit_query_with_position,
+                        );
+                        possible_targets
+                            .sort_by(|(_, _, _, dist), (_, _, _, dist2)| dist.cmp(dist2));
+
+                        let valid_moves = get_valid_moves_for_unit(
+                            &grid_manager.grid_manager,
+                            MovementRequest {
+                                origin: *enemy_pos,
+                                unit: enemy_unit.clone(),
+                                movement_points_available: resources.movement_points_left_in_phase,
+                            },
+                            unit_query,
+                        );
+
+                        let close_enough = 1;
+                        let mut choice = None;
+                        let mut choices = Vec::new();
+                        for (
+                            possible_target,
+                            possible_target_unit,
+                            possible_target_pos,
+                            dist_from_me,
+                        ) in possible_targets
+                        {
+                            for (pos, valid_move) in &valid_moves {
+                                let resulting_dist = manhattan_distance(&pos, &possible_target_pos);
+                                if resulting_dist <= close_enough {
+                                    let target = target_enemy_in_range(
+                                        &grid_manager.grid_manager,
+                                        enemy_unit,
+                                        *pos,
+                                        unit_query_with_position,
+                                    )
+                                    .map(|t| t.0);
+
+                                    match target {
+                                        Some(t) => {
+                                            choice = Some((t, valid_move.clone()));
+                                        }
+                                        None => continue,
+                                    }
+                                } else {
+                                    choices.push((valid_move, resulting_dist));
+                                }
+                            }
+                        }
+
+                        if let Some((t, valid_move)) = choice {
+                            action_queue.push_back(PlannedAction {
+                                action: UnitExecuteAction::Move(valid_move),
+                            });
+
+                            action_queue.push_back(PlannedAction {
+                                action: UnitExecuteAction::Attack(AttackIntent {
+                                    attacker: enemy,
+                                    defender: t,
+                                    skill: ATTACK_SKILL_ID,
+                                }),
+                            });
+                        } else {
+                            if let Some((valid_move, _)) = choices
+                                .into_iter()
+                                .min_by(|(_, dist), (_, dist2)| dist.cmp(dist2))
+                            {
+                                action_queue.push_back(PlannedAction {
+                                    action: UnitExecuteAction::Move(valid_move.clone()),
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Okay lots of planning, don't forget to end our turn.
+                action_queue.push_back(PlannedAction {
+                    action: UnitExecuteAction::Wait,
+                });
+                PlannedEnemyAction { action_queue }
+            }
+
             behaviors::Behavior::Trapper => {
                 let mut action_queue = VecDeque::new();
                 let valid_moves = get_valid_moves_for_unit(
@@ -153,18 +313,8 @@ pub fn plan_enemy_action(
                     unit_query,
                 );
 
-                let mut possible_targets = Vec::new();
-                // Some of this could probably be re-used for other behaviors
-                for (e, unit, unit_pos) in unit_query_with_position {
-                    // We don't want trappers just randomly attacking walls (or maybe we do?)
-                    // so we use "against_me" here.
-                    if !enemy_unit.team.against_me(&unit.team) || unit.downed() {
-                        continue;
-                    }
-
-                    let distance = manhattan_distance(unit_pos, enemy_pos);
-                    possible_targets.push((e, unit, unit_pos, distance));
-                }
+                let possible_targets =
+                    find_targets_by_distance(enemy_unit, *enemy_pos, unit_query_with_position);
 
                 // Find the closest unit (assume we can get to them for now!)
                 if let Some((target_entity, _, target_pos, _)) = possible_targets
@@ -177,7 +327,7 @@ pub fn plan_enemy_action(
                     for delta in DIRECTION_VECS {
                         let GridPositionChangeResult::Moved(possible_move) = grid_manager
                             .grid_manager
-                            .change_position_with_bounds(*target_pos, delta)
+                            .change_position_with_bounds(target_pos, delta)
                         else {
                             continue;
                         };

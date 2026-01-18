@@ -309,7 +309,7 @@ pub fn spawn_enemy(
             UnitPhaseResources::default(),
             Enemy {},
             EnemyAiBehavior {
-                behavior: enemy::behaviors::Behavior::Trapper,
+                behavior: enemy::behaviors::Behavior::Berserker,
             },
             BattleEntity {},
             skills,
@@ -683,7 +683,7 @@ pub fn execute_unit_actions(
     }
 }
 
-/// Builds a bounds square then filters for hamming distance
+/// Builds a bounds square then filters for manhattan distance
 pub fn radius_range_at_position(
     grid_manager: &GridManager,
     origin: &GridPosition,

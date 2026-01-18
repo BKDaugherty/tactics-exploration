@@ -189,13 +189,6 @@ pub fn animation_tick_system(
         if anim.timer.just_finished() {
             anim.frame += 1;
 
-            if animated_sprite_id == FLAME_VFX_ANIMATED_SPRITE_ID {
-                info!(
-                    "Current Frame: {:?}, Clip Data: {:?}",
-                    anim.frame, clip_data
-                );
-            }
-
             // Send event before bounds checking to allow for using the len(frames) as a "Complete" marker
             if let Some(marker) = clip_data.animation_offset_markers.get(&anim.frame) {
                 marker_events.write(AnimationMarkerMessage {
