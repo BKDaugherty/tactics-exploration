@@ -17,7 +17,8 @@ use crate::{
         update_facing_direction_on_movement,
     },
     assets::{
-        CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH,
+        BATTLE_TACTICS_TILESHEET, CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH,
+        OVERLAY_PATH,
         sprite_db::{SpriteDB, build_sprite_db},
     },
     battle_menu::{
@@ -56,6 +57,9 @@ use crate::{
     grid::{self, GridManager, GridPosition},
     grid_cursor,
     join_game_menu::get_sprite_resources_for_job,
+    map_generation::{
+        MapResource, build_tilemap_from_map, init_map_params, setup_map_data_from_params,
+    },
     menu::{
         menu_navigation::{
             self, ActiveMenu, GameMenuLatch, handle_menu_cursor_navigation, highlight_menu_option,
@@ -175,12 +179,15 @@ pub fn battle_plugin(app: &mut App) {
         .add_systems(
             OnEnter(GameState::Battle),
             (
+                init_map_params,
+                setup_map_data_from_params.after(init_map_params),
                 load_demo_battle_scene.after(load_battle_asset_resources),
                 init_phase_system,
                 init_enemy_ai_system,
                 setup_skill_system,
                 battle_ui_setup,
-            ),
+            )
+                .chain(),
         )
         .add_systems(
             Update,
@@ -313,8 +320,8 @@ pub fn battle_plugin(app: &mut App) {
         .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);
 }
 
-const DEMO_2_GRID_BOUNDS_X: u32 = 12;
-const DEMO_2_GRID_BOUNDS_Y: u32 = 7;
+const DEMO_2_GRID_BOUNDS_X: u32 = 13;
+const DEMO_2_GRID_BOUNDS_Y: u32 = 13;
 
 #[derive(Debug)]
 pub enum BattleEndCondition {
@@ -618,27 +625,17 @@ pub fn spawn_background_gradient(mut commands: Commands, asset_server: Res<Asset
 pub fn load_demo_battle_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    map_data: Res<MapResource>,
     registered_players: Res<RegisteredBattlePlayers>,
     tt_assets: Res<TinytacticsAssets>,
     anim_db: Res<AnimationDB>,
     sprite_db: Res<SpriteDB>,
 ) {
-    let map_handle =
-        bevy_ecs_tilemap_example::tiled::TiledMapHandle(asset_server.load(EXAMPLE_MAP_2_PATH));
-
-    commands.spawn((
-        bevy_ecs_tilemap_example::tiled::TiledMapBundle {
-            tiled_map: map_handle,
-            render_settings: TilemapRenderSettings {
-                // Map size is 12x12 so we'll have render chunks that are:
-                // 12 tiles wide and 1 tile tall.
-                render_chunk_size: UVec2::new(3, 1),
-                y_sort: true,
-            },
-            ..Default::default()
-        },
-        BattleEntity {},
-    ));
+    build_tilemap_from_map(
+        &mut commands,
+        asset_server.load(BATTLE_TACTICS_TILESHEET),
+        &map_data.data,
+    );
 
     commands.insert_resource(grid::GridManagerResource {
         grid_manager: GridManager::new(DEMO_2_GRID_BOUNDS_X, DEMO_2_GRID_BOUNDS_Y),
@@ -647,13 +644,7 @@ pub fn load_demo_battle_scene(
     // Spawn players and player cursors
     let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
-    let mut valid_player_positions = vec![
-        GridPosition { x: 0, y: 1 },
-        GridPosition { x: 0, y: 2 },
-        GridPosition { x: 0, y: 3 },
-        GridPosition { x: 0, y: 4 },
-        GridPosition { x: 0, y: 5 },
-    ];
+    let mut valid_player_positions = Vec::from(map_data.data.player_start_locations);
 
     let enemy_1_grid_pos = GridPosition { x: 7, y: 3 };
     let enemy_2_grid_pos = GridPosition { x: 4, y: 2 };
@@ -744,19 +735,17 @@ pub fn load_demo_battle_scene(
         ENEMY_TEAM,
     );
 
-    // Spawn Obstacles
-    let obstacle_locations = [
-        (GridPosition { x: 2, y: 0 }, ObstacleSprite::Bush),
-        (GridPosition { x: 2, y: 6 }, ObstacleSprite::Bush),
-        (GridPosition { x: 5, y: 1 }, ObstacleSprite::Rock),
-        (GridPosition { x: 7, y: 2 }, ObstacleSprite::Rock),
-        (GridPosition { x: 6, y: 5 }, ObstacleSprite::Rock),
-        (GridPosition { x: 10, y: 1 }, ObstacleSprite::Rock),
-    ];
-
     let mut obstacle_entities = Vec::new();
-    for (obstacle_location, sprite_type) in obstacle_locations {
-        let e = spawn_obstacle_unit(&mut commands, &tt_assets, obstacle_location, sprite_type);
+    for (obstacle_location, obstacle) in &map_data.data.obstacles {
+        info!("Obstacle spawning at {:?}", obstacle_location);
+        let sprite_type = match obstacle {
+            crate::map_generation::Obstacle::Rock1 => ObstacleSprite::Rock,
+            crate::map_generation::Obstacle::Rock2 => ObstacleSprite::Rock,
+            crate::map_generation::Obstacle::Bush => ObstacleSprite::Bush,
+            crate::map_generation::Obstacle::Tree => ObstacleSprite::Tree,
+        };
+
+        let e = spawn_obstacle_unit(&mut commands, &tt_assets, *obstacle_location, sprite_type);
         obstacle_entities.push(e);
     }
 }

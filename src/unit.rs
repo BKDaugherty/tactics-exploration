@@ -21,6 +21,7 @@ use crate::enemy::behaviors::EnemyAiBehavior;
 use crate::gameplay_effects::ActiveEffects;
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, manhattan_distance};
 use crate::grid_cursor::LockedOn;
+use crate::map_generation::TtIndex;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
 use crate::{enemy, grid, grid_cursor, player};
@@ -163,10 +164,11 @@ pub struct UnitBundle {
     pub active_effects: ActiveEffects,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObstacleSprite {
     Rock,
     Bush,
+    Tree,
 }
 
 impl std::fmt::Display for ObstacleSprite {
@@ -174,6 +176,7 @@ impl std::fmt::Display for ObstacleSprite {
         match self {
             ObstacleSprite::Rock => write!(f, "Rock"),
             ObstacleSprite::Bush => write!(f, "Bush"),
+            ObstacleSprite::Tree => write!(f, "Tree"),
         }
     }
 }
@@ -183,6 +186,7 @@ impl ObstacleSprite {
         match self {
             ObstacleSprite::Rock => 64,
             ObstacleSprite::Bush => 48,
+            ObstacleSprite::Tree => (TtIndex::new(5, 2).index() - 1) as usize,
         }
     }
 }
@@ -193,7 +197,15 @@ pub fn spawn_obstacle_unit(
     grid_position: crate::grid::GridPosition,
     obstacle_sprite_type: ObstacleSprite,
 ) -> Entity {
-    commands
+    let anchor = match obstacle_sprite_type {
+        ObstacleSprite::Rock => TINY_TACTICS_ANCHOR,
+        ObstacleSprite::Bush => TINY_TACTICS_ANCHOR,
+        // The Tree sprites have a weird amount of offset, and I want them to just
+        // look like they are sitting on tiles. Definitely a hack.
+        ObstacleSprite::Tree => TINY_TACTICS_ANCHOR.with_y(0.10).into(),
+    };
+
+    let t = commands
         .spawn((
             crate::grid::init_grid_to_world_transform(&grid_position),
             grid_position,
@@ -217,13 +229,31 @@ pub fn spawn_obstacle_unit(
                 color: Color::WHITE,
                 ..Default::default()
             },
-            TINY_TACTICS_ANCHOR,
+            anchor,
             UnitPhaseResources::default(),
             ActiveEffects {
                 effects: Vec::new(),
             },
         ))
-        .id()
+        .id();
+
+    // Attach a head to the tree
+    if obstacle_sprite_type == ObstacleSprite::Tree {
+        commands.entity(t).with_child((
+            Sprite {
+                image: tt_assets.tile_spritesheet.clone(),
+                texture_atlas: Some(TextureAtlas {
+                    layout: tt_assets.tile_layout.clone(),
+                    index: (TtIndex::new(4, 2).index() - 1) as usize,
+                }),
+                color: Color::WHITE,
+                ..Default::default()
+            },
+            anchor,
+            Transform::from_translation(Vec3::new(0., 32., 0.)),
+        ));
+    }
+    t
 }
 
 // TODO: I really need to clean up our Unit creation process
