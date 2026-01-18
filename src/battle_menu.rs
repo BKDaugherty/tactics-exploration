@@ -173,7 +173,7 @@ pub mod battle_menu_ui_definition {
                     align_self: AlignSelf::FlexEnd,
                     width: percent(100),
                     height: percent(40),
-                    flex_direction: FlexDirection::Column,
+                    flex_direction: FlexDirection::Row,
                     justify_content: JustifyContent::SpaceEvenly,
                     justify_items: JustifyItems::Center,
                     align_items: AlignItems::Center,
