@@ -14,6 +14,7 @@ pub mod grid;
 pub mod grid_cursor;
 pub mod join_game_menu;
 pub mod main_menu;
+pub mod map_generation;
 pub mod menu;
 pub mod player;
 pub mod projectile;

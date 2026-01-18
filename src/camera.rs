@@ -17,8 +17,8 @@ pub fn setup_camera(mut commands: Commands) {
     // let mut t = init_grid_to_world_transform(&GridPosition { x: 6, y: 4 });
     // TODO: Come up with some real camera positioning per
     // level / real positioning for the grid itself / world.
-    let t = Transform::from_translation(Vec3::new(0.0, -42.0, 0.0));
-    let camera_settings = CameraSettings { zoom_value: 0.3 };
+    let t = Transform::from_translation(Vec3::new(0.0, -75.0, 0.0));
+    let camera_settings = CameraSettings { zoom_value: 0.4 };
 
     commands.spawn((
         Name::new("Main Camera"),

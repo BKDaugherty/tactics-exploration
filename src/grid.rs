@@ -193,7 +193,7 @@ pub fn sync_grid_position_to_transform(
     }
 }
 
-#[derive(Component, Hash, PartialEq, Eq, Debug, Copy, Clone, Reflect)]
+#[derive(Component, Hash, PartialEq, Eq, Debug, Copy, Clone, Reflect, PartialOrd, Ord)]
 #[reflect(Component)]
 pub struct GridPosition {
     pub x: u32,
@@ -254,8 +254,8 @@ pub const MAGIC_Z_INDEX_OFFSET: f32 = 600.;
 
 /// Diamond isometric grid conversion
 pub fn grid_to_world(grid_pos: &GridPosition, tile_width: f32, tile_height: f32) -> Vec3 {
-    let offset_x = grid_pos.x as f32 - 5.;
-    let offset_y = grid_pos.y as f32 - 4.;
+    let offset_x = grid_pos.x as f32 - 6.;
+    let offset_y = grid_pos.y as f32 - 6.;
 
     let world_x = (offset_x + offset_y) * (tile_width / 2.0);
     let world_y = (offset_x - offset_y) * (tile_height / 2.0);
