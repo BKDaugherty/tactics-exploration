@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use crate::dungeon::DungeonEntity;
 use crate::{animation::Direction, battle::BattleEntity, grid::GridPosition};
 pub const DEMO_DUNGEON_ROOMS: u8 = 3;
 use rand::distr::{Alphanumeric, SampleString, Uniform};
@@ -74,12 +75,15 @@ pub fn build_tilemap_from_map(
             };
 
             let tile_entity = commands
-                .spawn(TileBundle {
-                    position: pos,
-                    tilemap_id: TilemapId(tilemap_entity),
-                    texture_index: tile.tile_texture_index(),
-                    ..Default::default()
-                })
+                .spawn((
+                    TileBundle {
+                        position: pos,
+                        tilemap_id: TilemapId(tilemap_entity),
+                        texture_index: tile.tile_texture_index(),
+                        ..Default::default()
+                    },
+                    DungeonEntity,
+                ))
                 .id();
 
             tile_storage.set(&pos, tile_entity);
@@ -104,6 +108,7 @@ pub fn build_tilemap_from_map(
             },
             // TODO: Remove me? once we are managing level movement more dynamically
             BattleEntity {},
+            DungeonEntity,
         ));
     }
 
@@ -209,14 +214,13 @@ pub struct MapParams {
 #[derive(clap::Parser, Debug, Clone)]
 pub struct BattleMapOptions {
     #[arg(long, default_value = "hello world")]
-    seed: String,
+    pub(crate) seed: String,
 }
 
-pub fn setup_map_data_from_params(mut commands: Commands, res: Res<MapParams>) {
+pub fn setup_map_data_from_params(_commands: &mut Commands, seed: String) -> MapData {
     let grid_size = (17, 17);
     let game_grid_space_x = 2..(grid_size.0 - 2);
     let game_grid_space_y = 2..(grid_size.1 - 2);
-    let seed = res.options.seed.clone();
     let mut rng: Pcg64 = Seeder::from(seed).into_rng();
 
     let mut water_layer = BTreeMap::new();
@@ -301,19 +305,19 @@ pub fn setup_map_data_from_params(mut commands: Commands, res: Res<MapParams>) {
     let bridge_end_no_block_locations = [
         to_game_space(GridPosition {
             x: bridge_location_x_2,
-            y: bounds_max_y,
+            y: bounds_max_y - 2,
         }),
         to_game_space(GridPosition {
             x: bridge_location_x_2 + 1,
-            y: bounds_max_y,
+            y: bounds_max_y - 2,
         }),
         to_game_space(GridPosition {
             x: bridge_location_x_2,
-            y: bounds_max_y - 1,
+            y: bounds_max_y - 3,
         }),
         to_game_space(GridPosition {
             x: bridge_location_x_2 + 1,
-            y: bounds_max_y - 1,
+            y: bounds_max_y - 3,
         }),
     ];
 
@@ -391,16 +395,14 @@ pub fn setup_map_data_from_params(mut commands: Commands, res: Res<MapParams>) {
         }
     }
 
-    commands.insert_resource(MapResource {
-        data: MapData {
-            grid_size,
-            tiles: BTreeMap::from([(LayerId(0), water_layer), (LayerId(1), ground_layer)]),
-            player_start_locations: player_start_positions,
-            bridge_start_locations: bridge_start_positions,
-            bridge_end_locations: on_bridge_end_locations,
-            obstacles,
-        },
-    });
+    MapData {
+        grid_size,
+        tiles: BTreeMap::from([(LayerId(0), water_layer), (LayerId(1), ground_layer)]),
+        player_start_locations: player_start_positions,
+        bridge_start_locations: bridge_start_positions,
+        bridge_end_locations: on_bridge_end_locations,
+        obstacles,
+    }
 }
 
 #[derive(Resource)]
