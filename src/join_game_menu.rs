@@ -847,7 +847,7 @@ fn handle_button_commands(
                                 }
                             }
 
-                            next_state.set(GameState::Battle);
+                            next_state.set(GameState::Dungeon);
                         }
                     }
                 }

@@ -297,7 +297,8 @@ pub mod phase_ui {
     use bevy::prelude::*;
 
     use crate::{
-        GameState, assets::FontResource, battle::BattleEntity, battle_phase::PlayerEnemyPhase,
+        assets::FontResource, battle::BattleEntity, battle_phase::PlayerEnemyPhase,
+        dungeon::DungeonState,
     };
 
     #[derive(Debug)]
@@ -349,7 +350,7 @@ pub mod phase_ui {
                     state: BannerAnimState::Entering,
                 },
                 BattleEntity {},
-                DespawnOnExit(GameState::Battle),
+                DespawnOnExit(DungeonState::InBattle),
             ))
             .id();
 

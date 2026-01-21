@@ -1,5 +1,6 @@
 use crate::assets::sounds::{SoundManagerParam, UiSound};
 use crate::battle::BattleEntity;
+use crate::dungeon::DungeonEntity;
 use crate::grid;
 use crate::menu::menu_navigation::{GameMenuLatch, check_latch_on_axis_move};
 use crate::player;
@@ -47,6 +48,7 @@ pub fn spawn_cursor(
                 player,
             },
             BattleEntity {},
+            DungeonEntity,
             GameMenuLatch::default(),
             // Default state of cursor is to be locked on player
             LockedOn {},

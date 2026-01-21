@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use bevy_egui::EguiPlugin;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_inspector_egui::quick::{StateInspectorPlugin, WorldInspectorPlugin};
 use bevy_pkv::{PersistentResourceAppExtensions, PkvStore};
 use clap::Parser;
 use leafwing_input_manager::plugin::InputManagerPlugin;
@@ -15,6 +15,7 @@ use tactics_exploration::assets::sounds::{
 use tactics_exploration::assets::sprite_db::build_sprite_db;
 use tactics_exploration::battle::{battle_plugin, god_mode_plugin, spawn_background_gradient};
 use tactics_exploration::camera::setup_camera;
+use tactics_exploration::dungeon::DungeonState;
 use tactics_exploration::join_game_menu::join_game_plugin;
 use tactics_exploration::main_menu::main_menu_plugin;
 use tactics_exploration::player::{Player, PlayerBundle, PlayerInputAction};
@@ -43,6 +44,7 @@ fn main() {
         .init_persistent_resource::<SaveFiles>()
         .init_persistent_resource::<SoundSettings>()
         .init_state::<GameState>()
+        .add_sub_state::<DungeonState>()
         .add_systems(
             Startup,
             (
@@ -70,9 +72,10 @@ fn main() {
         runner = runner
             .add_plugins(god_mode_plugin)
             .add_plugins(EguiPlugin::default())
-            .add_plugins(WorldInspectorPlugin::new());
+            .add_plugins(WorldInspectorPlugin::new())
+            .add_plugins(StateInspectorPlugin::<GameState>::default())
+            .add_plugins(StateInspectorPlugin::<DungeonState>::default());
     }
-
     runner.run();
 }
 

@@ -20,6 +20,7 @@ use crate::battle::{
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::combat::skills::{SkillDBResource, Targeting, UnitSkills};
+use crate::dungeon::DungeonEntity;
 use crate::enemy::behaviors::EnemyAiBehavior;
 use crate::equipment::{ItemDB, ItemId, UnitEquipment, equip_item_on_unit};
 use crate::gameplay_effects::ActiveEffects;
@@ -70,6 +71,36 @@ pub struct Unit {
     pub name: String,
     pub obstacle: ObstacleType,
     pub team: Team,
+}
+
+/// Lowkey, should Magic Power be Neutral, and AttackPower be Physical or
+/// something like that? Or is it fun having a Strength / Def?
+#[derive(Debug, Clone, Reflect, PartialEq, Eq, Hash, Copy)]
+pub enum ElementalType {
+    Fire,
+}
+
+/// Is it worth storing things like this?
+///
+/// I imagine I will still want to display in UIs
+/// why someones stats are what they are?
+#[derive(Debug, Clone, Reflect, PartialEq, Eq)]
+pub struct StatAttribute {
+    current_value: u32,
+    base_value: u32,
+}
+
+#[derive(Debug, Reflect, Clone)]
+pub struct Stats {
+    pub max_health: u32,
+    pub strength: u32,
+    pub magic_power: u32,
+    pub defense: u32,
+    /// At the moment, elemental_affinity is both (Str, Def) for the element
+    pub elemental_affinities: HashMap<ElementalType, u32>,
+    // TODO: Should stats represent the current state?
+    pub health: u32,
+    pub movement: u32,
 }
 
 #[derive(Bundle)]
@@ -140,6 +171,7 @@ pub fn spawn_obstacle_unit(
                 name: obstacle_sprite_type.to_string(),
             },
             BattleEntity {},
+            DungeonEntity,
             Sprite {
                 image: tt_assets.tile_spritesheet.clone(),
                 texture_atlas: Some(TextureAtlas {
@@ -185,7 +217,7 @@ pub fn spawn_obstacle_unit(
 pub fn spawn_enemy(
     commands: &mut Commands,
     unit_name: String,
-    tt_assets: &Res<TinytacticsAssets>,
+    tt_assets: &TinytacticsAssets,
     anim_db: &AnimationDB,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
@@ -250,6 +282,7 @@ pub fn spawn_enemy(
                     behavior: enemy::behaviors::Behavior::Berserker,
                 },
                 BattleEntity {},
+                DungeonEntity,
                 skills,
                 ActiveEffects {
                     effects: Vec::new(),
@@ -383,6 +416,7 @@ pub fn spawn_unit(
             },
             UnitEquipment::default(),
             BattleEntity {},
+            DungeonEntity,
             skills,
             level_manager,
             key,
