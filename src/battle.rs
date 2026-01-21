@@ -17,8 +17,7 @@ use crate::{
         update_facing_direction_on_movement,
     },
     assets::{
-        BATTLE_TACTICS_TILESHEET, CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH,
-        OVERLAY_PATH,
+        BATTLE_TACTICS_TILESHEET, CURSOR_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH,
         sprite_db::{SpriteDB, build_sprite_db},
     },
     battle_menu::{
@@ -50,6 +49,7 @@ use crate::{
         skills::{SkillId, UnitSkills, setup_skill_system},
         spawn_damage_text,
     },
+    dungeon::{DungeonState, RoomId, Teleporter, init_dungeon_manager, load_room},
     enemy::{
         begin_enemy_phase, execute_enemy_action, init_enemy_ai_system, plan_enemy_action,
         resolve_enemy_action, select_next_enemy,
@@ -57,9 +57,7 @@ use crate::{
     grid::{self, GridManager, GridPosition},
     grid_cursor,
     join_game_menu::get_sprite_resources_for_job,
-    map_generation::{
-        MapResource, build_tilemap_from_map, init_map_params, setup_map_data_from_params,
-    },
+    map_generation::{MapData, build_tilemap_from_map, init_map_params},
     menu::{
         menu_navigation::{
             self, ActiveMenu, GameMenuLatch, handle_menu_cursor_navigation, highlight_menu_option,
@@ -169,7 +167,7 @@ pub fn battle_plugin(app: &mut App) {
         ))
         .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
         .add_systems(
-            OnEnter(GameState::Battle),
+            OnEnter(GameState::Dungeon),
             (
                 load_battle_asset_resources,
                 load_animation_data,
@@ -177,18 +175,18 @@ pub fn battle_plugin(app: &mut App) {
             ),
         )
         .add_systems(
-            OnEnter(GameState::Battle),
+            OnEnter(GameState::Dungeon),
             (
                 init_map_params,
-                setup_map_data_from_params.after(init_map_params),
-                load_demo_battle_scene.after(load_battle_asset_resources),
                 init_phase_system,
+                init_dungeon_manager,
                 init_enemy_ai_system,
                 setup_skill_system,
                 battle_ui_setup,
             )
                 .chain(),
         )
+        .add_systems(OnEnter(DungeonState::LoadRoom), load_room)
         .add_systems(
             Update,
             (
@@ -205,14 +203,14 @@ pub fn battle_plugin(app: &mut App) {
                 banner_animation_system,
                 start_phase,
             )
-                .run_if(in_state(GameState::Battle))
+                .run_if(in_state(DungeonState::InBattle))
                 .chain(),
         )
         .add_systems(
             Update,
             (begin_enemy_phase)
                 .run_if(is_enemy_phase)
-                .run_if(in_state(GameState::Battle)),
+                .run_if(in_state(DungeonState::InBattle)),
         )
         .add_systems(
             Update,
@@ -244,9 +242,9 @@ pub fn battle_plugin(app: &mut App) {
                 // UI
                 update_player_ui_info,
             )
-                .run_if(in_state(GameState::Battle)),
+                .run_if(in_state(DungeonState::InBattle)),
         )
-        .add_systems(Update, change_zoom.run_if(in_state(GameState::Battle)))
+        .add_systems(Update, change_zoom.run_if(in_state(DungeonState::InBattle)))
         .add_systems(
             Update,
             (
@@ -258,7 +256,7 @@ pub fn battle_plugin(app: &mut App) {
                 update_facing_direction_on_attack,
                 cleanup_vfx_on_animation_complete,
             )
-                .run_if(in_state(GameState::Battle)),
+                .run_if(in_state(DungeonState::InBattle)),
         )
         .add_systems(
             Update,
@@ -269,7 +267,7 @@ pub fn battle_plugin(app: &mut App) {
                 impact_event_handler,
             )
                 .chain()
-                .run_if(in_state(GameState::Battle)),
+                .run_if(in_state(DungeonState::InBattle)),
         )
         .add_systems(
             Update,
@@ -281,17 +279,17 @@ pub fn battle_plugin(app: &mut App) {
             )
                 .chain()
                 .after(prepare_for_phase::<Enemy>)
-                .run_if(in_state(GameState::Battle))
+                .run_if(in_state(DungeonState::InBattle))
                 .run_if(is_running_enemy_phase),
         )
         .add_systems(
             Update,
             (projectile_bezier_system, projectile_arrival_system)
-                .run_if(in_state(GameState::Battle)),
+                .run_if(in_state(DungeonState::InBattle)),
         )
         .add_systems(
             Update,
-            check_battle_complete.run_if(in_state(GameState::Battle)),
+            check_battle_complete.run_if(in_state(DungeonState::InBattle)),
         )
         .add_systems(
             OnEnter(GameState::BattleResolution),
@@ -622,35 +620,51 @@ pub fn spawn_background_gradient(mut commands: Commands, asset_server: Res<Asset
     ));
 }
 
-pub fn load_demo_battle_scene(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    map_data: Res<MapResource>,
-    registered_players: Res<RegisteredBattlePlayers>,
-    tt_assets: Res<TinytacticsAssets>,
-    anim_db: Res<AnimationDB>,
-    sprite_db: Res<SpriteDB>,
+pub fn populate_room(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    map_data: &MapData,
+    registered_players: &RegisteredBattlePlayers,
+    tt_assets: &TinytacticsAssets,
+    anim_db: &AnimationDB,
+    sprite_db: &SpriteDB,
+    room_id: RoomId,
 ) {
     build_tilemap_from_map(
-        &mut commands,
+        commands,
         asset_server.load(BATTLE_TACTICS_TILESHEET),
-        &map_data.data,
+        map_data,
     );
-
-    commands.insert_resource(grid::GridManagerResource {
-        grid_manager: GridManager::new(DEMO_2_GRID_BOUNDS_X, DEMO_2_GRID_BOUNDS_Y),
-    });
 
     // Spawn players and player cursors
     let cursor_image: Handle<Image> = asset_server.load(CURSOR_PATH);
 
-    let mut valid_player_positions = Vec::from(map_data.data.player_start_locations);
+    let mut valid_player_positions = Vec::from(map_data.player_start_locations);
 
     let enemy_1_grid_pos = GridPosition { x: 7, y: 3 };
     let enemy_2_grid_pos = GridPosition { x: 4, y: 2 };
     let enemy_3_grid_pos = GridPosition { x: 4, y: 4 };
 
-    load_demo_battle_players(&mut commands, &registered_players);
+    commands.spawn((
+        Teleporter {
+            current_room: room_id,
+            next_room: RoomId(room_id.0 + 1),
+        },
+        map_data.bridge_end_locations[0],
+    ));
+    commands.spawn((
+        Teleporter {
+            current_room: room_id,
+            next_room: RoomId(room_id.0 + 1),
+        },
+        map_data.bridge_end_locations[1],
+    ));
+
+    commands.insert_resource(grid::GridManagerResource {
+        grid_manager: GridManager::new(13, 13),
+    });
+
+    load_demo_battle_players(commands, &registered_players);
 
     for (player, player_unit_info) in registered_players.players.iter() {
         let Some(position) = valid_player_positions.pop() else {
@@ -675,9 +689,9 @@ pub fn load_demo_battle_scene(
         let weapon_sheet = tt_assets.iron_axe_spritesheet.clone();
 
         spawn_unit(
-            &mut commands,
+            commands,
             player_unit_info.save_file_key.name.to_string(),
-            &tt_assets,
+            tt_assets,
             position,
             image,
             texture_atlas,
@@ -688,14 +702,14 @@ pub fn load_demo_battle_scene(
             Direction::NE,
         );
 
-        grid_cursor::spawn_cursor(&mut commands, cursor_image.clone(), *player, position);
+        grid_cursor::spawn_cursor(commands, cursor_image.clone(), *player, position);
     }
 
     if registered_players.players.len() > 1 {
         spawn_enemy(
-            &mut commands,
+            commands,
             "Deege".to_string(),
-            &tt_assets,
+            tt_assets,
             &anim_db,
             enemy_2_grid_pos,
             tt_assets.cleric_spritesheet.clone(),
@@ -707,9 +721,9 @@ pub fn load_demo_battle_scene(
         );
 
         spawn_enemy(
-            &mut commands,
+            commands,
             "Chaumwer".to_string(),
-            &tt_assets,
+            tt_assets,
             &anim_db,
             enemy_3_grid_pos,
             tt_assets.cleric_spritesheet.clone(),
@@ -722,9 +736,9 @@ pub fn load_demo_battle_scene(
     }
 
     spawn_enemy(
-        &mut commands,
+        commands,
         "Jimothy Timbers".to_string(),
-        &tt_assets,
+        tt_assets,
         &anim_db,
         enemy_1_grid_pos,
         tt_assets.cleric_spritesheet.clone(),
@@ -736,7 +750,7 @@ pub fn load_demo_battle_scene(
     );
 
     let mut obstacle_entities = Vec::new();
-    for (obstacle_location, obstacle) in &map_data.data.obstacles {
+    for (obstacle_location, obstacle) in &map_data.obstacles {
         info!("Obstacle spawning at {:?}", obstacle_location);
         let sprite_type = match obstacle {
             crate::map_generation::Obstacle::Rock1 => ObstacleSprite::Rock,
@@ -745,7 +759,7 @@ pub fn load_demo_battle_scene(
             crate::map_generation::Obstacle::Tree => ObstacleSprite::Tree,
         };
 
-        let e = spawn_obstacle_unit(&mut commands, &tt_assets, *obstacle_location, sprite_type);
+        let e = spawn_obstacle_unit(commands, &tt_assets, *obstacle_location, sprite_type);
         obstacle_entities.push(e);
     }
 }

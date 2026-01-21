@@ -240,10 +240,10 @@ pub fn plan_enemy_action(
                         let mut choice = None;
                         let mut choices = Vec::new();
                         for (
-                            possible_target,
-                            possible_target_unit,
+                            _possible_target,
+                            _possible_target_unit,
                             possible_target_pos,
-                            dist_from_me,
+                            _dist_from_me,
                         ) in possible_targets
                         {
                             for (pos, valid_move) in &valid_moves {

@@ -9,8 +9,7 @@ use crate::{
     animation::{
         Direction, UnitAnimationKind,
         animation_db::{
-            AnimatedSpriteId, AnimationDB, AnimationKey, AnimationStartIndexKey,
-            RegisteredAnimationId,
+            AnimationDB, AnimationKey, AnimationStartIndexKey,
             registered_sprite_ids::{TT_UNIT_ANIMATED_SPRITE_ID, UNIT_DEMO_SPRITE_ID},
         },
     },
@@ -633,13 +632,6 @@ pub struct HasReadyButton {
 #[derive(Component)]
 pub struct ReadyButtonMarker;
 
-pub struct JoinGameButtonEvent {
-    /// The player that pressed the event
-    player: Player,
-    /// The command that was clicked
-    command: UiCommands,
-}
-
 // TODO: This should probably just emit events with the Command tied to this Entity or something
 // and then each system can handle the commands individually?
 fn handle_button_commands(
@@ -856,7 +848,7 @@ fn handle_button_commands(
                                 }
                             }
 
-                            next_state.set(GameState::Battle);
+                            next_state.set(GameState::Dungeon);
                         }
                     }
                 }

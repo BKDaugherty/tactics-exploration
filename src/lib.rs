@@ -7,6 +7,7 @@ pub mod battle_phase;
 mod bevy_ecs_tilemap_example;
 pub mod camera;
 pub mod combat;
+pub mod dungeon;
 pub mod enemy;
 pub mod equipment;
 pub mod gameplay_effects;
@@ -30,6 +31,6 @@ pub enum GameState {
     Initializing,
     MainMenu,
     JoinGame,
-    Battle,
+    Dungeon,
     BattleResolution,
 }

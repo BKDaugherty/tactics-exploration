@@ -17,7 +17,7 @@ use crate::{
     grid_cursor::Cursor,
     menu::{
         menu_navigation::{ActiveMenu, GameMenuController, GameMenuGrid},
-        ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_MENU_BACKGROUND, UI_TEXT_COLOR},
+        ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_TEXT_COLOR},
     },
     player::{self, Player, PlayerInputAction},
     unit::Unit,
@@ -90,7 +90,7 @@ pub enum UnitMenuAction {
 ///
 /// Includes the definition of the Battle Menus, PlayerUI, and the ObjectiveUI.
 pub mod battle_menu_ui_definition {
-    use std::collections::HashMap;
+    
 
     use crate::{
         menu::{

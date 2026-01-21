@@ -609,12 +609,12 @@ pub fn attack_intent_system(
         let mut tracker = commands.entity(e);
         tracker.remove::<AttackIntent>();
 
-        let Some((attacker, attacker_grid_pos)) = unit_query.get(intent.attacker).ok() else {
+        let Some((_attacker, _attacker_grid_pos)) = unit_query.get(intent.attacker).ok() else {
             error!("Attack Intent originated from an Attacker that no longer exists?");
             continue;
         };
 
-        let Some((defender, defender_grid_pos)) = unit_query.get(intent.defender).ok() else {
+        let Some((_defender, defender_grid_pos)) = unit_query.get(intent.defender).ok() else {
             error!("Attack Intent is attacking a defender that no longer exists?");
             continue;
         };

@@ -129,11 +129,6 @@ impl Stats {
         self
     }
 
-    fn with_elemental_affinity(&mut self, element: ElementalType, affinity: u32) -> &mut Self {
-        let _ = self.elemental_affinities.insert(element, affinity);
-        self
-    }
-
     fn with_magic_power(&mut self, p: u32) -> &mut Self {
         self.magic_power = p;
         self
@@ -260,7 +255,7 @@ pub fn spawn_obstacle_unit(
 pub fn spawn_enemy(
     commands: &mut Commands,
     unit_name: String,
-    tt_assets: &Res<TinytacticsAssets>,
+    tt_assets: &TinytacticsAssets,
     anim_db: &AnimationDB,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
@@ -348,7 +343,7 @@ pub const TINY_TACTICS_ANCHOR: Anchor = Anchor(Vec2::new(0., -0.25));
 pub fn spawn_unit(
     commands: &mut Commands,
     unit_name: String,
-    tt_assets: &Res<TinytacticsAssets>,
+    tt_assets: &TinytacticsAssets,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
     texture_atlas: TextureAtlas,
@@ -896,6 +891,7 @@ pub fn handle_unit_cursor_actions(
     for (player, action_state) in player_query.iter() {
         for (cursor_entity, cursor_player, mut cursor_grid_pos) in cursor_query.iter_mut() {
             if player != cursor_player {
+                log::error!("derp derp derp");
                 continue;
             }
 
@@ -909,6 +905,7 @@ pub fn handle_unit_cursor_actions(
             if player_state.cursor_state == player::PlayerCursorState::Idle
                 && action_state.just_pressed(&PlayerInputAction::Select)
             {
+                log::info!("just pressed select");
                 let selection = select_unit_for_movement(
                     &cursor_grid_pos,
                     &grid_manager_res.grid_manager,
