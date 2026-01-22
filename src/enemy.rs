@@ -440,6 +440,9 @@ pub fn resolve_enemy_action(
                         .entity(e)
                         .remove::<(ActiveEnemy, EnemyActionInProgress, PlannedEnemyAction)>();
                 }
+                crate::unit::UnitAction::Interact => {
+                    error!("Enemy {:?} interacted with something?", e);
+                }
             }
         }
     }

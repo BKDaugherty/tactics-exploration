@@ -24,8 +24,9 @@ use crate::{
     battle_menu::{
         battle_menu_ui_definition::{PlayerBattleMenu, battle_ui_setup},
         player_battle_ui_systems::{
-            activate_battle_ui, clear_stale_battle_menus_on_activate,
-            handle_battle_ui_interactions, reactivate_ui_on_back_message, set_active_battle_menu,
+            activate_battle_ui, clear_stale_battle_menus_on_activate, close_player_battle_menus,
+            handle_battle_ui_interactions, on_unit_completed_action_reopen_battle_menu,
+            reactivate_ui_on_back_message, set_active_battle_menu,
         },
         player_info_ui_systems::update_unit_viewer_ui,
         update_controlled_ui_info,
@@ -57,6 +58,10 @@ use crate::{
     },
     grid::{self, GridManager, GridPosition},
     grid_cursor,
+    interactable::{
+        InteractionEnabled, ObtainableItem, TreasureChest, handle_interactions,
+        update_player_ui_available_options,
+    },
     join_game_menu::get_sprite_resources_for_job,
     map_generation::{
         MapResource, build_tilemap_from_map, init_map_params, setup_map_data_from_params,
@@ -74,7 +79,6 @@ use crate::{
         CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit,
         UnitActionCompletedMessage, UnitExecuteActionMessage, execute_unit_actions,
         handle_unit_cursor_actions, handle_unit_ui_command,
-        on_unit_completed_action_reopen_battle_menu,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_ui_command,
     },
@@ -122,6 +126,7 @@ pub enum UnitCommand {
     Cancel,
     UseSkill(SkillId),
     ViewMap,
+    Interact(Entity),
 }
 
 pub fn god_mode_plugin(app: &mut App) {
@@ -197,6 +202,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_systems(
             Update,
             (
+                check_battle_complete,
                 check_should_advance_phase::<Player>,
                 check_should_advance_phase::<Enemy>,
                 prepare_for_phase::<Player>.after(check_should_advance_phase::<Player>),
@@ -233,16 +239,13 @@ pub fn battle_plugin(app: &mut App) {
                 clear_stale_battle_menus_on_activate.run_if(is_running_player_phase),
                 activate_battle_ui.run_if(is_running_player_phase),
                 handle_battle_ui_interactions.run_if(is_running_player_phase),
-                // hide_battle_ui_on_unit_ui_command.run_if(is_running_player_phase),
                 unlock_cursor_after_unit_ui_command.after(handle_battle_ui_interactions),
                 // Player UI System
                 handle_unit_cursor_actions.run_if(is_running_player_phase),
                 reactivate_ui_on_back_message.run_if(is_running_player_phase),
                 execute_unit_actions,
                 // Menu UI
-                highlight_menu_option
-                    .run_if(is_running_player_phase)
-                    .before(check_should_advance_phase::<Player>),
+                highlight_menu_option,
                 handle_menu_cursor_navigation.run_if(is_running_player_phase),
                 // Combat
                 attack_intent_system,
@@ -303,12 +306,8 @@ pub fn battle_plugin(app: &mut App) {
                 .run_if(in_state(GameState::Battle)),
         )
         .add_systems(
-            Update,
-            check_battle_complete.run_if(in_state(GameState::Battle)),
-        )
-        .add_systems(
             OnEnter(GameState::BattleResolution),
-            spawn_battle_resolution_ui,
+            (close_player_battle_menus, spawn_battle_resolution_ui),
         )
         .add_systems(
             Update,
@@ -328,6 +327,10 @@ pub fn battle_plugin(app: &mut App) {
                 spawn_damage_text,
                 despawn_after_timer_completed::<DamageText>,
             ),
+        )
+        .add_systems(
+            Update,
+            (update_player_ui_available_options, handle_interactions),
         )
         .add_observer(handle_battle_resolution_ui_buttons)
         .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);
@@ -644,6 +647,20 @@ pub fn load_demo_battle_scene(
     anim_db: Res<AnimationDB>,
     sprite_db: Res<SpriteDB>,
 ) {
+    commands.spawn((
+        GridPosition { x: 3, y: 3 },
+        ObtainableItem {
+            item_id: "Cool Item".to_string(),
+        },
+        InteractionEnabled,
+    ));
+
+    commands.spawn((
+        GridPosition { x: 2, y: 3 },
+        TreasureChest,
+        InteractionEnabled,
+    ));
+
     build_tilemap_from_map(
         &mut commands,
         asset_server.load(BATTLE_TACTICS_TILESHEET),

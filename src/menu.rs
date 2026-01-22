@@ -160,10 +160,20 @@ pub mod menu_navigation {
         }
 
         /// Pushes a button the default stack of the Game Menu Grid.
-        pub fn push_button_to_stack(&mut self, button_entity: Entity) {
-            if let Err(e) = self.add_button_to_column(1, button_entity) {
-                error!("Failed to push button to base stack: {:?}", e)
+        pub fn push_button_to_stack(&mut self, button_entity: Entity) -> MenuGridPosition {
+            match self.add_button_to_column(1, button_entity) {
+                Ok(pos) => pos,
+                Err(e) => panic!("Failed to push button to base stack: {:?}", e),
             }
+        }
+
+        pub fn remove_button(&mut self, position: &MenuGridPosition) -> anyhow::Result<()> {
+            if let Some(..) = self.buttons.remove(position) {
+                if let Some(y) = self.column_heights.get_mut(&position.x) {
+                    *y = y.saturating_sub(1);
+                }
+            }
+            Ok(())
         }
 
         /// Pushes buttons to the default stack of the Game Menu Grid.
@@ -173,7 +183,11 @@ pub mod menu_navigation {
             }
         }
 
-        fn add_button_to_column(&mut self, col: u8, button_entity: Entity) -> anyhow::Result<()> {
+        fn add_button_to_column(
+            &mut self,
+            col: u8,
+            button_entity: Entity,
+        ) -> anyhow::Result<MenuGridPosition> {
             if col > self.width {
                 return Err(anyhow::anyhow!(
                     "Tried to insert column, greater than width {:?}",
@@ -185,7 +199,7 @@ pub mod menu_navigation {
             let pos = MenuGridPosition { x: col, y: *height };
 
             let _ = self.buttons.insert(pos, button_entity);
-            Ok(())
+            Ok(pos)
         }
     }
 

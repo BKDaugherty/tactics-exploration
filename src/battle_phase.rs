@@ -296,7 +296,9 @@ pub fn start_phase(
 pub mod phase_ui {
     use bevy::prelude::*;
 
-    use crate::{assets::FontResource, battle::BattleEntity, battle_phase::PlayerEnemyPhase};
+    use crate::{
+        GameState, assets::FontResource, battle::BattleEntity, battle_phase::PlayerEnemyPhase,
+    };
 
     #[derive(Debug)]
     pub enum BattleBannerMessage {
@@ -347,6 +349,7 @@ pub mod phase_ui {
                     state: BannerAnimState::Entering,
                 },
                 BattleEntity {},
+                DespawnOnExit(GameState::Battle),
             ))
             .id();
 
