@@ -27,6 +27,9 @@ use crate::{
 #[derive(Component)]
 pub struct BattlePlayerUI {}
 
+/// Component for the containere that holds the "owning" player's unit information for this UI box.
+pub struct PlayerOwnedUnitUi {}
+
 /// A marker component for the container that holds the information about the unit under the player's cursor
 #[derive(Component)]
 pub struct PlayerUiInfo {}
@@ -49,9 +52,14 @@ pub struct ObjectiveText {}
 
 /// Marker component for the top level BattleUiContainer.
 ///
-/// It's expected that the BattleUiContainer will house the
+/// It's expected that the BattleUiContainer will house all of the
+/// battle menus for a specific player
 #[derive(Component)]
-pub struct BattleUiContainer {}
+pub struct BattleUiContainer {
+    standard: Entity,
+    pub(crate) skills_menu: Entity,
+    pub(crate) filtered_skills_menu: Entity,
+}
 
 /// Marker component for the third tier of the Battle Menu
 #[derive(Component)]
@@ -74,6 +82,7 @@ pub enum BattleMenuAction {
     Action(UnitMenuAction),
     OpenSkillMenu,
     OpenSkillsFilteredByCategoryMenu(skills::SkillCategoryId),
+    ViewMap,
 }
 
 /// A terminal node in the BattleMenu. Turned into a `UnitCommand` and sent out
@@ -85,6 +94,20 @@ pub enum UnitMenuAction {
     UseSkill(skills::SkillId),
     Wait,
 }
+
+#[derive(Component)]
+pub struct UnitViewerScreen {
+    name: Entity,
+}
+
+#[derive(Component)]
+pub struct UnitViewHealthText;
+
+#[derive(Component)]
+pub struct UnitViewNameText;
+
+#[derive(Component)]
+pub struct MenuAwaitingInputFromCursor;
 
 /// Functions for spawning the battle UI itself
 ///
@@ -184,7 +207,7 @@ pub mod battle_menu_ui_definition {
             ))
             .id();
 
-        for player in registered_players.players.keys().cloned() {
+        for player in registered_players.save_files.keys().cloned() {
             let player_ui_container = commands
                 .spawn((
                     Name::new(format!("PlayerUiContainer {:?}", player)),
@@ -197,31 +220,6 @@ pub mod battle_menu_ui_definition {
                         flex_direction: FlexDirection::Column,
                         ..Default::default()
                     },
-                    BorderRadius::all(percent(20)),
-                ))
-                .id();
-
-            // Build Player Unit UI Info
-            let player_ui_info = commands
-                .spawn((
-                    BackgroundColor(UI_MENU_BACKGROUND),
-                    Node {
-                        display: Display::Flex,
-                        height: percent(20),
-                        width: percent(100),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceEvenly,
-                        justify_items: JustifyItems::Center,
-                        align_items: AlignItems::Center,
-                        align_content: AlignContent::SpaceEvenly,
-                        padding: UiRect {
-                            left: percent(5),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    },
-                    player,
-                    PlayerUiInfo {},
                     BorderRadius::all(percent(20)),
                 ))
                 .id();
@@ -268,6 +266,37 @@ pub mod battle_menu_ui_definition {
                 ))
                 .id();
 
+            // Build Player Unit UI Info
+            let player_ui_info = commands
+                .spawn((
+                    BackgroundColor(UI_MENU_BACKGROUND),
+                    Node {
+                        display: Display::Flex,
+                        height: percent(20),
+                        width: percent(100),
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::SpaceEvenly,
+                        justify_items: JustifyItems::Center,
+                        align_items: AlignItems::Center,
+                        align_content: AlignContent::SpaceEvenly,
+                        padding: UiRect {
+                            left: percent(5),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    player,
+                    PlayerUiInfo {},
+                    ControlledUnitUiEntities {
+                        move_text,
+                        health_text,
+                        ap_text,
+                        name_text,
+                    },
+                    BorderRadius::all(percent(20)),
+                ))
+                .id();
+
             let action_category_menu = commands
                 .spawn((
                     Name::new("ActionCategoryMenu"),
@@ -287,21 +316,6 @@ pub mod battle_menu_ui_definition {
                     SkillMenu {},
                     GameMenuLatch::default(),
                     PlayerBattleMenu,
-                ))
-                .id();
-
-            // Build Battle UI
-            let battle_menu_container = commands
-                .spawn((
-                    Name::new("PlayerBattleMenu"),
-                    Node {
-                        display: Display::Flex,
-                        width: percent(100),
-                        height: percent(100),
-                        ..Default::default()
-                    },
-                    BattleUiContainer {},
-                    player,
                 ))
                 .id();
 
@@ -355,6 +369,7 @@ pub mod battle_menu_ui_definition {
                     player,
                     BackgroundColor(UI_MENU_BACKGROUND),
                     PlayerBattleMenu,
+                    ActiveMenu {},
                 ))
                 .id();
 
@@ -380,14 +395,72 @@ pub mod battle_menu_ui_definition {
                 ))
                 .id();
 
+            let unit_view_name_text = commands
+                .spawn((
+                    Text::new("Viewed Unit Name"),
+                    font_style
+                        .clone()
+                        .with_font(fonts.pixelify_sans_regular.clone()),
+                    TextColor(UI_TEXT_COLOR),
+                ))
+                .id();
+
+            let view_map_container = commands
+                .spawn((
+                    Name::new("ViewMapScreen"),
+                    Node {
+                        display: Display::None,
+                        width: percent(100),
+                        height: percent(100),
+                        flex_direction: FlexDirection::Column,
+                        justify_content: JustifyContent::SpaceEvenly,
+                        align_items: AlignItems::FlexStart,
+                        padding: UiRect::all(percent(1)),
+                        ..Default::default()
+                    },
+                    BackgroundColor(UI_MENU_BACKGROUND),
+                    BorderRadius::all(percent(20)),
+                    player,
+                    UnitViewerScreen {
+                        name: unit_view_name_text,
+                    },
+                    GameMenuLatch::default(),
+                    PlayerBattleMenu,
+                ))
+                .id();
+
+            commands
+                .entity(view_map_container)
+                .add_child(unit_view_name_text);
+
             commands
                 .entity(standard_battle_menu_container)
                 .add_children(&[move_button, skills_button, wait_button]);
+
+            // Build Battle UI
+            let battle_menu_container = commands
+                .spawn((
+                    Name::new("PlayerBattleMenu"),
+                    Node {
+                        display: Display::Flex,
+                        width: percent(100),
+                        height: percent(100),
+                        ..Default::default()
+                    },
+                    BattleUiContainer {
+                        standard: standard_battle_menu_container,
+                        skills_menu: action_category_menu,
+                        filtered_skills_menu: action_menu,
+                    },
+                    player,
+                ))
+                .id();
 
             commands.entity(battle_menu_container).add_children(&[
                 standard_battle_menu_container,
                 action_category_menu,
                 action_menu,
+                view_map_container,
             ]);
 
             commands.entity(player_ui_info).add_children(&[
@@ -448,11 +521,63 @@ pub struct PlayerUiApText {}
 #[derive(Component)]
 pub struct PlayerUiMoveText {}
 
+#[derive(Component)]
+pub struct ControlledUnitUiEntities {
+    name_text: Entity,
+    health_text: Entity,
+    ap_text: Entity,
+    move_text: Entity,
+}
+
+#[derive(Component)]
+pub struct ControlledUnit {
+    unit: Entity,
+}
+
+// We want this to update anytime the Unit's resources change or
+// if the controlled unit changes. I'm not sure how to express that with Bevy's
+// filters.
+pub fn update_controlled_ui_info(
+    player_unit_ui: Query<(&player::Player, &ControlledUnitUiEntities)>,
+    unit_query: Query<
+        (&Unit, &UnitPhaseResources, &Player),
+        Or<(Changed<Unit>, Changed<UnitPhaseResources>)>,
+    >,
+    // So would this block any other queries updating text in the Game?
+    mut text: Query<&mut Text>,
+) {
+    for (player, controlled_ui) in player_unit_ui {
+        for (unit, resources, unit_player) in unit_query {
+            if player != unit_player {
+                continue;
+            }
+
+            if let Some(mut text_item) = text.get_mut(controlled_ui.name_text).ok() {
+                text_item.0 = unit.name.clone();
+            }
+
+            if let Some(mut text_item) = text.get_mut(controlled_ui.health_text).ok() {
+                text_item.0 = format!("HP: {} / {}", unit.stats.health, unit.stats.max_health);
+            }
+
+            if let Some(mut text_item) = text.get_mut(controlled_ui.move_text).ok() {
+                text_item.0 = format!("Move: {}", resources.movement_points_left_in_phase);
+            }
+
+            if let Some(mut text_item) = text.get_mut(controlled_ui.ap_text).ok() {
+                text_item.0 = format!("AP: {}", resources.action_points_left_in_phase);
+            }
+        }
+    }
+}
+
 /// Systems that update information on the Player Cursor Information UI
 pub mod player_info_ui_systems {
     use super::*;
 
-    /// Updates the PlayerUiInfo pane based on the current position of the player's cursor.
+    /// Updates the UnitViewerScreen pane based on the current position of the player's cursor.
+    ///
+    /// This pane should be updated by
     pub fn update_player_ui_info(
         grid_manager: Res<grid::GridManagerResource>,
         // TODO: Can I do (Changed<GridPosition> or Changed<Unit>) in two diff queries?
@@ -461,46 +586,8 @@ pub mod player_info_ui_systems {
         // TODO: This is terrible. I could make this one Text box, or
         // could do Option<Component> and have one query and then
         // do some match / runtime stuff? Def a little silly.
-        mut player_unit_ui: Query<
-            (&player::Player, &mut Visibility, &Children),
-            With<PlayerUiInfo>,
-        >,
-        mut player_ui_health_text: Query<
-            &mut Text,
-            (
-                With<PlayerUiHealthText>,
-                Without<PlayerUiNameText>,
-                Without<PlayerUiApText>,
-                Without<PlayerUiMoveText>,
-            ),
-        >,
-        mut player_ui_name_text: Query<
-            &mut Text,
-            (
-                With<PlayerUiNameText>,
-                Without<PlayerUiHealthText>,
-                Without<PlayerUiApText>,
-                Without<PlayerUiMoveText>,
-            ),
-        >,
-        mut player_ui_move_text: Query<
-            &mut Text,
-            (
-                With<PlayerUiApText>,
-                Without<PlayerUiHealthText>,
-                Without<PlayerUiMoveText>,
-                Without<PlayerUiNameText>,
-            ),
-        >,
-        mut player_ui_ap_text: Query<
-            &mut Text,
-            (
-                With<PlayerUiMoveText>,
-                Without<PlayerUiHealthText>,
-                Without<PlayerUiApText>,
-                Without<PlayerUiNameText>,
-            ),
-        >,
+        player_unit_viewer: Query<(&player::Player, &UnitViewerScreen)>,
+        mut text_query: Query<&mut Text>,
     ) {
         for (cursor_player, grid_pos) in cursor_query.iter() {
             let Some(entities) = grid_manager.grid_manager.get_by_position(grid_pos) else {
@@ -512,31 +599,18 @@ pub mod player_info_ui_systems {
                 .filter_map(|t| unit_query.get(*t).ok())
                 .next();
 
-            for (ui_player, mut unit_ui_repr, children) in player_unit_ui.iter_mut() {
+            for (ui_player, unit_viewer_screen) in player_unit_viewer {
                 if cursor_player != ui_player {
                     continue;
                 }
-
-                match unit {
-                    Some(..) => *unit_ui_repr = Visibility::Visible,
-                    None => *unit_ui_repr = Visibility::Hidden,
-                };
 
                 // If there is a unit, we need to update the now visible UI
                 let Some((unit, phase_resources)) = unit else {
                     continue;
                 };
 
-                for child in children {
-                    if let Ok(mut text) = player_ui_health_text.get_mut(*child) {
-                        text.0 = PlayerUiHealthText::derive_text(unit);
-                    } else if let Ok(mut text) = player_ui_name_text.get_mut(*child) {
-                        text.0 = PlayerUiNameText::derive_text(unit);
-                    } else if let Ok(mut text) = player_ui_move_text.get_mut(*child) {
-                        text.0 = format!("Move: {}", phase_resources.movement_points_left_in_phase);
-                    } else if let Ok(mut text) = player_ui_ap_text.get_mut(*child) {
-                        text.0 = format!("AP: {}", phase_resources.action_points_left_in_phase);
-                    }
+                if let Some(mut text_item) = text_query.get_mut(unit_viewer_screen.name).ok() {
+                    text_item.0 = unit.name.clone();
                 }
             }
         }
@@ -574,8 +648,10 @@ pub mod player_battle_ui_systems {
 
     use crate::{
         assets::sounds::{SoundManagerParam, UiSound},
+        battle_menu::battle_menu_ui_definition::PlayerBattleMenu,
         combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills},
         menu::NestedDynamicMenu,
+        unit::UnitActionCompletedMessage,
     };
 
     use super::*;
@@ -585,7 +661,7 @@ pub mod player_battle_ui_systems {
     /// Primarily used to communicate to the menu what unit was selected.
     #[derive(Component, Clone)]
     pub struct ActiveBattleMenu {
-        selected_unit: Entity,
+        pub(crate) selected_unit: Entity,
     }
 
     /// If the player has selected a terminal node in the BattleUi, but then clicks back
@@ -654,7 +730,7 @@ pub mod player_battle_ui_systems {
     }
 
     /// Utility function for cleaning up a stale skill menu
-    fn clean_stale_menu(commands: &mut Commands, menu_e: Entity) {
+    pub fn clean_stale_menu(commands: &mut Commands, menu_e: Entity) {
         let mut skill_menu = commands.entity(menu_e);
         skill_menu.despawn_children();
         skill_menu.remove::<(
@@ -665,32 +741,42 @@ pub mod player_battle_ui_systems {
         )>();
     }
 
+    /// At the moment a player has exactly one Unit on the board.
+    /// This system links the UI that the player will get to that entity.
+    pub fn set_active_battle_menu(
+        mut commands: Commands,
+        player_units: Query<(Entity, &Player), With<Unit>>,
+        battle_menus: Query<(Entity, &Player), With<BattlePlayerUI>>,
+    ) {
+        for (e, player) in player_units {
+            for (battle_menu_e, battle_player) in battle_menus {
+                if player != battle_player {
+                    continue;
+                }
+
+                commands
+                    .entity(battle_menu_e)
+                    .insert(ActiveBattleMenu { selected_unit: e });
+            }
+        }
+    }
+
     /// Clear out potentially stale skill systems when the Battle UI is activated
     ///
     /// TODO: I don't love that this uses UnitSelectionMessage, as opposed to
-    /// having a specific event coming off the BattleUI.a
+    /// having a specific event coming off the BattleUI.
     pub fn clear_stale_battle_menus_on_activate(
         mut commands: Commands,
         mut unit_selected: MessageReader<UnitSelectionMessage>,
-        mut skill_menu_query: Query<(Entity, &Player), With<SkillMenu>>,
-        mut skill_menu_category_query: Query<
-            (Entity, &Player),
-            (With<SkillsFilteredByCategoryMenu>, Without<SkillMenu>),
-        >,
+        battle_ui_query: Query<(&Player, &BattleUiContainer)>,
     ) {
         for message in unit_selected.read() {
-            for (e, p) in skill_menu_query.iter_mut() {
+            for (p, ui_container) in battle_ui_query {
                 if *p != message.player {
                     continue;
                 }
-                clean_stale_menu(&mut commands, e);
-            }
-
-            for (e, p) in skill_menu_category_query.iter_mut() {
-                if *p != message.player {
-                    continue;
-                }
-                clean_stale_menu(&mut commands, e);
+                clean_stale_menu(&mut commands, ui_container.skills_menu);
+                clean_stale_menu(&mut commands, ui_container.filtered_skills_menu);
             }
         }
     }
@@ -732,7 +818,8 @@ pub mod player_battle_ui_systems {
         fonts: Res<FontResource>,
         skill_db: Res<SkillDBResource>,
         player_input_query: Query<(&Player, &ActionState<PlayerInputAction>)>,
-        mut player_battle_menu: Query<
+        battle_ui_container_query: Query<(&Player, &BattleUiContainer)>,
+        mut active_player_battle_menu: Query<
             (
                 Entity,
                 &ActiveBattleMenu,
@@ -743,31 +830,23 @@ pub mod player_battle_ui_systems {
             With<ActiveMenu>,
         >,
         unit_menu_query: Query<&BattleMenuAction>,
-        mut skill_menu_query: Query<
-            (Entity, &Player),
-            (
-                With<SkillMenu>,
-                Without<SkillsFilteredByCategoryMenu>,
-                Without<ActiveMenu>,
-            ),
-        >,
-        mut skill_menu_category_query: Query<
-            (Entity, &Player),
-            (
-                With<SkillsFilteredByCategoryMenu>,
-                Without<SkillMenu>,
-                Without<ActiveMenu>,
-            ),
-        >,
-        unit_skills_query: Query<&UnitSkills>,
+        unit_info_query: Query<(&UnitSkills, &UnitPhaseResources)>,
         mut battle_command_writer: MessageWriter<UnitUiCommandMessage>,
         sounds: SoundManagerParam,
     ) {
         for (player, input_actions) in player_input_query.iter() {
-            let Some((battle_menu_e, battle_menu, menu, controller, nested)) = player_battle_menu
-                .iter_mut()
-                .find(|(_, _, _, controller, _)| controller.players.contains(player))
+            let Some((battle_menu_e, battle_menu, menu, controller, nested)) =
+                active_player_battle_menu
+                    .iter_mut()
+                    .find(|(_, _, _, controller, _)| controller.players.contains(player))
             else {
+                continue;
+            };
+
+            let Some((_, battle_ui_container)) =
+                battle_ui_container_query.iter().find(|(p, _)| *p == player)
+            else {
+                error!("No BattleUI Container found for player: {:?}", player);
                 continue;
             };
 
@@ -784,12 +863,43 @@ pub mod player_battle_ui_systems {
                     continue;
                 };
 
-                sounds.play_sound(&mut commands, UiSound::Select);
+                let Some((_, unit_resources)) = unit_info_query.get(battle_menu.selected_unit).ok()
+                else {
+                    warn!("No controlled unit for battle menu");
+                    continue;
+                };
 
                 // Spawn a ChildMenu with Menu Options? Set that as the ActiveMenu with a Reference for this Player?
                 // So then a Cancel goes back to
                 match menu_option {
                     BattleMenuAction::Action(action) => {
+                        // Check if the Unit can take this action or not!
+                        match action {
+                            UnitMenuAction::Move => {
+                                if unit_resources.movement_points_left_in_phase == 0 {
+                                    sounds.play_sound(&mut commands, UiSound::Error);
+                                    info!(
+                                        "It'd be nice if the player was told why they can't move!"
+                                    );
+                                    continue;
+                                }
+                            }
+                            // TODO: Calculate the AP cost for the skill, don't assume it's just 1.
+                            UnitMenuAction::UseSkill(skill_id) => {
+                                if unit_resources.action_points_left_in_phase == 0 {
+                                    sounds.play_sound(&mut commands, UiSound::Error);
+                                    info!(
+                                        "It'd be nice if the player was told why they can't use this skill! We are assuming {:?} has AP 1",
+                                        skill_id
+                                    );
+                                    continue;
+                                }
+                            }
+                            _ => {}
+                        };
+
+                        info!("Playing sound");
+                        sounds.play_sound(&mut commands, UiSound::Select);
                         battle_command_writer.write(UnitUiCommandMessage {
                             player: *player,
                             command: match action {
@@ -806,14 +916,10 @@ pub mod player_battle_ui_systems {
                     }
                     BattleMenuAction::OpenSkillMenu => {
                         // Should only be one Menu per player
-                        let Some((skill_menu, _)) =
-                            skill_menu_query.iter_mut().find(|(_, p)| *p == player)
-                        else {
-                            continue;
-                        };
+                        let skill_menu = battle_ui_container.skills_menu;
 
-                        let Some(unit_skills) =
-                            unit_skills_query.get(battle_menu.selected_unit).ok()
+                        let Some((unit_skills, _)) =
+                            unit_info_query.get(battle_menu.selected_unit).ok()
                         else {
                             error!("No skills found for Unit: {:?}", battle_menu.selected_unit);
                             continue;
@@ -859,18 +965,13 @@ pub mod player_battle_ui_systems {
                             },
                         );
 
+                        sounds.play_sound(&mut commands, UiSound::Select);
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                     }
                     BattleMenuAction::OpenSkillsFilteredByCategoryMenu(selected_category) => {
-                        let Some((skill_menu_category, _)) = skill_menu_category_query
-                            .iter_mut()
-                            .find(|(_, p)| *p == player)
-                        else {
-                            continue;
-                        };
-
-                        let Some(unit_skills) =
-                            unit_skills_query.get(battle_menu.selected_unit).ok()
+                        let skill_menu_category = battle_ui_container.filtered_skills_menu;
+                        let Some((unit_skills, _)) =
+                            unit_info_query.get(battle_menu.selected_unit).ok()
                         else {
                             error!("No skills found for Unit: {:?}", battle_menu.selected_unit);
                             continue;
@@ -909,6 +1010,10 @@ pub mod player_battle_ui_systems {
                             },
                         );
 
+                        sounds.play_sound(&mut commands, UiSound::Select);
+                        commands.entity(battle_menu_e).remove::<ActiveMenu>();
+                    }
+                    BattleMenuAction::ViewMap => {
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                     }
                 }
@@ -918,18 +1023,10 @@ pub mod player_battle_ui_systems {
                     let parent = dynamic_menu.parent;
                     clean_stale_menu(&mut commands, battle_menu_e);
                     commands.entity(parent).insert(ActiveMenu {});
-                } else {
-                    sounds.play_sound(&mut commands, UiSound::CloseMenu);
-                    // Turn off the Battle Menu, and unlock the unit's cursor
-                    battle_command_writer.write(UnitUiCommandMessage {
-                        player: *player,
-                        command: UnitCommand::Cancel,
-                        unit: battle_menu.selected_unit,
-                    });
-
-                    commands.entity(battle_menu_e).remove::<ActiveMenu>();
                 }
             }
         }
     }
+
+    //
 }
