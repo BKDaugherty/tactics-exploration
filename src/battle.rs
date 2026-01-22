@@ -27,7 +27,7 @@ use crate::{
             activate_battle_ui, clear_stale_battle_menus_on_activate,
             handle_battle_ui_interactions, reactivate_ui_on_back_message, set_active_battle_menu,
         },
-        player_info_ui_systems::update_player_ui_info,
+        player_info_ui_systems::update_unit_viewer_ui,
         update_controlled_ui_info,
     },
     battle_phase::{
@@ -121,6 +121,7 @@ pub enum UnitCommand {
     Wait,
     Cancel,
     UseSkill(SkillId),
+    ViewMap,
 }
 
 pub fn god_mode_plugin(app: &mut App) {
@@ -229,8 +230,8 @@ pub fn battle_plugin(app: &mut App) {
                 // Unit Movement + Overlay UI
                 handle_overlays_events_system,
                 handle_unit_ui_command,
-                activate_battle_ui.run_if(is_running_player_phase),
                 clear_stale_battle_menus_on_activate.run_if(is_running_player_phase),
+                activate_battle_ui.run_if(is_running_player_phase),
                 handle_battle_ui_interactions.run_if(is_running_player_phase),
                 // hide_battle_ui_on_unit_ui_command.run_if(is_running_player_phase),
                 unlock_cursor_after_unit_ui_command.after(handle_battle_ui_interactions),
@@ -239,14 +240,16 @@ pub fn battle_plugin(app: &mut App) {
                 reactivate_ui_on_back_message.run_if(is_running_player_phase),
                 execute_unit_actions,
                 // Menu UI
-                highlight_menu_option,
+                highlight_menu_option
+                    .run_if(is_running_player_phase)
+                    .before(check_should_advance_phase::<Player>),
                 handle_menu_cursor_navigation.run_if(is_running_player_phase),
                 // Combat
                 attack_intent_system,
                 attack_execution_despawner,
                 // Battle Camera Zoom
                 // UI
-                update_player_ui_info,
+                update_unit_viewer_ui,
                 update_controlled_ui_info,
             )
                 .run_if(in_state(GameState::Battle)),

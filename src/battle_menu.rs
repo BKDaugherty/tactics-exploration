@@ -59,6 +59,7 @@ pub struct BattleUiContainer {
     standard: Entity,
     pub(crate) skills_menu: Entity,
     pub(crate) filtered_skills_menu: Entity,
+    pub(crate) map_viewer: Entity,
 }
 
 /// Marker component for the third tier of the Battle Menu
@@ -96,8 +97,12 @@ pub enum UnitMenuAction {
 }
 
 #[derive(Component)]
+pub struct UnitViewerItem;
+
+#[derive(Component)]
 pub struct UnitViewerScreen {
     name: Entity,
+    info_container: Entity,
 }
 
 #[derive(Component)]
@@ -343,8 +348,16 @@ pub mod battle_menu_ui_definition {
                 ))
                 .id();
 
+            let view_map_button = commands
+                .spawn(battle_ui_button(
+                    fonts,
+                    BattleMenuAction::ViewMap,
+                    "View Map",
+                ))
+                .id();
+
             let mut menu = GameMenuGrid::new_vertical();
-            menu.push_buttons_to_stack(&[move_button, skills_button, wait_button]);
+            menu.push_buttons_to_stack(&[move_button, skills_button, wait_button, view_map_button]);
 
             let standard_battle_menu_container = commands
                 .spawn((
@@ -402,9 +415,29 @@ pub mod battle_menu_ui_definition {
                         .clone()
                         .with_font(fonts.pixelify_sans_regular.clone()),
                     TextColor(UI_TEXT_COLOR),
+                    UnitViewerItem,
                 ))
                 .id();
 
+            let view_map_info_container = commands
+                .spawn((
+                    Name::new("ViewMapInfo"),
+                    Node {
+                        display: Display::Flex,
+                        width: percent(100),
+                        height: percent(100),
+                        flex_direction: FlexDirection::Column,
+                        justify_content: JustifyContent::SpaceEvenly,
+                        justify_items: JustifyItems::Center,
+                        align_items: AlignItems::FlexStart,
+                        align_content: AlignContent::Center,
+                        padding: UiRect::all(percent(2)),
+                        ..Default::default()
+                    },
+                    Visibility::Inherited,
+                    UnitViewerItem,
+                ))
+                .id();
             let view_map_container = commands
                 .spawn((
                     Name::new("ViewMapScreen"),
@@ -415,7 +448,6 @@ pub mod battle_menu_ui_definition {
                         flex_direction: FlexDirection::Column,
                         justify_content: JustifyContent::SpaceEvenly,
                         align_items: AlignItems::FlexStart,
-                        padding: UiRect::all(percent(1)),
                         ..Default::default()
                     },
                     BackgroundColor(UI_MENU_BACKGROUND),
@@ -423,6 +455,7 @@ pub mod battle_menu_ui_definition {
                     player,
                     UnitViewerScreen {
                         name: unit_view_name_text,
+                        info_container: view_map_info_container,
                     },
                     GameMenuLatch::default(),
                     PlayerBattleMenu,
@@ -430,12 +463,15 @@ pub mod battle_menu_ui_definition {
                 .id();
 
             commands
-                .entity(view_map_container)
+                .entity(view_map_info_container)
                 .add_child(unit_view_name_text);
+            commands
+                .entity(view_map_container)
+                .add_child(view_map_info_container);
 
             commands
                 .entity(standard_battle_menu_container)
-                .add_children(&[move_button, skills_button, wait_button]);
+                .add_children(&[move_button, skills_button, wait_button, view_map_button]);
 
             // Build Battle UI
             let battle_menu_container = commands
@@ -451,6 +487,7 @@ pub mod battle_menu_ui_definition {
                         standard: standard_battle_menu_container,
                         skills_menu: action_category_menu,
                         filtered_skills_menu: action_menu,
+                        map_viewer: view_map_container,
                     },
                     player,
                 ))
@@ -578,36 +615,43 @@ pub mod player_info_ui_systems {
     /// Updates the UnitViewerScreen pane based on the current position of the player's cursor.
     ///
     /// This pane should be updated by
-    pub fn update_player_ui_info(
+    pub fn update_unit_viewer_ui(
         grid_manager: Res<grid::GridManagerResource>,
         // TODO: Can I do (Changed<GridPosition> or Changed<Unit>) in two diff queries?
         cursor_query: Query<(&player::Player, &grid::GridPosition), With<Cursor>>,
-        unit_query: Query<(&Unit, &UnitPhaseResources)>,
-        // TODO: This is terrible. I could make this one Text box, or
-        // could do Option<Component> and have one query and then
-        // do some match / runtime stuff? Def a little silly.
+        unit_query: Query<(&Unit, Option<&UnitPhaseResources>)>,
         player_unit_viewer: Query<(&player::Player, &UnitViewerScreen)>,
-        mut text_query: Query<&mut Text>,
+        mut vis_mutator: Query<&mut Visibility, With<UnitViewerItem>>,
+        mut text_query: Query<&mut Text, With<UnitViewerItem>>,
     ) {
         for (cursor_player, grid_pos) in cursor_query.iter() {
-            let Some(entities) = grid_manager.grid_manager.get_by_position(grid_pos) else {
-                continue;
-            };
-
-            let unit = entities
-                .iter()
-                .filter_map(|t| unit_query.get(*t).ok())
-                .next();
-
             for (ui_player, unit_viewer_screen) in player_unit_viewer {
                 if cursor_player != ui_player {
                     continue;
                 }
 
-                // If there is a unit, we need to update the now visible UI
-                let Some((unit, phase_resources)) = unit else {
+                let Some((unit, _phase_resources)) = grid_manager
+                    .grid_manager
+                    .get_by_position(grid_pos)
+                    .map(|t| t.iter().filter_map(|t| unit_query.get(*t).ok()).next())
+                    .flatten()
+                else {
+                    // Nothing for the viewer to see. Set the internal Viewer Vis to 0?
+
+                    if let Some(mut viewer_container_vis) =
+                        vis_mutator.get_mut(unit_viewer_screen.info_container).ok()
+                    {
+                        *viewer_container_vis = Visibility::Hidden
+                    }
+
                     continue;
                 };
+
+                if let Some(mut viewer_container_vis) =
+                    vis_mutator.get_mut(unit_viewer_screen.info_container).ok()
+                {
+                    *viewer_container_vis = Visibility::Inherited
+                }
 
                 if let Some(mut text_item) = text_query.get_mut(unit_viewer_screen.name).ok() {
                     text_item.0 = unit.name.clone();
@@ -730,9 +774,11 @@ pub mod player_battle_ui_systems {
     }
 
     /// Utility function for cleaning up a stale skill menu
-    pub fn clean_stale_menu(commands: &mut Commands, menu_e: Entity) {
+    pub fn clean_stale_menu(commands: &mut Commands, menu_e: Entity, despawn_children: bool) {
         let mut skill_menu = commands.entity(menu_e);
-        skill_menu.despawn_children();
+        if despawn_children {
+            skill_menu.despawn_children();
+        }
         skill_menu.remove::<(
             GameMenuGrid,
             ActiveBattleMenu,
@@ -775,8 +821,9 @@ pub mod player_battle_ui_systems {
                 if *p != message.player {
                     continue;
                 }
-                clean_stale_menu(&mut commands, ui_container.skills_menu);
-                clean_stale_menu(&mut commands, ui_container.filtered_skills_menu);
+                clean_stale_menu(&mut commands, ui_container.skills_menu, true);
+                clean_stale_menu(&mut commands, ui_container.filtered_skills_menu, true);
+                clean_stale_menu(&mut commands, ui_container.map_viewer, false);
             }
         }
     }
@@ -1014,14 +1061,28 @@ pub mod player_battle_ui_systems {
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                     }
                     BattleMenuAction::ViewMap => {
+                        sounds.play_sound(&mut commands, UiSound::Select);
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
+                        commands.entity(battle_ui_container.map_viewer).insert((
+                            battle_menu.to_owned(),
+                            NestedDynamicMenu {
+                                parent: battle_menu_e,
+                            },
+                            controller.to_owned(),
+                            ActiveMenu {},
+                        ));
+                        battle_command_writer.write(UnitUiCommandMessage {
+                            player: *player,
+                            command: UnitCommand::ViewMap,
+                            unit: battle_menu.selected_unit,
+                        });
                     }
                 }
             } else if input_actions.just_pressed(&PlayerInputAction::Deselect) {
                 if let Some(dynamic_menu) = nested {
                     sounds.play_sound(&mut commands, UiSound::Cancel);
                     let parent = dynamic_menu.parent;
-                    clean_stale_menu(&mut commands, battle_menu_e);
+                    clean_stale_menu(&mut commands, battle_menu_e, true);
                     commands.entity(parent).insert(ActiveMenu {});
                 }
             }
