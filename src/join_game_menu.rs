@@ -115,9 +115,7 @@ pub fn join_game_cleanup(
 
 pub fn join_game_menu_setup(mut commands: Commands, fonts: Res<FontResource>) {
     commands.insert_resource(JoinedPlayers::default());
-    commands.insert_resource(RegisteredBattlePlayers {
-        players: HashMap::new(),
-    });
+    commands.insert_resource(RegisteredBattlePlayers::default());
     build_ui(&mut commands, &fonts);
 }
 
@@ -689,6 +687,8 @@ fn handle_button_commands(
                     warn!("No option for menu?");
                     continue;
                 };
+
+                sounds.play_sound(&mut commands, UiSound::Select);
                 match highlighted_option {
                     UiCommands::FocusTextInput(entity) => {
                         for (text_e, mut text_input_active) in text_input_query.iter_mut() {
@@ -852,7 +852,7 @@ fn handle_button_commands(
                         {
                             for (k, value) in &joined_players.0 {
                                 if let LoadedUnitState::ReadyUnit(t) = &value.unit_state {
-                                    registered_players.players.insert(*k, t.clone());
+                                    registered_players.save_files.insert(*k, t.clone());
                                 }
                             }
 

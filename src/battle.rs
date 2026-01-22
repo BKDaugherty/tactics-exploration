@@ -25,9 +25,10 @@ use crate::{
         battle_menu_ui_definition::{PlayerBattleMenu, battle_ui_setup},
         player_battle_ui_systems::{
             activate_battle_ui, clear_stale_battle_menus_on_activate,
-            handle_battle_ui_interactions, reactivate_ui_on_back_message,
+            handle_battle_ui_interactions, reactivate_ui_on_back_message, set_active_battle_menu,
         },
         player_info_ui_systems::update_player_ui_info,
+        update_controlled_ui_info,
     },
     battle_phase::{
         PhaseMessage, StartOfPhaseEffectsMessage, TurnStartMessage,
@@ -73,6 +74,7 @@ use crate::{
         CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit,
         UnitActionCompletedMessage, UnitExecuteActionMessage, execute_unit_actions,
         handle_unit_cursor_actions, handle_unit_ui_command,
+        on_unit_completed_action_reopen_battle_menu,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_ui_command,
     },
@@ -186,6 +188,8 @@ pub fn battle_plugin(app: &mut App) {
                 init_enemy_ai_system,
                 setup_skill_system,
                 battle_ui_setup,
+                // TODO: Run on Load Room.
+                set_active_battle_menu,
             )
                 .chain(),
         )
@@ -236,15 +240,21 @@ pub fn battle_plugin(app: &mut App) {
                 execute_unit_actions,
                 // Menu UI
                 highlight_menu_option,
-                handle_menu_cursor_navigation,
+                handle_menu_cursor_navigation.run_if(is_running_player_phase),
                 // Combat
                 attack_intent_system,
                 attack_execution_despawner,
                 // Battle Camera Zoom
                 // UI
                 update_player_ui_info,
+                update_controlled_ui_info,
             )
                 .run_if(in_state(GameState::Battle)),
+        )
+        // TODO: Run if DungeonState::InBattle
+        .add_systems(
+            Update,
+            on_unit_completed_action_reopen_battle_menu.run_if(in_state(GameState::Battle)),
         )
         .add_systems(Update, change_zoom.run_if(in_state(GameState::Battle)))
         .add_systems(
@@ -626,7 +636,7 @@ pub fn load_demo_battle_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     map_data: Res<MapResource>,
-    registered_players: Res<RegisteredBattlePlayers>,
+    mut registered_players: ResMut<RegisteredBattlePlayers>,
     tt_assets: Res<TinytacticsAssets>,
     anim_db: Res<AnimationDB>,
     sprite_db: Res<SpriteDB>,
@@ -651,8 +661,9 @@ pub fn load_demo_battle_scene(
     let enemy_3_grid_pos = GridPosition { x: 4, y: 4 };
 
     load_demo_battle_players(&mut commands, &registered_players);
+    let save_files = registered_players.save_files.clone().into_iter();
 
-    for (player, player_unit_info) in registered_players.players.iter() {
+    for (player, player_unit_info) in save_files {
         let Some(position) = valid_player_positions.pop() else {
             log::warn!("Not enough valid player positions for all registered players!");
             break;
@@ -661,7 +672,7 @@ pub fn load_demo_battle_scene(
         let Ok((image, texture_atlas)) = get_sprite_resources_for_job(
             &anim_db,
             &sprite_db,
-            player_unit_info,
+            &player_unit_info,
             Direction::NE,
             false,
         ) else {
@@ -674,7 +685,7 @@ pub fn load_demo_battle_scene(
         // TODO: Support equipment for a given player!
         let weapon_sheet = tt_assets.iron_axe_spritesheet.clone();
 
-        spawn_unit(
+        let unit_e = spawn_unit(
             &mut commands,
             player_unit_info.save_file_key.name.to_string(),
             &tt_assets,
@@ -683,15 +694,19 @@ pub fn load_demo_battle_scene(
             texture_atlas,
             weapon_sheet,
             player_unit_info.job.base_unit_skills(),
-            *player,
+            player,
             PLAYER_TEAM,
             Direction::NE,
         );
 
-        grid_cursor::spawn_cursor(&mut commands, cursor_image.clone(), *player, position);
+        let cursor_e =
+            grid_cursor::spawn_cursor(&mut commands, cursor_image.clone(), player, position);
+
+        // registered_players.unit.insert(player, unit_e);
+        // registered_players.cursor.insert(player, cursor_e);
     }
 
-    if registered_players.players.len() > 1 {
+    if registered_players.save_files.len() > 1 {
         spawn_enemy(
             &mut commands,
             "Deege".to_string(),
@@ -753,7 +768,7 @@ pub fn load_demo_battle_scene(
 fn load_demo_battle_players(commands: &mut Commands, players: &RegisteredBattlePlayers) {
     let mut player_game_state_map = HashMap::new();
 
-    for player in players.players.keys() {
+    for player in players.save_files.keys() {
         player_game_state_map.insert(*player, player::PlayerState::default());
     }
 

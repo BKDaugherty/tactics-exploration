@@ -14,14 +14,21 @@ use crate::assets::sounds::{SoundManagerParam, UiSound};
 use crate::battle::{
     BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
 };
+use crate::battle_menu::player_battle_ui_systems::{ActiveBattleMenu, clean_stale_menu};
+use crate::battle_menu::{
+    BattlePlayerUI, BattleUiContainer, SkillMenu, SkillsFilteredByCategoryMenu,
+};
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::combat::skills::{SkillDBResource, Targeting, UnitSkills};
 use crate::enemy::behaviors::EnemyAiBehavior;
 use crate::gameplay_effects::ActiveEffects;
-use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, manhattan_distance};
-use crate::grid_cursor::LockedOn;
+use crate::grid::{
+    GridManager, GridManagerResource, GridMovement, GridPosition, GridVec, manhattan_distance,
+};
+use crate::grid_cursor::{Cursor, LockedOn};
 use crate::map_generation::TtIndex;
+use crate::menu::menu_navigation::{ActiveMenu, GameMenuGrid};
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
 use crate::{enemy, grid, grid_cursor, player};
@@ -357,7 +364,7 @@ pub fn spawn_unit(
     player: crate::player::Player,
     team: Team,
     direction: Direction,
-) {
+) -> Entity {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
     let unit = commands
         .spawn((
@@ -419,6 +426,8 @@ pub fn spawn_unit(
         .id();
 
     commands.entity(unit).add_child(weapon);
+
+    unit
 }
 
 fn end_move(
@@ -872,6 +881,60 @@ pub fn handle_unit_ui_command(
             crate::battle::UnitCommand::Attack => {
                 error!("Attacks are deprecated, don't ya know?");
             }
+        }
+    }
+}
+
+/// This function relies on the Player only "Controlling" one unit.
+pub fn on_unit_completed_action_reopen_battle_menu(
+    mut commands: Commands,
+    mut reader: MessageReader<UnitActionCompletedMessage>,
+    grid_manager: Res<GridManagerResource>,
+    player_query: Query<&Player, With<Unit>>,
+    battle_ui_container_query: Query<(&Player, &BattleUiContainer)>,
+    mut battle_ui_query: Query<(Entity, &Player, &mut GameMenuGrid), With<BattlePlayerUI>>,
+    mut cursor_query: Query<(Entity, &Player, &mut GridPosition), With<Cursor>>,
+) {
+    for m in reader.read() {
+        let Some(player) = player_query.get(m.unit).ok() else {
+            continue;
+        };
+
+        // The unit is controlled by a player and just finished an action, re-open
+        // the player's menu.
+        for (menu, menu_player, mut menu_grid) in battle_ui_query.iter_mut() {
+            if menu_player != player {
+                continue;
+            }
+
+            commands.entity(menu).insert((
+                ActiveMenu {},
+                ActiveBattleMenu {
+                    selected_unit: m.unit,
+                },
+            ));
+
+            menu_grid.reset_menu_option();
+        }
+
+        for (cursor, cursor_player, mut pos) in cursor_query.iter_mut() {
+            if player != cursor_player {
+                continue;
+            }
+
+            if let Some(unit_pos) = grid_manager.grid_manager.get_by_id(&m.unit) {
+                *pos = unit_pos;
+            }
+
+            commands.entity(cursor).insert(LockedOn {});
+        }
+
+        for (p, ui_container) in battle_ui_container_query {
+            if p != player {
+                continue;
+            }
+            clean_stale_menu(&mut commands, ui_container.skills_menu);
+            clean_stale_menu(&mut commands, ui_container.filtered_skills_menu);
         }
     }
 }

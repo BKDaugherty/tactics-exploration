@@ -137,7 +137,7 @@ pub struct PlayerState {
 }
 
 /// I'm not that attached to this yet.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct RegisteredBattlePlayers {
-    pub players: HashMap<Player, UnitSaveV1>,
+    pub save_files: HashMap<Player, UnitSaveV1>,
 }

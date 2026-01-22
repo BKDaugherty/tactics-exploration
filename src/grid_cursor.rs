@@ -28,26 +28,30 @@ pub fn spawn_cursor(
     image: Handle<Image>,
     player: player::Player,
     initial_grid_pos: grid::GridPosition,
-) {
+) -> Entity {
     let mut initial_transform = grid::init_grid_to_world_transform(&initial_grid_pos);
 
     // Put cursor behind players
     initial_transform.translation.z -= 50.;
-    commands.spawn((
-        CursorBundle {
-            grid_position: initial_grid_pos,
-            transform: initial_transform,
-            sprite: Sprite {
-                image,
-                color: Color::linear_rgb(1.0, 0.0, 1.0),
-                ..Default::default()
+    commands
+        .spawn((
+            CursorBundle {
+                grid_position: initial_grid_pos,
+                transform: initial_transform,
+                sprite: Sprite {
+                    image,
+                    color: Color::linear_rgb(1.0, 0.0, 1.0),
+                    ..Default::default()
+                },
+                cursor: Cursor {},
+                player,
             },
-            cursor: Cursor {},
-            player,
-        },
-        BattleEntity {},
-        GameMenuLatch::default(),
-    ));
+            BattleEntity {},
+            GameMenuLatch::default(),
+            // Default state of cursor is to be locked on player
+            LockedOn {},
+        ))
+        .id()
 }
 
 /// Translates Input Actions to grid movement for the cursor

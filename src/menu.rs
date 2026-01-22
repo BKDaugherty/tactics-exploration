@@ -252,7 +252,6 @@ pub mod menu_navigation {
                 if input_action_state.just_pressed(&player::PlayerInputAction::Select)
                     && let Some(entity) = game_menu.get_active_menu_option()
                 {
-                    sounds.play_sound(&mut commands, &sound_settings, UiSound::Select);
                     click_entity_with_fake_mouse(&mut commands, *entity);
                 }
             }
