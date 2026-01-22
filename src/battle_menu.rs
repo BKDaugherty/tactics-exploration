@@ -94,6 +94,7 @@ pub enum UnitMenuAction {
     Attack,
     UseSkill(skills::SkillId),
     Wait,
+    Interact(Entity),
 }
 
 #[derive(Component)]
@@ -519,7 +520,7 @@ pub mod battle_menu_ui_definition {
 }
 
 // Returns an opaque Button Bundle to spawn for a BattleUiButton
-fn battle_ui_button(fonts: &FontResource, action: BattleMenuAction, text: &str) -> impl Bundle {
+pub fn battle_ui_button(fonts: &FontResource, action: BattleMenuAction, text: &str) -> impl Bundle {
     (
         BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
         BorderRadius::all(percent(20)),
@@ -564,11 +565,6 @@ pub struct ControlledUnitUiEntities {
     health_text: Entity,
     ap_text: Entity,
     move_text: Entity,
-}
-
-#[derive(Component)]
-pub struct ControlledUnit {
-    unit: Entity,
 }
 
 // We want this to update anytime the Unit's resources change or
@@ -694,6 +690,8 @@ pub mod player_battle_ui_systems {
         assets::sounds::{SoundManagerParam, UiSound},
         battle_menu::battle_menu_ui_definition::PlayerBattleMenu,
         combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills},
+        grid::GridPosition,
+        grid_cursor::LockedOn,
         menu::NestedDynamicMenu,
         unit::UnitActionCompletedMessage,
     };
@@ -706,6 +704,15 @@ pub mod player_battle_ui_systems {
     #[derive(Component, Clone)]
     pub struct ActiveBattleMenu {
         pub(crate) selected_unit: Entity,
+    }
+
+    /// Close the player battle menus, by removing ActiveMenu
+    pub fn close_player_battle_menus(mut commands: Commands, query: Query<&BattleUiContainer>) {
+        for battle_ui_container in query {
+            commands
+                .entity(battle_ui_container.standard)
+                .remove::<ActiveMenu>();
+        }
     }
 
     /// If the player has selected a terminal node in the BattleUi, but then clicks back
@@ -741,6 +748,63 @@ pub mod player_battle_ui_systems {
 
             if let Some(target) = target {
                 commands.entity(target).insert(ActiveMenu {});
+            }
+        }
+    }
+
+    /// This function relies on the Player only "Controlling" one unit.
+    pub fn on_unit_completed_action_reopen_battle_menu(
+        mut commands: Commands,
+        mut reader: MessageReader<UnitActionCompletedMessage>,
+        grid_manager: Res<GridManagerResource>,
+        player_query: Query<&Player, With<Unit>>,
+        battle_ui_container_query: Query<(&Player, &BattleUiContainer)>,
+        mut battle_ui_query: Query<(Entity, &Player, &mut GameMenuGrid), With<BattlePlayerUI>>,
+        mut cursor_query: Query<(Entity, &Player, &mut GridPosition), With<Cursor>>,
+    ) {
+        for m in reader.read() {
+            info!("Unit Action Completed: {:?}", m);
+
+            let Some(player) = player_query.get(m.unit).ok() else {
+                continue;
+            };
+
+            // The unit is controlled by a player and just finished an action, re-open
+            // the player's menu.
+            for (menu, menu_player, mut menu_grid) in battle_ui_query.iter_mut() {
+                if menu_player != player {
+                    continue;
+                }
+
+                commands.entity(menu).insert((
+                    ActiveMenu {},
+                    ActiveBattleMenu {
+                        selected_unit: m.unit,
+                    },
+                ));
+
+                menu_grid.reset_menu_option();
+            }
+
+            for (cursor, cursor_player, mut pos) in cursor_query.iter_mut() {
+                if player != cursor_player {
+                    continue;
+                }
+
+                if let Some(unit_pos) = grid_manager.grid_manager.get_by_id(&m.unit) {
+                    *pos = unit_pos;
+                }
+
+                commands.entity(cursor).insert(LockedOn {});
+            }
+
+            for (p, ui_container) in battle_ui_container_query {
+                if p != player {
+                    continue;
+                }
+                clean_stale_menu(&mut commands, ui_container.skills_menu, true);
+                clean_stale_menu(&mut commands, ui_container.filtered_skills_menu, true);
+                clean_stale_menu(&mut commands, ui_container.map_viewer, false);
             }
         }
     }
@@ -802,7 +866,7 @@ pub mod player_battle_ui_systems {
 
                 commands
                     .entity(battle_menu_e)
-                    .insert(ActiveBattleMenu { selected_unit: e });
+                    .insert((ActiveBattleMenu { selected_unit: e }, ActiveMenu {}));
             }
         }
     }
@@ -945,7 +1009,6 @@ pub mod player_battle_ui_systems {
                             _ => {}
                         };
 
-                        info!("Playing sound");
                         sounds.play_sound(&mut commands, UiSound::Select);
                         battle_command_writer.write(UnitUiCommandMessage {
                             player: *player,
@@ -956,6 +1019,7 @@ pub mod player_battle_ui_systems {
                                 UnitMenuAction::UseSkill(skill_id) => {
                                     UnitCommand::UseSkill(*skill_id)
                                 }
+                                UnitMenuAction::Interact(e) => UnitCommand::Interact(*e),
                             },
                             unit: battle_menu.selected_unit,
                         });

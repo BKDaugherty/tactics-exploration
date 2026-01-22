@@ -14,10 +14,6 @@ use crate::assets::sounds::{SoundManagerParam, UiSound};
 use crate::battle::{
     BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
 };
-use crate::battle_menu::player_battle_ui_systems::{ActiveBattleMenu, clean_stale_menu};
-use crate::battle_menu::{
-    BattlePlayerUI, BattleUiContainer, SkillMenu, SkillsFilteredByCategoryMenu,
-};
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::combat::skills::{SkillDBResource, Targeting, UnitSkills};
@@ -26,9 +22,8 @@ use crate::gameplay_effects::ActiveEffects;
 use crate::grid::{
     GridManager, GridManagerResource, GridMovement, GridPosition, GridVec, manhattan_distance,
 };
-use crate::grid_cursor::{Cursor, LockedOn};
+use crate::grid_cursor::LockedOn;
 use crate::map_generation::TtIndex;
-use crate::menu::menu_navigation::{ActiveMenu, GameMenuGrid};
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
 use crate::{enemy, grid, grid_cursor, player};
@@ -653,6 +648,7 @@ pub struct UnitExecuteActionMessage {
 pub enum UnitExecuteAction {
     Move(ValidMove),
     Attack(AttackIntent),
+    Interact { interactable_entity: Entity },
     Wait,
 }
 
@@ -688,6 +684,7 @@ pub fn execute_unit_actions(
                     action: UnitAction::Wait,
                 });
             }
+            _ => {}
         }
     }
 }
@@ -884,61 +881,14 @@ pub fn handle_unit_ui_command(
             crate::battle::UnitCommand::Attack => {
                 error!("Attacks are deprecated, don't ya know?");
             }
-        }
-    }
-}
-
-/// This function relies on the Player only "Controlling" one unit.
-pub fn on_unit_completed_action_reopen_battle_menu(
-    mut commands: Commands,
-    mut reader: MessageReader<UnitActionCompletedMessage>,
-    grid_manager: Res<GridManagerResource>,
-    player_query: Query<&Player, With<Unit>>,
-    battle_ui_container_query: Query<(&Player, &BattleUiContainer)>,
-    mut battle_ui_query: Query<(Entity, &Player, &mut GameMenuGrid), With<BattlePlayerUI>>,
-    mut cursor_query: Query<(Entity, &Player, &mut GridPosition), With<Cursor>>,
-) {
-    for m in reader.read() {
-        let Some(player) = player_query.get(m.unit).ok() else {
-            continue;
-        };
-
-        // The unit is controlled by a player and just finished an action, re-open
-        // the player's menu.
-        for (menu, menu_player, mut menu_grid) in battle_ui_query.iter_mut() {
-            if menu_player != player {
-                continue;
+            crate::battle::UnitCommand::Interact(e) => {
+                execute_action_writer.write(UnitExecuteActionMessage {
+                    entity: unit_entity,
+                    action: UnitExecuteAction::Interact {
+                        interactable_entity: e,
+                    },
+                });
             }
-
-            commands.entity(menu).insert((
-                ActiveMenu {},
-                ActiveBattleMenu {
-                    selected_unit: m.unit,
-                },
-            ));
-
-            menu_grid.reset_menu_option();
-        }
-
-        for (cursor, cursor_player, mut pos) in cursor_query.iter_mut() {
-            if player != cursor_player {
-                continue;
-            }
-
-            if let Some(unit_pos) = grid_manager.grid_manager.get_by_id(&m.unit) {
-                *pos = unit_pos;
-            }
-
-            commands.entity(cursor).insert(LockedOn {});
-        }
-
-        for (p, ui_container) in battle_ui_container_query {
-            if p != player {
-                continue;
-            }
-            clean_stale_menu(&mut commands, ui_container.skills_menu, true);
-            clean_stale_menu(&mut commands, ui_container.filtered_skills_menu, true);
-            clean_stale_menu(&mut commands, ui_container.map_viewer, false);
         }
     }
 }
@@ -1136,9 +1086,10 @@ pub enum UnitAction {
     Move,
     Attack,
     Wait,
+    Interact,
 }
 
-#[derive(Message)]
+#[derive(Message, Debug)]
 pub struct UnitActionCompletedMessage {
     pub unit: Entity,
     pub action: UnitAction,
