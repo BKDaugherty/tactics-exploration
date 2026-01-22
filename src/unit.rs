@@ -878,6 +878,9 @@ pub fn handle_unit_ui_command(
 
                 player_state.cursor_state = player::PlayerCursorState::Idle;
             }
+            crate::battle::UnitCommand::ViewMap => {
+                player_state.cursor_state = player::PlayerCursorState::Idle;
+            }
             crate::battle::UnitCommand::Attack => {
                 error!("Attacks are deprecated, don't ya know?");
             }
@@ -933,8 +936,9 @@ pub fn on_unit_completed_action_reopen_battle_menu(
             if p != player {
                 continue;
             }
-            clean_stale_menu(&mut commands, ui_container.skills_menu);
-            clean_stale_menu(&mut commands, ui_container.filtered_skills_menu);
+            clean_stale_menu(&mut commands, ui_container.skills_menu, true);
+            clean_stale_menu(&mut commands, ui_container.filtered_skills_menu, true);
+            clean_stale_menu(&mut commands, ui_container.map_viewer, false);
         }
     }
 }
@@ -949,7 +953,10 @@ pub fn handle_unit_cursor_actions(
         (Entity, &Player, &mut grid::GridPosition),
         (With<grid_cursor::Cursor>, Without<LockedOn>),
     >,
-    player_unit_query: Query<(Entity, &player::Player, &Unit)>,
+    player_unit_query: Query<
+        (Entity, &player::Player, &Unit, &GridPosition),
+        Without<grid_cursor::Cursor>,
+    >,
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
     mut unit_selection_message: MessageWriter<UnitSelectionMessage>,
     mut unit_selection_back_message: MessageWriter<UnitSelectionBackMessage>,
@@ -969,36 +976,54 @@ pub fn handle_unit_cursor_actions(
 
             // If the cursor is idle, and there's a unit at the cursor position,
             // generate overlays using that unit's movement
-            if player_state.cursor_state == player::PlayerCursorState::Idle
-                && action_state.just_pressed(&PlayerInputAction::Select)
-            {
-                let selection = select_unit_for_movement(
-                    &cursor_grid_pos,
-                    &grid_manager_res.grid_manager,
-                    |entity| {
-                        // Get the first Unit owned by this player, and then clone the values to satisfy lifetimes.
-                        let queried = player_unit_query
-                            .get(*entity)
-                            .ok()
-                            .filter(|(_, p, _)| **p == *player);
-                        queried.map(|(a, b, c)| (a, *b, c.clone()))
-                    },
-                );
+            if player_state.cursor_state == player::PlayerCursorState::Idle {
+                // TODO: We don't need this anymore probably
+                if action_state.just_pressed(&PlayerInputAction::Select) {
+                    let selection = select_unit_for_movement(
+                        &cursor_grid_pos,
+                        &grid_manager_res.grid_manager,
+                        |entity| {
+                            // Get the first Unit owned by this player, and then clone the values to satisfy lifetimes.
+                            let queried = player_unit_query
+                                .get(*entity)
+                                .ok()
+                                .filter(|(_, p, _, _)| **p == *player);
+                            queried.map(|(a, b, c, _)| (a, *b, c.clone()))
+                        },
+                    );
 
-                match selection {
-                    UnitMovementSelection::Selected(entity) => {
-                        unit_selection_message.write(UnitSelectionMessage {
-                            entity,
-                            player: *player,
-                        });
+                    match selection {
+                        UnitMovementSelection::Selected(entity) => {
+                            unit_selection_message.write(UnitSelectionMessage {
+                                entity,
+                                player: *player,
+                            });
 
-                        commands.entity(cursor_entity).insert(LockedOn {});
-                        sounds.play_sound(&mut commands, UiSound::OpenMenu);
+                            commands.entity(cursor_entity).insert(LockedOn {});
+                            sounds.play_sound(&mut commands, UiSound::OpenMenu);
+                        }
+                        UnitMovementSelection::NoPlayerUnitOnTile => {
+                            sounds.play_sound(&mut commands, UiSound::Error);
+                            warn!("Selected tile with no player unit");
+                        }
                     }
-                    UnitMovementSelection::NoPlayerUnitOnTile => {
-                        sounds.play_sound(&mut commands, UiSound::Error);
-                        warn!("Selected tile with no player unit");
-                    }
+                } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
+                    let Some((controlled_unit, unit_pos)) = player_unit_query
+                        .iter()
+                        .find(|t| t.1 == player)
+                        .map(|t| (t.0, t.3))
+                    else {
+                        error!("No controlled unit for player: {:?}", player);
+                        continue;
+                    };
+
+                    *cursor_grid_pos = *unit_pos;
+                    unit_selection_message.write(UnitSelectionMessage {
+                        entity: controlled_unit,
+                        player: *player,
+                    });
+                    commands.entity(cursor_entity).insert(LockedOn {});
+                    sounds.play_sound(&mut commands, UiSound::Cancel);
                 }
             }
             // If we're moving a unit, and we press select again, attempt to move the unit to that position
@@ -1024,7 +1049,7 @@ pub fn handle_unit_cursor_actions(
                             player_unit_query
                                 .get(*entity)
                                 .ok()
-                                .map(|(a, b, c)| (a, *b, c))
+                                .map(|(a, b, c, _)| (a, *b, c))
                         },
                     );
 
