@@ -10,7 +10,8 @@ use crate::animation::{
     AnimationFollower, Direction, FacingDirection, TinytacticsAssets, UnitAnimationKind,
     UnitAnimationPlayer,
 };
-use crate::assets::sounds::{SoundManagerParam, UiSound};
+use crate::assets::sound_resolvers::Voice;
+use crate::assets::sounds::{SoundManagerParam, UiSound, VoiceId};
 use crate::battle::{
     BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
 };
@@ -164,6 +165,7 @@ pub struct UnitBundle {
     pub anchor: Anchor,
     pub phase_resources: UnitPhaseResources,
     pub active_effects: ActiveEffects,
+    pub voice: Voice,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -318,6 +320,9 @@ pub fn spawn_enemy(
             ActiveEffects {
                 effects: Vec::new(),
             },
+            Voice {
+                voice_id: VoiceId::Base,
+            },
         ))
         .id();
 
@@ -393,6 +398,9 @@ pub fn spawn_unit(
                 phase_resources: UnitPhaseResources::default(),
                 active_effects: ActiveEffects {
                     effects: Vec::new(),
+                },
+                voice: Voice {
+                    voice_id: VoiceId::Base,
                 },
             },
             BattleEntity {},

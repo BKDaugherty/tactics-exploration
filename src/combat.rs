@@ -6,6 +6,7 @@ use crate::assets::FontResource;
 use crate::assets::sounds::AudioContext;
 use crate::assets::sounds::AudioCue;
 use crate::assets::sounds::AudioEventMessage;
+use crate::assets::sounds::ImpactInteractionRole;
 use crate::gameplay_effects::ActiveEffects;
 use crate::gameplay_effects::Effect;
 use crate::gameplay_effects::EffectMetadata;
@@ -48,7 +49,7 @@ pub struct CombatStageId(pub u32);
 enum CombatStage {
     UnitAttack(Entity, CombatAnimationId, UnitAnimationKind),
     Cast(GridPosition, CastingData),
-    Impact(Option<Entity>, Entity, Vec<SkillAction>),
+    Impact(Option<Entity>, Entity, Vec<SkillAction>, SkillId),
 }
 
 pub struct CombatTimeline {
@@ -108,7 +109,7 @@ impl CombatTimeline {
                             actions.push(action.clone());
                         }
                     }
-                    CombatStage::Impact(None, defender_e, actions)
+                    CombatStage::Impact(None, defender_e, actions, skill.skill_id)
                 }
                 otherwise => {
                     anyhow::bail!(
@@ -327,6 +328,8 @@ pub struct ImpactEvent {
     defender: Entity,
     // grid_position: GridPosition,
     skill_actions: Vec<SkillAction>,
+    skill_id: SkillId,
+    attack_execution: Entity,
 }
 
 #[derive(Component)]
@@ -523,13 +526,15 @@ pub fn handle_combat_stage_enter(
                         }
                     }
                 }
-                CombatStage::Impact(entity, entity1, items) => {
+                CombatStage::Impact(entity, entity1, items, skill_id) => {
                     // TODO: Counterattacks should write back to the
                     // CombatStage.
                     impact_event.write(ImpactEvent {
                         attacker: *entity,
                         defender: *entity1,
                         skill_actions: items.clone(),
+                        skill_id: *skill_id,
+                        attack_execution: message.attack_execution,
                     });
                 }
             }
@@ -587,6 +592,7 @@ fn build_timeline_for_skill(
                     Some(attack_intent.attacker),
                     attack_intent.defender,
                     actions,
+                    skill.skill_id,
                 )
             }
         };
@@ -751,8 +757,13 @@ pub fn spawn_damage_text(
 // TODO: Should Attacker be Optional here?
 pub fn impact_event_handler(
     mut impact_events: MessageReader<ImpactEvent>,
-    mut unit_query: Query<(&mut Unit, &mut UnitAnimationPlayer, &mut ActiveEffects)>,
+    mut unit_query: Query<(
+        &mut Unit,
+        Option<&mut UnitAnimationPlayer>,
+        &mut ActiveEffects,
+    )>,
     mut message_writer: MessageWriter<UnitHealthChangedEvent>,
+    mut audio_writer: MessageWriter<AudioEventMessage>,
 ) {
     for impact in impact_events.read() {
         let attacker = impact
@@ -767,30 +778,60 @@ pub fn impact_event_handler(
         let damage = calculate_damage(attacker, defender, &impact.skill_actions);
 
         if let Ok((mut defender, mut animation_player, _)) = unit_query.get_mut(impact.defender) {
-            if damage != 0 {
+            if damage < 0 {
+                let old_health = defender.stats.health;
+                defender.stats.health = defender.stats.health.saturating_sub(damage.unsigned_abs());
+                let health_changed = old_health - defender.stats.health;
                 message_writer.write(UnitHealthChangedEvent {
                     unit: impact.defender,
-                    health_changed: damage,
+                    health_changed: -1 * (health_changed as i32),
                 });
-            }
 
-            if damage < 0 {
-                defender.stats.health = defender.stats.health.saturating_sub(damage.unsigned_abs());
-                animation_player.play(AnimToPlay {
-                    id: UnitAnimationKind::TakeDamage.into(),
-                    frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
+                if let Some(animation_player) = animation_player.as_mut() {
+                    animation_player.play(AnimToPlay {
+                        id: UnitAnimationKind::TakeDamage.into(),
+                        frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
+                    });
+                }
+
+                audio_writer.write(AudioEventMessage {
+                    source: impact.attack_execution,
+                    cue: AudioCue::Hit,
+                    audio_context: AudioContext {
+                        skill_id: Some(impact.skill_id),
+                    },
                 });
             }
 
             if damage > 0 {
-                defender.stats.health = u32::min(
+                let new_health = u32::min(
                     defender.stats.max_health,
                     defender.stats.health + damage as u32,
                 );
-                animation_player.play(AnimToPlay {
-                    id: UnitAnimationKind::Release.into(),
-                    frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
-                });
+
+                let health_changed = new_health - defender.stats.health;
+                defender.stats.health = new_health;
+                if health_changed > 0 {
+                    message_writer.write(UnitHealthChangedEvent {
+                        unit: impact.defender,
+                        health_changed: health_changed as i32,
+                    });
+
+                    if let Some(animation_player) = animation_player.as_mut() {
+                        animation_player.play(AnimToPlay {
+                            id: UnitAnimationKind::TakeDamage.into(),
+                            frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
+                        });
+                    }
+
+                    audio_writer.write(AudioEventMessage {
+                        source: impact.attack_execution,
+                        cue: AudioCue::Healed,
+                        audio_context: AudioContext {
+                            skill_id: Some(impact.skill_id),
+                        },
+                    });
+                }
             }
         }
 

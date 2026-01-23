@@ -181,6 +181,7 @@ pub mod sounds {
             },
             music::BATTLE_MUSIC_PATH,
             rpg_essentials::FLAME_EXPLOSION_PATH,
+            voice_sounds::BASE_OUCH,
         },
         combat::skills::SkillId,
     };
@@ -202,6 +203,10 @@ pub mod sounds {
 
     pub mod music {
         pub const BATTLE_MUSIC_PATH: &str = "sound_assets/music/BattleMusic.ogg";
+    }
+
+    pub mod voice_sounds {
+        pub const BASE_OUCH: &str = "sound_assets/voice/base/ouch.ogg";
     }
 
     #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
@@ -248,12 +253,25 @@ pub mod sounds {
         ui_sounds: HashMap<UiSound, Handle<AudioSource>>,
         music: HashMap<Music, Handle<AudioSource>>,
         combat_sounds: HashMap<CombatSound, Handle<AudioSource>>,
+        pub voice_db: HashMap<VoiceId, VoiceProfile>,
     }
 
     /// Container type (also will include voice, and weapon I guess? Maybe also footstep?)
     #[derive(Hash, PartialEq, Eq, Copy, Clone, Debug)]
     pub enum CombatSound {
         Skill(SkillSound),
+        Voice(VoiceId, VoiceSound),
+    }
+
+    #[derive(Hash, PartialEq, Eq, Copy, Clone, Debug)]
+    pub enum VoiceSound {
+        Ouch,
+        Hiyah,
+    }
+
+    #[derive(Hash, PartialEq, Eq, Copy, Clone, Debug)]
+    pub enum VoiceId {
+        Base,
     }
 
     #[derive(Component)]
@@ -274,10 +292,17 @@ pub mod sounds {
                     ),
                 ]),
                 music: HashMap::from([(Music::BattleMusic, asset_server.load(BATTLE_MUSIC_PATH))]),
-                combat_sounds: HashMap::from([(
-                    CombatSound::Skill(SkillSound::FlameExplosion),
-                    asset_server.load(FLAME_EXPLOSION_PATH),
-                )]),
+                combat_sounds: HashMap::from([
+                    (
+                        CombatSound::Skill(SkillSound::FlameExplosion),
+                        asset_server.load(FLAME_EXPLOSION_PATH),
+                    ),
+                    (
+                        CombatSound::Voice(VoiceId::Base, VoiceSound::Ouch),
+                        asset_server.load(BASE_OUCH),
+                    ),
+                ]),
+                voice_db: HashMap::from([(VoiceId::Base, default_voice_profile())]),
             }
         }
 
@@ -379,7 +404,7 @@ pub mod sounds {
     #[derive(SystemParam)]
     pub struct SoundManagerParam<'w> {
         settings: Res<'w, SoundSettings>,
-        manager: Res<'w, SoundManager>,
+        pub manager: Res<'w, SoundManager>,
     }
 
     impl<'s> SoundManagerParam<'s> {
@@ -406,6 +431,90 @@ pub mod sounds {
         /// Emitted by the ImpactEvent system
         Miss,
         Hit,
+        Healed,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct VoiceProfile {
+        responses: Vec<VoiceResponse>,
+    }
+
+    fn default_voice_profile() -> VoiceProfile {
+        VoiceProfile {
+            responses: vec![VoiceResponse {
+                cue: AudioCue::Hit,
+                role: Some(ImpactInteractionRole::Defender),
+                sound: VoiceSound::Ouch,
+            }],
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct VoiceResponse {
+        cue: AudioCue,
+        role: Option<ImpactInteractionRole>,
+        // Later we could add a Vec<VoiceSound> and let u choose randomly
+        // maybe with some priority set.
+        sound: VoiceSound,
+    }
+
+    impl VoiceProfile {
+        /// Figure out what VoiceSounds should be played based on the AudioEventMessage
+        /// for this Profile.
+        pub fn resolve(
+            &self,
+            audio_event: &AudioEventMessage,
+            interaction_role: Option<ImpactInteractionRole>,
+        ) -> Vec<VoiceSound> {
+            let mut options = Vec::new();
+            info!(
+                "VoiceProfile::resolve: {:?} {:?}",
+                audio_event, interaction_role
+            );
+            for response in &self.responses {
+                if audio_event.cue != response.cue {
+                    continue;
+                }
+
+                if let Some(required_role) = response.role {
+                    if !interaction_role
+                        .map(|t| t == required_role)
+                        .unwrap_or_default()
+                    {
+                        continue;
+                    }
+                }
+
+                options.push(response.sound.clone())
+            }
+            options
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_resolve() {
+            let profile = default_voice_profile();
+            let lines = profile.resolve(
+                &super::AudioEventMessage {
+                    source: Entity::from_bits(1),
+                    cue: AudioCue::Hit,
+                    audio_context: AudioContext { skill_id: None },
+                },
+                Some(ImpactInteractionRole::Defender),
+            );
+
+            assert_eq!(lines, vec![VoiceSound::Ouch]);
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Hash)]
+    pub enum ImpactInteractionRole {
+        Caster,
+        Defender,
     }
 
     /// Context associated with the AudioEvent that was emitted.
@@ -426,7 +535,7 @@ pub mod sounds {
     }
 
     /// Sent out to trigger the Audio Resolvers to act
-    #[derive(Message)]
+    #[derive(Message, Debug)]
     pub struct AudioEventMessage {
         pub source: Entity,
         pub cue: AudioCue,
@@ -438,8 +547,8 @@ pub mod sound_resolvers {
     use bevy::prelude::*;
 
     use crate::{
-        assets::sounds::{AudioEventMessage, SoundManagerParam},
-        combat::skills::SkillDBResource,
+        assets::sounds::{AudioEventMessage, SoundManagerParam, VoiceId},
+        combat::{AttackExecution, skills::SkillDBResource},
     };
 
     /// Accepts AudioEventMessages with context and plays skill specific sounds
@@ -466,6 +575,87 @@ pub mod sound_resolvers {
             for sound in sounds {
                 sound_manager.play_combat_sound(&mut commands, *sound);
             }
+        }
+    }
+
+    #[derive(Component, Debug)]
+    pub struct Voice {
+        pub voice_id: VoiceId,
+    }
+
+    pub fn resolve_voice_audio_events(
+        mut commands: Commands,
+        mut messages: MessageReader<AudioEventMessage>,
+        attack_execution: Query<&AttackExecution>,
+        unit_query: Query<&Voice>,
+        sound_manager: SoundManagerParam,
+    ) {
+        for message in messages.read() {
+            let attacker_voice = attack_execution
+                .get(message.source)
+                .ok()
+                .map(|t| t.attacker)
+                .flatten()
+                .map(|t| unit_query.get(t).ok())
+                .flatten();
+
+            let defender_voice = attack_execution
+                .get(message.source)
+                .ok()
+                .map(|t| t.defender)
+                .map(|t| unit_query.get(t).ok())
+                .flatten();
+
+            info!(
+                "Resolving Voice Audio Event: {:?}, {:?}, {:?}",
+                attacker_voice, defender_voice, message
+            );
+
+            // TODO: Make me a fn
+            if let Some(voice) = attacker_voice {
+                let Some(profile) = sound_manager.manager.voice_db.get(&voice.voice_id) else {
+                    error!("No Profile found for Voice {:?}", voice.voice_id);
+                    continue;
+                };
+
+                let lines =
+                    profile.resolve(message, Some(super::sounds::ImpactInteractionRole::Caster));
+
+                info!(
+                    "Resolved Sounds with voice: {:?}, {:?}",
+                    voice.voice_id, lines
+                );
+                for line in lines {
+                    sound_manager.play_combat_sound(
+                        &mut commands,
+                        super::sounds::CombatSound::Voice(voice.voice_id, line),
+                    );
+                }
+            };
+
+            if let Some(voice) = defender_voice {
+                let Some(profile) = sound_manager.manager.voice_db.get(&voice.voice_id) else {
+                    error!("No Profile found for Voice {:?}", voice.voice_id);
+                    continue;
+                };
+
+                let lines = profile.resolve(
+                    message,
+                    Some(super::sounds::ImpactInteractionRole::Defender),
+                );
+
+                info!(
+                    "Resolved Sounds with voice: {:?}, {:?}",
+                    voice.voice_id, lines
+                );
+
+                for line in lines {
+                    sound_manager.play_combat_sound(
+                        &mut commands,
+                        super::sounds::CombatSound::Voice(voice.voice_id, line),
+                    );
+                }
+            };
         }
     }
 }

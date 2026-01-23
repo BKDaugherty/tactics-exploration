@@ -19,7 +19,7 @@ use crate::{
     assets::{
         BATTLE_TACTICS_TILESHEET, CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH,
         OVERLAY_PATH,
-        sound_resolvers::resolve_skill_audio_events,
+        sound_resolvers::{resolve_skill_audio_events, resolve_voice_audio_events},
         sounds::AudioEventMessage,
         sprite_db::{SpriteDB, build_sprite_db},
     },
@@ -338,7 +338,8 @@ pub fn battle_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            resolve_skill_audio_events.run_if(in_state(GameState::Battle)),
+            (resolve_skill_audio_events, resolve_voice_audio_events)
+                .run_if(in_state(GameState::Battle)),
         )
         .add_observer(handle_battle_resolution_ui_buttons)
         .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);

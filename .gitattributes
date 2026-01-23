@@ -100,3 +100,5 @@ assets/font_assets/pixelify-sans/static/PixelifySans-Medium.ttf filter=lfs diff=
 assets/font_assets/pixelify-sans/static/PixelifySans-Regular.ttf filter=lfs diff=lfs merge=lfs -text
 assets/font_assets/pixelify-sans/static/PixelifySans-SemiBold.ttf filter=lfs diff=lfs merge=lfs -text
 assets/font_assets/pixelify-sans/PixelifySans-VariableFont_wght.ttf filter=lfs diff=lfs merge=lfs -text
+assets/sound_assets/voice/base/ouch.ogg filter=lfs diff=lfs merge=lfs -text
+assets/sound_assets/rpg_essentials/04_Fire_explosion_04_medium.ogg filter=lfs diff=lfs merge=lfs -text
