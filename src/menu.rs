@@ -259,7 +259,7 @@ pub mod menu_navigation {
                 if delta != MenuVec::default() {
                     let changed = game_menu.apply_menu_vec_to_cursor(delta);
                     if changed {
-                        sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                        sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
                     }
                 }
 
@@ -433,21 +433,21 @@ pub mod menu_horizontal_selector {
                 if let Some(dir) = check_latch_on_axis_move(action_state, latch) {
                     if dir == IVec2::X {
                         hort_selector.apply_index(HortDirection::East);
-                        sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                        sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
                     } else if dir == -IVec2::X {
                         hort_selector.apply_index(HortDirection::West);
-                        sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                        sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
                     }
                 }
 
                 if action_state.just_pressed(&player::PlayerInputAction::MoveCursorLeft) {
                     hort_selector.apply_index(HortDirection::West);
-                    sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                    sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
                 }
 
                 if action_state.just_pressed(&player::PlayerInputAction::MoveCursorRight) {
                     hort_selector.apply_index(HortDirection::East);
-                    sounds.play_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
+                    sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::MoveCursor);
                 }
             }
         }
@@ -493,7 +493,7 @@ pub fn deselect_nested_menu(
 
                 commands.entity(menu_e).remove::<ActiveMenu>();
                 commands.entity(nested.parent).insert(ActiveMenu {});
-                sounds.play_sound(&mut commands, &sound_settings, UiSound::CloseMenu);
+                sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::CloseMenu);
             }
         }
     }

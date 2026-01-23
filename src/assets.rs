@@ -173,12 +173,16 @@ pub mod sounds {
     use anyhow::Context;
     use bevy::{audio::Volume, ecs::system::SystemParam, prelude::*};
 
-    use crate::assets::sounds::{
-        jdsherbert_pixel_ui_sfx::{
-            CANCEL_SOUND_PATH, CLOSE_MENU_PATH, ERROR_SOUND_PATH, MOVE_CURSOR_SOUND_PATH,
-            OPEN_MENU_PATH, SELECT_SOUND_PATH,
+    use crate::{
+        assets::sounds::{
+            jdsherbert_pixel_ui_sfx::{
+                CANCEL_SOUND_PATH, CLOSE_MENU_PATH, ERROR_SOUND_PATH, MOVE_CURSOR_SOUND_PATH,
+                OPEN_MENU_PATH, SELECT_SOUND_PATH,
+            },
+            music::BATTLE_MUSIC_PATH,
+            rpg_essentials::FLAME_EXPLOSION_PATH,
         },
-        music::BATTLE_MUSIC_PATH,
+        combat::skills::SkillId,
     };
 
     /// JD Sherbert holding down the fort on these ui sounds
@@ -189,6 +193,11 @@ pub mod sounds {
         pub const CANCEL_SOUND_PATH: &str = CLOSE_MENU_PATH;
         pub const ERROR_SOUND_PATH: &str = "sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert - Pixel UI SFX Pack - Error 1 (Sine).ogg";
         pub const MOVE_CURSOR_SOUND_PATH: &str = "sound_assets/jdsherbert-pixel-ui-sfx-pack-free/Stereo/ogg/JDSherbert - Pixel UI SFX Pack - Cursor 2 (Sine).ogg";
+    }
+
+    pub mod rpg_essentials {
+        pub const FLAME_EXPLOSION_PATH: &str =
+            "sound_assets/rpg_essentials/04_Fire_explosion_04_medium.ogg";
     }
 
     pub mod music {
@@ -227,11 +236,24 @@ pub mod sounds {
         }
     }
 
+    /// TBD if this should be an enum or just an id
+    #[derive(Hash, PartialEq, Eq, Copy, Clone, Debug)]
+    pub enum SkillSound {
+        FlameExplosion,
+    }
+
     #[derive(Resource)]
     /// Resource holding all of our UI SFX
     pub struct SoundManager {
         ui_sounds: HashMap<UiSound, Handle<AudioSource>>,
         music: HashMap<Music, Handle<AudioSource>>,
+        combat_sounds: HashMap<CombatSound, Handle<AudioSource>>,
+    }
+
+    /// Container type (also will include voice, and weapon I guess? Maybe also footstep?)
+    #[derive(Hash, PartialEq, Eq, Copy, Clone, Debug)]
+    pub enum CombatSound {
+        Skill(SkillSound),
     }
 
     #[derive(Component)]
@@ -252,13 +274,17 @@ pub mod sounds {
                     ),
                 ]),
                 music: HashMap::from([(Music::BattleMusic, asset_server.load(BATTLE_MUSIC_PATH))]),
+                combat_sounds: HashMap::from([(
+                    CombatSound::Skill(SkillSound::FlameExplosion),
+                    asset_server.load(FLAME_EXPLOSION_PATH),
+                )]),
             }
         }
 
         /// Back at it again with they dynamic, but static set of resources
         ///
         /// Same choice here.
-        pub fn get_sound(&self, sound: UiSound) -> Handle<AudioSource> {
+        pub fn get_ui_sound(&self, sound: UiSound) -> Handle<AudioSource> {
             self.ui_sounds
                 .get(&sound)
                 .cloned()
@@ -284,14 +310,32 @@ pub mod sounds {
                 .unwrap()
         }
 
-        pub fn play_sound(
+        pub fn play_ui_sound(
             &self,
             commands: &mut Commands,
             settings: &SoundSettings,
             sound: UiSound,
         ) {
             commands.spawn((
-                AudioPlayer::new(self.get_sound(sound)),
+                AudioPlayer::new(self.get_ui_sound(sound)),
+                PlaybackSettings::DESPAWN.with_volume(Volume::Linear(
+                    (settings.global_volume * settings.sfx_volume) as f32,
+                )),
+            ));
+        }
+
+        pub fn get_combat_sound(&self, sound: CombatSound) -> Handle<AudioSource> {
+            self.combat_sounds.get(&sound).expect("Why have an enum for Combat sounds if you aren't going to have a sound for an enum discriminant").clone()
+        }
+
+        pub fn play_combat_sound(
+            &self,
+            commands: &mut Commands,
+            settings: &SoundSettings,
+            sound: CombatSound,
+        ) {
+            commands.spawn((
+                AudioPlayer::new(self.get_combat_sound(sound)),
                 PlaybackSettings::DESPAWN.with_volume(Volume::Linear(
                     (settings.global_volume * settings.sfx_volume) as f32,
                 )),
@@ -339,8 +383,89 @@ pub mod sounds {
     }
 
     impl<'s> SoundManagerParam<'s> {
-        pub fn play_sound(&self, commands: &mut Commands, sound: UiSound) {
-            self.manager.play_sound(commands, &self.settings, sound);
+        pub fn play_ui_sound(&self, commands: &mut Commands, sound: UiSound) {
+            self.manager.play_ui_sound(commands, &self.settings, sound);
+        }
+
+        pub fn play_combat_sound(&self, commands: &mut Commands, sound: CombatSound) {
+            self.manager
+                .play_combat_sound(commands, &self.settings, sound);
+        }
+    }
+
+    /// AudioCues allow us to generalize a bit for different
+    /// weapons / units / skills different semantic moments in our audio pipeline.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum AudioCue {
+        /// Started use of skill
+        SkillStart,
+        SkillRelease,
+        /// Unconditional on Impact sound
+        Impact,
+
+        /// Emitted by the ImpactEvent system
+        Miss,
+        Hit,
+    }
+
+    /// Context associated with the AudioEvent that was emitted.
+    ///
+    /// AudioResolvers use this to know if they need to play an event or not.
+    #[derive(Clone, PartialEq, Debug)]
+    pub struct AudioContext {
+        pub skill_id: Option<SkillId>,
+    }
+
+    /// So the skill would have this profile registered for audio
+    /// tailored to specific skill events
+    #[derive(Debug, Default, Clone)]
+    pub struct AudioProfile {
+        /// TODO: Is AudioCue enough? We can come back later, I don't think it's
+        /// going to be. I think this is going to have to not be generic maybe?
+        pub on_cue: HashMap<AudioCue, Vec<CombatSound>>,
+    }
+
+    /// Sent out to trigger the Audio Resolvers to act
+    #[derive(Message)]
+    pub struct AudioEventMessage {
+        pub source: Entity,
+        pub cue: AudioCue,
+        pub audio_context: AudioContext,
+    }
+}
+
+pub mod sound_resolvers {
+    use bevy::prelude::*;
+
+    use crate::{
+        assets::sounds::{AudioEventMessage, SoundManagerParam},
+        combat::skills::SkillDBResource,
+    };
+
+    /// Accepts AudioEventMessages with context and plays skill specific sounds
+    pub fn resolve_skill_audio_events(
+        mut commands: Commands,
+        mut messages: MessageReader<AudioEventMessage>,
+        skill_db: Res<SkillDBResource>,
+        sound_manager: SoundManagerParam,
+    ) {
+        for message in messages.read() {
+            let Some(skill) = message
+                .audio_context
+                .skill_id
+                .as_ref()
+                .map(|t| skill_db.skill_db.get_skill(t))
+            else {
+                continue;
+            };
+
+            let Some(sounds) = skill.audio_profile.on_cue.get(&message.cue) else {
+                continue;
+            };
+
+            for sound in sounds {
+                sound_manager.play_combat_sound(&mut commands, *sound);
+            }
         }
     }
 }
