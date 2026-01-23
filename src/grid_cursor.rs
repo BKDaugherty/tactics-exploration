@@ -103,10 +103,10 @@ pub fn handle_cursor_movement(
             if delta != (grid::GridVec { x: 0, y: 0 }) {
                 match new_pos {
                     grid::GridPositionChangeResult::Moved(..) => {
-                        sounds.play_sound(&mut commands, UiSound::MoveCursor);
+                        sounds.play_ui_sound(&mut commands, UiSound::MoveCursor);
                     }
                     grid::GridPositionChangeResult::OutOfBounds(..) => {
-                        sounds.play_sound(&mut commands, UiSound::Error);
+                        sounds.play_ui_sound(&mut commands, UiSound::Error);
                     }
                 }
             }

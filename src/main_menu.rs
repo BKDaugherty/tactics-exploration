@@ -384,7 +384,7 @@ fn main_menu_action(
 ) {
     let button_entity = click.entity;
     if let Ok(menu_button_action) = menu_button.get(button_entity) {
-        sounds.play_sound(&mut commands, &sound_settings, UiSound::Select);
+        sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::Select);
         click.propagate(false);
         match menu_button_action {
             MainMenuButtonAction::Quit => {

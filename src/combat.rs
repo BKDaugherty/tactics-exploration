@@ -3,6 +3,9 @@ use std::collections::BTreeMap;
 use bevy::prelude::*;
 
 use crate::assets::FontResource;
+use crate::assets::sounds::AudioContext;
+use crate::assets::sounds::AudioCue;
+use crate::assets::sounds::AudioEventMessage;
 use crate::gameplay_effects::ActiveEffects;
 use crate::gameplay_effects::Effect;
 use crate::gameplay_effects::EffectMetadata;
@@ -52,6 +55,7 @@ pub struct CombatTimeline {
     current_stage: CombatStageId,
     stages: BTreeMap<CombatStageId, CombatStage>,
     conditions_to_advance: BTreeMap<CombatStageId, Vec<AttackExecutionTrigger>>,
+    audio_events_to_emit_on_stage_complete: BTreeMap<CombatStageId, Vec<AudioCue>>,
 }
 
 impl CombatTimeline {
@@ -60,6 +64,7 @@ impl CombatTimeline {
             current_stage: CombatStageId(0),
             stages: BTreeMap::new(),
             conditions_to_advance: BTreeMap::from([(CombatStageId(0), Vec::new())]),
+            audio_events_to_emit_on_stage_complete: BTreeMap::new(),
         }
     }
 
@@ -249,6 +254,7 @@ pub fn listen_for_combat_conditions(
 pub fn check_combat_timeline_should_advance(
     mut ae: Query<(Entity, &mut AttackExecution)>,
     mut message_writer: MessageWriter<CombatStageComplete>,
+    mut audio_event_writer: MessageWriter<AudioEventMessage>,
 ) {
     for (ae_entity, mut ae) in ae.iter_mut() {
         let combat_timeline = &ae.combat_timeline;
@@ -268,6 +274,25 @@ pub fn check_combat_timeline_should_advance(
                 attack_execution: ae_entity,
                 stage_id: ae.combat_timeline.current_stage,
             });
+
+            if let Some(events) = ae
+                .combat_timeline
+                .audio_events_to_emit_on_stage_complete
+                .get(&ae.combat_timeline.current_stage)
+            {
+                for event in events {
+                    audio_event_writer.write(
+                        // Should source be the attacker or the AE?
+                        AudioEventMessage {
+                            source: ae_entity,
+                            cue: *event,
+                            audio_context: AudioContext {
+                                skill_id: Some(ae.skill.skill_id),
+                            },
+                        },
+                    );
+                }
+            }
 
             info!(
                 "Advancing from {:?} to {:?}",
@@ -575,6 +600,14 @@ fn build_timeline_for_skill(
         stage_id.0 += 1;
     }
 
+    timeline.audio_events_to_emit_on_stage_complete = skill
+        .audio_cues_to_emit
+        .to_emit_on_exit
+        .clone()
+        .into_iter()
+        .map(|(k, v)| (k.into(), v))
+        .collect();
+
     timeline
 }
 
@@ -820,7 +853,11 @@ pub mod skills {
                 registered_sprite_ids::POISON_VFX_ANIMATED_SPRITE_ID,
             },
         },
-        assets::sprite_db::SpriteId,
+        assets::{
+            sounds::{AudioCue, AudioProfile, CombatSound, SkillSound},
+            sprite_db::SpriteId,
+        },
+        combat::CombatStageId,
         gameplay_effects::{EffectData, StatusTag},
     };
 
@@ -957,9 +994,29 @@ pub mod skills {
         pub advancing_event: SkillEvent,
     }
 
+    #[derive(PartialEq, Eq, Clone, Copy, Default, Hash, PartialOrd, Ord, Debug)]
+    pub struct SkillStageIndex(pub u32);
+
+    impl From<SkillStageIndex> for CombatStageId {
+        fn from(value: SkillStageIndex) -> Self {
+            CombatStageId(value.0)
+        }
+    }
+
+    #[derive(Default, Clone, Debug)]
+    pub struct SkillAudioCues {
+        /// Emit this on exit of the skill stage.
+        ///
+        /// Use SkillStageIndex 0 for on start of 1.
+        pub to_emit_on_exit: HashMap<SkillStageIndex, Vec<AudioCue>>,
+    }
+
     /// A representation of a Skill used in combat by a player.
     #[derive(Debug, Clone)]
     pub struct Skill {
+        /// The Id of the skill
+        pub skill_id: SkillId,
+
         /// The name of the skill
         pub name: String,
         /// Damaging portions of the skill, if any
@@ -977,6 +1034,13 @@ pub mod skills {
         /// Should this just be an effect on Self?
         /// If so I might need to change Targeting?
         pub cost: SkillCost,
+
+        /// Cues that should be emitted when this skill is processed.
+        pub audio_cues_to_emit: SkillAudioCues,
+
+        /// Not so sure that this should be generic across all types,
+        /// but let's leave it like this for now.
+        pub audio_profile: AudioProfile,
     }
 
     #[derive(bevy::prelude::Resource)]
@@ -1144,6 +1208,7 @@ pub mod skills {
                 SkillCategoryId(0),
                 ATTACK_SKILL_ID,
                 Skill {
+                    skill_id: ATTACK_SKILL_ID,
                     name: "Attack".to_owned(),
                     actions: Vec::from([SkillAction {
                         base_accuracy: 1.0,
@@ -1176,6 +1241,8 @@ pub mod skills {
                         },
                     ],
                     cost: SkillCost { ap: 1 },
+                    audio_profile: AudioProfile::default(),
+                    audio_cues_to_emit: SkillAudioCues::default(),
                 },
             )?
             .register_category(
@@ -1218,6 +1285,7 @@ pub mod skills {
                 SkillCategoryId(1),
                 SkillId(2),
                 Skill {
+                    skill_id: SkillId(2),
                     name: "Flame".to_owned(),
                     actions: Vec::from([SkillAction {
                         base_accuracy: 0.8,
@@ -1280,12 +1348,27 @@ pub mod skills {
                         },
                     ],
                     cost: SkillCost { ap: 1 },
+                    // TODO: We could consider just having the SkillStageAction
+                    // drive what is happening for Impact?
+                    audio_cues_to_emit: SkillAudioCues {
+                        to_emit_on_exit: HashMap::from([(
+                            SkillStageIndex(3),
+                            vec![AudioCue::Impact],
+                        )]),
+                    },
+                    audio_profile: AudioProfile {
+                        on_cue: HashMap::from([(
+                            AudioCue::Impact,
+                            vec![CombatSound::Skill(SkillSound::FlameExplosion)],
+                        )]),
+                    },
                 },
             )?
             .register_skill(
                 SkillCategoryId(6),
                 SkillId(3),
                 Skill {
+                    skill_id: SkillId(3),
                     name: "Hit em Twice".to_owned(),
                     actions: Vec::from([
                         SkillAction {
@@ -1347,12 +1430,15 @@ pub mod skills {
                         },
                     ],
                     cost: SkillCost { ap: 1 },
+                    audio_cues_to_emit: SkillAudioCues::default(),
+                    audio_profile: AudioProfile::default(),
                 },
             )?
             .register_skill(
                 SkillCategoryId(3),
                 SkillId(4),
                 Skill {
+                    skill_id: SkillId(4),
                     name: "Lob Attack".to_owned(),
                     actions: Vec::from([SkillAction {
                         base_accuracy: 1.0,
@@ -1379,12 +1465,15 @@ pub mod skills {
                         },
                     ],
                     cost: SkillCost { ap: 1 },
+                    audio_cues_to_emit: SkillAudioCues::default(),
+                    audio_profile: AudioProfile::default(),
                 },
             )?
             .register_skill(
                 SkillCategoryId(5),
                 SkillId(5),
                 Skill {
+                    skill_id: SkillId(5),
                     name: "Poison Shot".to_owned(),
                     actions: Vec::from([
                         SkillAction {
@@ -1428,12 +1517,15 @@ pub mod skills {
                         },
                     ],
                     cost: SkillCost { ap: 1 },
+                    audio_cues_to_emit: SkillAudioCues::default(),
+                    audio_profile: AudioProfile::default(),
                 },
             )?
             .register_skill(
                 SkillCategoryId(5),
                 SkillId(6),
                 Skill {
+                    skill_id: SkillId(6),
                     name: "Stun Shot".to_owned(),
                     actions: Vec::from([
                         SkillAction {
@@ -1474,6 +1566,8 @@ pub mod skills {
                         },
                     ],
                     cost: SkillCost { ap: 1 },
+                    audio_cues_to_emit: SkillAudioCues::default(),
+                    audio_profile: AudioProfile::default(),
                 },
             )?
             // Uh, not a skill necessarily, but this pretty much gets what I want for free so...
@@ -1481,6 +1575,7 @@ pub mod skills {
                 SkillCategoryId(3),
                 SkillId(7),
                 Skill {
+                    skill_id: SkillId(7),
                     name: "Take Poison Damage".to_owned(),
                     actions: Vec::from([SkillAction {
                         base_accuracy: 1.0,
@@ -1520,12 +1615,15 @@ pub mod skills {
                         },
                     ],
                     cost: SkillCost { ap: 1 },
+                    audio_cues_to_emit: SkillAudioCues::default(),
+                    audio_profile: AudioProfile::default(),
                 },
             )?
             .register_skill(
                 SkillCategoryId(1),
                 SkillId(8),
                 Skill {
+                    skill_id: SkillId(8),
                     name: "Heal".to_owned(),
                     actions: Vec::from([SkillAction {
                         base_accuracy: 1.0,
@@ -1569,6 +1667,8 @@ pub mod skills {
                         },
                     ],
                     cost: SkillCost { ap: 1 },
+                    audio_cues_to_emit: SkillAudioCues::default(),
+                    audio_profile: AudioProfile::default(),
                 },
             )?;
 

@@ -988,7 +988,7 @@ pub mod player_battle_ui_systems {
                         match action {
                             UnitMenuAction::Move => {
                                 if unit_resources.movement_points_left_in_phase == 0 {
-                                    sounds.play_sound(&mut commands, UiSound::Error);
+                                    sounds.play_ui_sound(&mut commands, UiSound::Error);
                                     info!(
                                         "It'd be nice if the player was told why they can't move!"
                                     );
@@ -998,7 +998,7 @@ pub mod player_battle_ui_systems {
                             // TODO: Calculate the AP cost for the skill, don't assume it's just 1.
                             UnitMenuAction::UseSkill(skill_id) => {
                                 if unit_resources.action_points_left_in_phase == 0 {
-                                    sounds.play_sound(&mut commands, UiSound::Error);
+                                    sounds.play_ui_sound(&mut commands, UiSound::Error);
                                     info!(
                                         "It'd be nice if the player was told why they can't use this skill! We are assuming {:?} has AP 1",
                                         skill_id
@@ -1009,7 +1009,7 @@ pub mod player_battle_ui_systems {
                             _ => {}
                         };
 
-                        sounds.play_sound(&mut commands, UiSound::Select);
+                        sounds.play_ui_sound(&mut commands, UiSound::Select);
                         battle_command_writer.write(UnitUiCommandMessage {
                             player: *player,
                             command: match action {
@@ -1076,7 +1076,7 @@ pub mod player_battle_ui_systems {
                             },
                         );
 
-                        sounds.play_sound(&mut commands, UiSound::Select);
+                        sounds.play_ui_sound(&mut commands, UiSound::Select);
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                     }
                     BattleMenuAction::OpenSkillsFilteredByCategoryMenu(selected_category) => {
@@ -1121,11 +1121,11 @@ pub mod player_battle_ui_systems {
                             },
                         );
 
-                        sounds.play_sound(&mut commands, UiSound::Select);
+                        sounds.play_ui_sound(&mut commands, UiSound::Select);
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                     }
                     BattleMenuAction::ViewMap => {
-                        sounds.play_sound(&mut commands, UiSound::Select);
+                        sounds.play_ui_sound(&mut commands, UiSound::Select);
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                         commands.entity(battle_ui_container.map_viewer).insert((
                             battle_menu.to_owned(),
@@ -1144,7 +1144,7 @@ pub mod player_battle_ui_systems {
                 }
             } else if input_actions.just_pressed(&PlayerInputAction::Deselect) {
                 if let Some(dynamic_menu) = nested {
-                    sounds.play_sound(&mut commands, UiSound::Cancel);
+                    sounds.play_ui_sound(&mut commands, UiSound::Cancel);
                     let parent = dynamic_menu.parent;
                     clean_stale_menu(&mut commands, battle_menu_e, true);
                     commands.entity(parent).insert(ActiveMenu {});

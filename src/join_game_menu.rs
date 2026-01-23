@@ -588,7 +588,7 @@ fn wait_for_joining_player(
             ) {
                 error!("Failed to add player: {:?}", e);
             } else {
-                sounds.play_sound(&mut commands, &sound_settings, UiSound::OpenMenu);
+                sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::OpenMenu);
             }
         }
     }
@@ -688,7 +688,7 @@ fn handle_button_commands(
                     continue;
                 };
 
-                sounds.play_sound(&mut commands, UiSound::Select);
+                sounds.play_ui_sound(&mut commands, UiSound::Select);
                 match highlighted_option {
                     UiCommands::FocusTextInput(entity) => {
                         for (text_e, mut text_input_active) in text_input_query.iter_mut() {
@@ -868,7 +868,7 @@ fn handle_button_commands(
                     commands.entity(menu_e).remove::<ActiveMenu>();
                     commands.entity(parent).insert(ActiveMenu {});
 
-                    sounds.play_sound(&mut commands, UiSound::Cancel);
+                    sounds.play_ui_sound(&mut commands, UiSound::Cancel);
                 } else {
                     // Despawn the players UI
                     commands.entity(controlled_ui_block.entity).despawn();
@@ -877,7 +877,7 @@ fn handle_button_commands(
                         commands.entity(t.input_entity).despawn();
                     }
 
-                    sounds.play_sound(&mut commands, UiSound::CloseMenu);
+                    sounds.play_ui_sound(&mut commands, UiSound::CloseMenu);
                 }
             }
         }
@@ -1248,7 +1248,7 @@ fn handle_unload_unit(
                     player_data.unit_state = LoadedUnitState::NoUnit;
                 }
 
-                sounds.play_sound(&mut commands, &sound_settings, UiSound::Cancel);
+                sounds.play_ui_sound(&mut commands, &sound_settings, UiSound::Cancel);
             }
         }
     }

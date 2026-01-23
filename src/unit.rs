@@ -950,10 +950,10 @@ pub fn handle_unit_cursor_actions(
                             });
 
                             commands.entity(cursor_entity).insert(LockedOn {});
-                            sounds.play_sound(&mut commands, UiSound::OpenMenu);
+                            sounds.play_ui_sound(&mut commands, UiSound::OpenMenu);
                         }
                         UnitMovementSelection::NoPlayerUnitOnTile => {
-                            sounds.play_sound(&mut commands, UiSound::Error);
+                            sounds.play_ui_sound(&mut commands, UiSound::Error);
                             warn!("Selected tile with no player unit");
                         }
                     }
@@ -973,7 +973,7 @@ pub fn handle_unit_cursor_actions(
                         player: *player,
                     });
                     commands.entity(cursor_entity).insert(LockedOn {});
-                    sounds.play_sound(&mut commands, UiSound::Cancel);
+                    sounds.play_ui_sound(&mut commands, UiSound::Cancel);
                 }
             }
             // If we're moving a unit, and we press select again, attempt to move the unit to that position
@@ -987,7 +987,7 @@ pub fn handle_unit_cursor_actions(
                     // TODO: What to do if this changes between start and end of movement?
                     let Some(valid_move) = valid_moves.remove(&cursor_grid_pos) else {
                         log::warn!("Attempting to move to invalid position");
-                        sounds.play_sound(&mut commands, UiSound::Error);
+                        sounds.play_ui_sound(&mut commands, UiSound::Error);
                         continue;
                     };
 
@@ -1008,11 +1008,11 @@ pub fn handle_unit_cursor_actions(
                             "Cannot move unit to position {:?} because it is occupied",
                             cursor_grid_pos
                         );
-                        sounds.play_sound(&mut commands, UiSound::Error);
+                        sounds.play_ui_sound(&mut commands, UiSound::Error);
                         continue;
                     }
 
-                    sounds.play_sound(&mut commands, UiSound::Select);
+                    sounds.play_ui_sound(&mut commands, UiSound::Select);
                     execute_action_writer.write(UnitExecuteActionMessage {
                         entity: unit_entity,
                         action: UnitExecuteAction::Move(valid_move),
@@ -1029,7 +1029,7 @@ pub fn handle_unit_cursor_actions(
 
                     commands.entity(cursor_entity).insert(LockedOn {});
 
-                    sounds.play_sound(&mut commands, UiSound::Cancel);
+                    sounds.play_ui_sound(&mut commands, UiSound::Cancel);
                 }
             } else if let PlayerCursorState::LookingForTargetWithAttack(
                 unit_entity,
@@ -1042,7 +1042,7 @@ pub fn handle_unit_cursor_actions(
                     // based on state, and then have some other system take over?
                     let Some(valid_move) = valid_attack_moves.remove(&cursor_grid_pos) else {
                         log::warn!("Attempting to attack an invalid position");
-                        sounds.play_sound(&mut commands, UiSound::Error);
+                        sounds.play_ui_sound(&mut commands, UiSound::Error);
                         continue;
                     };
 
@@ -1055,7 +1055,7 @@ pub fn handle_unit_cursor_actions(
                         }),
                     });
 
-                    sounds.play_sound(&mut commands, UiSound::Select);
+                    sounds.play_ui_sound(&mut commands, UiSound::Select);
 
                     end_move(&mut overlay_message_writer, player, player_state);
                 } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
@@ -1074,7 +1074,7 @@ pub fn handle_unit_cursor_actions(
 
                     commands.entity(cursor_entity).insert(LockedOn {});
 
-                    sounds.play_sound(&mut commands, UiSound::Cancel);
+                    sounds.play_ui_sound(&mut commands, UiSound::Cancel);
                 }
             }
         }

@@ -19,6 +19,8 @@ use crate::{
     assets::{
         BATTLE_TACTICS_TILESHEET, CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH,
         OVERLAY_PATH,
+        sound_resolvers::resolve_skill_audio_events,
+        sounds::AudioEventMessage,
         sprite_db::{SpriteDB, build_sprite_db},
     },
     battle_menu::{
@@ -169,6 +171,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<TurnStartMessage>()
         .add_message::<StartOfPhaseEffectsMessage>()
         .add_message::<UnitHealthChangedEvent>()
+        .add_message::<AudioEventMessage>()
         // .add_plugins(TiledPlugin::default())
         // .add_plugins(TiledDebugPluginGroup)
         .add_plugins((
@@ -330,7 +333,12 @@ pub fn battle_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            (update_player_ui_available_options, handle_interactions),
+            (update_player_ui_available_options, handle_interactions)
+                .run_if(in_state(GameState::Battle)),
+        )
+        .add_systems(
+            Update,
+            resolve_skill_audio_events.run_if(in_state(GameState::Battle)),
         )
         .add_observer(handle_battle_resolution_ui_buttons)
         .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);
