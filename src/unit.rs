@@ -61,95 +61,90 @@ pub const NEUTRAL_TEAM: Team = Team(0);
 #[derive(Component, Debug, Reflect, Clone)]
 pub struct Unit {
     pub name: String,
-    pub stats: Stats,
     pub obstacle: ObstacleType,
     pub team: Team,
 }
 
-impl Unit {
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy, Reflect, Hash)]
+pub enum StatType {
+    Strength,
+    Magic,
+    Defense,
+    Resistance,
+    Speed,
+    Skill,
+    MaxHealth,
+    Movement,
+    // Not super sure if I want health here, but maybe fine for now?
+    Health,
+}
+
+impl StatType {
+    pub const VARIANTS: &[StatType] = &[
+        StatType::Strength,
+        StatType::Magic,
+        StatType::Defense,
+        StatType::Resistance,
+        StatType::Speed,
+        StatType::Skill,
+        StatType::MaxHealth,
+        StatType::Health,
+        StatType::Movement,
+    ];
+}
+
+#[derive(PartialEq, Clone, Copy, Default, Debug)]
+pub struct StatValue(pub f32);
+
+#[derive(Clone, Default, Debug)]
+pub struct StatContainer {
+    stats: HashMap<StatType, StatValue>,
+}
+
+impl StatContainer {
+    pub fn new() -> StatContainer {
+        let mut stats = HashMap::new();
+        for variant in StatType::VARIANTS {
+            stats.insert(*variant, StatValue(0.));
+        }
+        StatContainer { stats }
+    }
+
+    /// Access a stat of a particular type
+    pub fn stat(&self, stat_type: StatType) -> StatValue {
+        self.stats
+            .get(&stat_type)
+            .expect("The game depends on a StatContainer always having a value for all stats")
+            .to_owned()
+    }
+
+    /// Update a stat of a particular type
+    pub fn with_stat(&mut self, stat_type: StatType, value: StatValue) -> &mut Self {
+        let _ = self.stats.insert(stat_type, value);
+        self
+    }
+}
+
+#[derive(Component)]
+pub struct UnitBaseStats {
+    pub stats: StatContainer,
+}
+
+#[derive(Component)]
+pub struct UnitDerivedStats {
+    pub stats: StatContainer,
+}
+
+impl UnitDerivedStats {
     /// Whether or not the unit is at 0 health
     pub fn downed(&self) -> bool {
-        self.stats.health == 0
+        self.stats.stat(StatType::Health) == StatValue(0.)
     }
 
     // Not downed, but less than 30% of max health is "critical"
     pub fn critical_health(&self) -> bool {
-        !self.downed() && (self.stats.health as f32 / self.stats.max_health as f32) <= 0.3
-    }
-}
-
-/// Lowkey, should Magic Power be Neutral, and AttackPower be Physical or
-/// something like that? Or is it fun having a Strength / Def?
-#[derive(Debug, Clone, Reflect, PartialEq, Eq, Hash, Copy)]
-pub enum ElementalType {
-    Fire,
-}
-
-/// Is it worth storing things like this?
-///
-/// I imagine I will still want to display in UIs
-/// why someones stats are what they are?
-#[derive(Debug, Clone, Reflect, PartialEq, Eq)]
-pub struct StatAttribute {
-    current_value: u32,
-    base_value: u32,
-}
-
-#[derive(Debug, Reflect, Clone)]
-pub struct Stats {
-    pub max_health: u32,
-    pub strength: u32,
-    pub magic_power: u32,
-    pub defense: u32,
-    /// At the moment, elemental_affinity is both (Str, Def) for the element
-    pub elemental_affinities: HashMap<ElementalType, u32>,
-    // TODO: Should stats represent the current state?
-    pub health: u32,
-    pub movement: u32,
-}
-
-impl Stats {
-    fn new() -> Self {
-        Self {
-            max_health: 0,
-            strength: 0,
-            magic_power: 0,
-            defense: 0,
-            movement: 0,
-            health: 0,
-            elemental_affinities: HashMap::new(),
-        }
-    }
-
-    fn with_health(&mut self, health: u32) -> &mut Self {
-        self.health = health;
-        self.max_health = health;
-        self
-    }
-
-    fn with_strength(&mut self, strength: u32) -> &mut Self {
-        self.strength = strength;
-        self
-    }
-
-    fn with_elemental_affinity(&mut self, element: ElementalType, affinity: u32) -> &mut Self {
-        let _ = self.elemental_affinities.insert(element, affinity);
-        self
-    }
-
-    fn with_magic_power(&mut self, p: u32) -> &mut Self {
-        self.magic_power = p;
-        self
-    }
-
-    fn with_movement(&mut self, p: u32) -> &mut Self {
-        self.movement = p;
-        self
-    }
-
-    fn with_defense(&mut self, p: u32) -> &mut Self {
-        self.defense = p;
-        self
+        !self.downed()
+            && (self.stats.stat(StatType::Health).0 / self.stats.stat(StatType::MaxHealth).0) <= 0.3
     }
 }
 
@@ -166,6 +161,8 @@ pub struct UnitBundle {
     pub phase_resources: UnitPhaseResources,
     pub active_effects: ActiveEffects,
     pub voice: Voice,
+    pub derived_stats: UnitDerivedStats,
+    pub base_stats: UnitBaseStats,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -214,11 +211,6 @@ pub fn spawn_obstacle_unit(
             crate::grid::init_grid_to_world_transform(&grid_position),
             grid_position,
             Unit {
-                stats: Stats::new()
-                    .with_health(3)
-                    .with_defense(0)
-                    .with_movement(0)
-                    .to_owned(),
                 obstacle: ObstacleType::Neutral,
                 team: Team(0),
                 name: obstacle_sprite_type.to_string(),
@@ -237,6 +229,11 @@ pub fn spawn_obstacle_unit(
             UnitPhaseResources::default(),
             ActiveEffects {
                 effects: Vec::new(),
+            },
+            UnitDerivedStats {
+                stats: StatContainer::new()
+                    .with_stat(StatType::MaxHealth, StatValue(3.))
+                    .to_owned(),
             },
         ))
         .id();
@@ -283,17 +280,25 @@ pub fn spawn_enemy(
         })
         .expect("Must have animation data");
 
+    let stat_container = StatContainer::new()
+        .with_stat(StatType::MaxHealth, StatValue(10.))
+        .with_stat(StatType::Health, StatValue(10.))
+        .with_stat(StatType::Defense, StatValue(1.))
+        .with_stat(StatType::Movement, StatValue(3.))
+        .to_owned();
+
     let unit_e = commands
         .spawn((
             Unit {
-                stats: Stats::new()
-                    .with_health(10)
-                    .with_defense(1)
-                    .with_movement(3)
-                    .to_owned(),
                 obstacle: ObstacleType::Filter(HashSet::from([team])),
                 team,
                 name: unit_name,
+            },
+            UnitDerivedStats {
+                stats: stat_container.clone(),
+            },
+            UnitBaseStats {
+                stats: stat_container.clone(),
             },
             grid_position,
             Sprite {
@@ -311,15 +316,17 @@ pub fn spawn_enemy(
             UnitAnimationPlayer::new(TT_UNIT_ANIMATED_SPRITE_ID),
             TINY_TACTICS_ANCHOR,
             UnitPhaseResources::default(),
-            Enemy {},
-            EnemyAiBehavior {
-                behavior: enemy::behaviors::Behavior::Berserker,
-            },
-            BattleEntity {},
-            skills,
-            ActiveEffects {
-                effects: Vec::new(),
-            },
+            (
+                Enemy {},
+                EnemyAiBehavior {
+                    behavior: enemy::behaviors::Behavior::Berserker,
+                },
+                BattleEntity {},
+                skills,
+                ActiveEffects {
+                    effects: Vec::new(),
+                },
+            ),
             Voice {
                 voice_id: VoiceId::Base,
             },
@@ -366,17 +373,15 @@ pub fn spawn_unit(
     direction: Direction,
 ) -> Entity {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
+    let stats = StatContainer::new()
+        .with_stat(StatType::Health, StatValue(13.))
+        .with_stat(StatType::MaxHealth, StatValue(13.))
+        .with_stat(StatType::Movement, StatValue(4.))
+        .to_owned();
     let unit = commands
         .spawn((
             UnitBundle {
                 unit: Unit {
-                    stats: Stats::new()
-                        .with_health(13)
-                        .with_defense(1)
-                        .with_magic_power(1)
-                        .with_movement(4)
-                        .with_strength(2)
-                        .to_owned(),
                     obstacle: ObstacleType::Filter(HashSet::from([team])),
                     team,
                     name: unit_name,
@@ -401,6 +406,12 @@ pub fn spawn_unit(
                 },
                 voice: Voice {
                     voice_id: VoiceId::Base,
+                },
+                base_stats: UnitBaseStats {
+                    stats: stats.clone(),
+                },
+                derived_stats: UnitDerivedStats {
+                    stats: stats.clone(),
                 },
             },
             BattleEntity {},
@@ -499,10 +510,9 @@ pub struct ValidMove {
 pub fn get_valid_moves_for_unit(
     grid_manager: &GridManager,
     movement: MovementRequest,
-    unit_query: Query<(Entity, &Unit)>,
+    unit_query: Query<(Entity, &Unit, &UnitDerivedStats)>,
 ) -> HashMap<GridPosition, ValidMove> {
     let movement_left = movement.movement_points_available;
-
     let mut spaces_explored = HashSet::new();
     let mut queue = VecDeque::new();
     let mut valid_moves = HashMap::new();
@@ -524,7 +534,7 @@ pub fn get_valid_moves_for_unit(
                 ValidMove {
                     target: to_explore,
                     path: path.clone(),
-                    movement_used: movement.unit.stats.movement - movement_left as u32,
+                    movement_used: movement.movement_points_available - movement_left as u32,
                 },
             );
         }
@@ -555,7 +565,7 @@ pub fn get_valid_moves_for_unit(
                 .next()
                 .flatten();
 
-            if let Some((_, unit)) = unit_on_target {
+            if let Some((_, unit, stats)) = unit_on_target {
                 match &unit.obstacle {
                     // Can't move here, or through here.
                     ObstacleType::Neutral => {
@@ -563,7 +573,7 @@ pub fn get_valid_moves_for_unit(
                     }
                     // Can move through here, but can't move here.
                     ObstacleType::Filter(hash_set) => {
-                        if !hash_set.contains(&movement.unit.team) && !unit.downed() {
+                        if !hash_set.contains(&movement.unit.team) && !stats.downed() {
                             continue;
                         } else {
                             let mut new_path = path.clone();
@@ -770,7 +780,7 @@ pub fn handle_unit_ui_command(
     mut unit_command_message: MessageReader<UnitUiCommandMessage>,
     mut overlay_message_writer: MessageWriter<OverlaysMessage>,
     mut controlled_unit_query: Query<(Entity, &Unit, &mut UnitPhaseResources, &GridPosition)>,
-    unit_query: Query<(Entity, &Unit)>,
+    unit_query: Query<(Entity, &Unit, &UnitDerivedStats)>,
     mut execute_action_writer: MessageWriter<UnitExecuteActionMessage>,
 ) {
     for message in unit_command_message.read() {
@@ -838,7 +848,7 @@ pub fn handle_unit_ui_command(
                     //
                     // TODO: Add some form of "targeting options" or something for
                     // deciding if you can cast this on an enemy or player or self or not
-                    if let Some((target_entity, _)) = grid_manager_res
+                    if let Some((target_entity, _, _)) = grid_manager_res
                         .grid_manager
                         .get_by_position(possible_attack_pos)
                         .cloned()
@@ -1350,9 +1360,10 @@ mod tests {
         grid_cursor,
         player::{self, Player, PlayerGameStates, PlayerInputAction, PlayerState},
         unit::{
-            PLAYER_TEAM, Stats, Unit, UnitActionCompletedMessage, UnitExecuteActionMessage,
-            execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
-            overlay::OverlaysMessage, unlock_cursor_after_unit_ui_command,
+            PLAYER_TEAM, StatContainer, StatType, StatValue, Unit, UnitActionCompletedMessage,
+            UnitBaseStats, UnitDerivedStats, UnitExecuteActionMessage, execute_unit_actions,
+            handle_unit_cursor_actions, handle_unit_ui_command, overlay::OverlaysMessage,
+            unlock_cursor_after_unit_ui_command,
         },
     };
     use bevy::{
@@ -1398,12 +1409,15 @@ mod tests {
             .world_mut()
             .spawn(player::PlayerBundle::new(player))
             .id();
+        let stats = StatContainer::new()
+            .with_stat(StatType::MaxHealth, StatValue(5.))
+            .with_stat(StatType::Movement, StatValue(3.))
+            .to_owned();
         let unit_entity = app
             .world_mut()
             .spawn((
                 // TODO: Make constructor
                 Unit {
-                    stats: Stats::new().with_movement(2).with_health(5).to_owned(),
                     team: PLAYER_TEAM,
                     obstacle: crate::unit::ObstacleType::Filter(HashSet::from([PLAYER_TEAM])),
                     name: "Bob".to_string(),
@@ -1412,6 +1426,12 @@ mod tests {
                 GridPosition { x: 2, y: 2 },
                 Transform::default(),
                 UnitPhaseResources::default(),
+                UnitDerivedStats {
+                    stats: stats.clone(),
+                },
+                UnitBaseStats {
+                    stats: stats.clone(),
+                },
             ))
             .id();
 

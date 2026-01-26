@@ -47,9 +47,10 @@ use crate::{
     camera::change_zoom,
     combat::{
         CombatStageComplete, DamageText, ImpactEvent, UnitHealthChangedEvent,
-        attack_execution_despawner, attack_intent_system, check_combat_timeline_should_advance,
-        cleanup_vfx_on_animation_complete, despawn_after_timer_completed,
-        handle_combat_stage_enter, impact_event_handler, listen_for_combat_conditions,
+        UnitStatChangeRequest, attack_execution_despawner, attack_intent_system,
+        check_combat_timeline_should_advance, cleanup_vfx_on_animation_complete,
+        despawn_after_timer_completed, handle_combat_stage_enter, handle_stat_changes,
+        impact_event_handler, listen_for_combat_conditions,
         skills::{SkillId, UnitSkills, setup_skill_system},
         spawn_damage_text,
     },
@@ -77,9 +78,9 @@ use crate::{
     player::{self, Player, RegisteredBattlePlayers},
     projectile::{ProjectileArrived, projectile_arrival_system, projectile_bezier_system},
     unit::{
-        CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, Unit,
-        UnitActionCompletedMessage, UnitExecuteActionMessage, execute_unit_actions,
-        handle_unit_cursor_actions, handle_unit_ui_command,
+        CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, StatType, StatValue, Unit,
+        UnitActionCompletedMessage, UnitDerivedStats, UnitExecuteActionMessage,
+        execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_ui_command,
     },
@@ -136,18 +137,18 @@ pub fn god_mode_plugin(app: &mut App) {
 
 pub fn handle_god_mode_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut player_unit_query: Query<&mut Unit, (With<Player>, Without<Enemy>)>,
-    mut enemy_unit_query: Query<&mut Unit, (With<Enemy>, Without<Player>)>,
+    mut player_unit_query: Query<&mut UnitDerivedStats, (With<Player>, Without<Enemy>)>,
+    mut enemy_unit_query: Query<&mut UnitDerivedStats, (With<Enemy>, Without<Player>)>,
 ) {
     if keyboard_input.just_pressed(KeyCode::KeyP) {
         for mut player in player_unit_query.iter_mut() {
-            player.stats.health = 0;
+            player.stats.with_stat(StatType::Health, StatValue(0.));
         }
     }
 
     if keyboard_input.just_pressed(KeyCode::KeyK) {
         for mut enemy in enemy_unit_query.iter_mut() {
-            enemy.stats.health = 0;
+            enemy.stats.with_stat(StatType::Health, StatValue(0.));
         }
     }
 }
@@ -171,6 +172,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<StartOfPhaseEffectsMessage>()
         .add_message::<UnitHealthChangedEvent>()
         .add_message::<AudioEventMessage>()
+        .add_message::<UnitStatChangeRequest>()
         .add_plugins((TilemapPlugin,))
         .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
         .add_systems(
@@ -196,6 +198,7 @@ pub fn battle_plugin(app: &mut App) {
             )
                 .chain(),
         )
+        .add_systems(Update, (handle_stat_changes))
         .add_systems(
             Update,
             (
@@ -214,7 +217,8 @@ pub fn battle_plugin(app: &mut App) {
                 start_phase,
             )
                 .run_if(in_state(GameState::Battle))
-                .chain(),
+                .chain()
+                .after(handle_stat_changes),
         )
         .add_systems(
             Update,
@@ -295,7 +299,8 @@ pub fn battle_plugin(app: &mut App) {
                 .chain()
                 .after(prepare_for_phase::<Enemy>)
                 .run_if(in_state(GameState::Battle))
-                .run_if(is_running_enemy_phase),
+                .run_if(is_running_enemy_phase)
+                .after(handle_stat_changes),
         )
         .add_systems(
             Update,
@@ -542,8 +547,8 @@ pub fn handle_battle_resolution_ui_buttons(
 // Naively assumes the BattleObjective is to defeat all enemies
 pub fn check_battle_complete(
     mut commands: Commands,
-    player_unit_query: Query<&Unit, With<Player>>,
-    enemy_unit_query: Query<&Unit, With<Enemy>>,
+    player_unit_query: Query<&UnitDerivedStats, With<Player>>,
+    enemy_unit_query: Query<&UnitDerivedStats, With<Enemy>>,
     mut game_state: ResMut<NextState<GameState>>,
     combat_marker_query: Query<Entity, With<CombatActionMarker>>,
 ) {

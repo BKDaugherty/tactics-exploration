@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-use crate::{combat::skills::AttackModifier, equipment::StatType};
+use crate::{combat::skills::AttackModifier, unit::StatType};
 
 /// Looking at GAS from Unreal as a motivator for this
 

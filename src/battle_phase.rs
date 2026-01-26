@@ -15,7 +15,7 @@ use crate::{
     gameplay_effects::{ActiveEffects, EffectDuration, StatusTag},
     grid::GridPosition,
     player::Player,
-    unit::{CombatActionMarker, Unit},
+    unit::{CombatActionMarker, StatType, Unit, UnitDerivedStats},
 };
 
 /// The Phase Manager keeps track of the current phase globally for the battle.
@@ -128,7 +128,7 @@ pub fn init_phase_system(
 pub fn check_should_advance_phase<T: PhaseSystem<PlayerEnemyPhase>>(
     mut phase_manager: ResMut<PhaseManager>,
     mut message_writer: MessageWriter<PhaseMessage>,
-    query: Query<(&UnitPhaseResources, &Unit), With<T::Marker>>,
+    query: Query<(&UnitPhaseResources, &UnitDerivedStats), With<T::Marker>>,
     wait_for_no_attacks_ongoing: Query<Entity, With<CombatActionMarker>>,
 ) {
     if phase_manager.current_phase != T::OWNED_PHASE
@@ -140,7 +140,7 @@ pub fn check_should_advance_phase<T: PhaseSystem<PlayerEnemyPhase>>(
 
     if query
         .iter()
-        .all(|(resources, unit)| !resources.can_act() || unit.downed())
+        .all(|(resources, derived_stats)| !resources.can_act() || derived_stats.downed())
     {
         let next_phase = T::OWNED_PHASE.next();
         phase_manager.current_phase = next_phase;
@@ -154,7 +154,7 @@ pub fn check_should_advance_phase<T: PhaseSystem<PlayerEnemyPhase>>(
 pub fn prepare_for_phase<T: PhaseSystem<PlayerEnemyPhase>>(
     phase_manager: ResMut<PhaseManager>,
     mut message_reader: MessageReader<PhaseMessage>,
-    mut query: Query<(&Unit, &mut UnitPhaseResources), With<T::Marker>>,
+    mut query: Query<(&UnitDerivedStats, &mut UnitPhaseResources), With<T::Marker>>,
     mut battle_phase_change_writer: MessageWriter<ShowBattleBannerMessage>,
 ) {
     for message in message_reader.read() {
@@ -163,7 +163,8 @@ pub fn prepare_for_phase<T: PhaseSystem<PlayerEnemyPhase>>(
         if phase == T::OWNED_PHASE && phase_manager.phase_state == PhaseState::Initializing {
             for (unit, mut phase_resources) in query.iter_mut() {
                 phase_resources.action_points_left_in_phase = 1;
-                phase_resources.movement_points_left_in_phase = unit.stats.movement;
+                phase_resources.movement_points_left_in_phase =
+                    unit.stats.stat(StatType::Movement).0 as u32;
                 phase_resources.waited = false;
             }
 
