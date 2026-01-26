@@ -10,8 +10,7 @@ pub const BATTLE_TACTICS_TILESHEET: &str =
 
 pub const GRADIENT_PATH: &str = "utility_assets/gradient.png";
 
-pub const EXAMPLE_MAP_PATH: &str = "map_assets/example-map/example-map.tmx";
-pub const EXAMPLE_MAP_2_PATH: &str = "map_assets/tinytactics-32-map/example-map-tiny-tactics.tmx";
+use std::path::PathBuf;
 
 use bevy::prelude::*;
 
@@ -27,18 +26,49 @@ pub struct FontResource {
     pub pixelify_sans_semi_bold: Handle<Font>,
 }
 
+impl FontResource {
+    pub(crate) fn get_all_paths(&self) -> Vec<PathBuf> {
+        let FontResource {
+            fine_fantasy,
+            badge,
+            pixelify_sans_regular,
+            pixelify_sans_medium,
+            pixelify_sans_bold,
+            pixelify_sans_semi_bold,
+        } = self;
+        [
+            fine_fantasy,
+            badge,
+            pixelify_sans_regular,
+            pixelify_sans_medium,
+            pixelify_sans_bold,
+            pixelify_sans_semi_bold,
+        ]
+        .iter()
+        .filter_map(|t| t.path().map(|t| t.path().to_path_buf()))
+        .collect()
+    }
+}
+
+pub const FONT_BADGE_PATH: &str = "font_assets/tinyRPGFontKit01_v1_2/TinyRPG-BadgeFont.ttf";
+pub const FONT_FINE_FANTASY_PATH: &str =
+    "font_assets/tinyRPGFontKit01_v1_2/TinyRPG-FineFantasyStrategies.ttf";
+pub const FONT_PIXELIFY_SANS_REGULAR_PATH: &str =
+    "font_assets/pixelify-sans/static/PixelifySans-Regular.ttf";
+pub const FONT_PIXELIFY_SANS_BOLD_PATH: &str =
+    "font_assets/pixelify-sans/static/PixelifySans-BOLD.ttf";
+pub const FONT_PIXELIFY_SANS_MEDIUM_PATH: &str =
+    "font_assets/pixelify-sans/static/PixelifySans-Medium.ttf";
+pub const FONT_PIXELIFY_SANS_SEMI_BOLD_PATH: &str =
+    "font_assets/pixelify-sans/static/PixelifySans-SemiBold.ttf";
+
 pub fn setup_fonts(mut commands: Commands, asset_loader: Res<AssetServer>) {
-    let badge = asset_loader.load("font_assets/tinyRPGFontKit01_v1_2/TinyRPG-BadgeFont.ttf");
-    let fine_fantasy =
-        asset_loader.load("font_assets/tinyRPGFontKit01_v1_2/TinyRPG-FineFantasyStrategies.ttf");
-    let pixelify_sans_regular =
-        asset_loader.load("font_assets/pixelify-sans/static/PixelifySans-Regular.ttf");
-    let pixelify_sans_bold =
-        asset_loader.load("font_assets/pixelify-sans/static/PixelifySans-Bold.ttf");
-    let pixelify_sans_medium =
-        asset_loader.load("font_assets/pixelify-sans/static/PixelifySans-Medium.ttf");
-    let pixelify_sans_semi_bold =
-        asset_loader.load("font_assets/pixelify-sans/static/PixelifySans-SemiBold.ttf");
+    let badge = asset_loader.load(FONT_BADGE_PATH);
+    let fine_fantasy = asset_loader.load(FONT_FINE_FANTASY_PATH);
+    let pixelify_sans_regular = asset_loader.load(FONT_PIXELIFY_SANS_REGULAR_PATH);
+    let pixelify_sans_bold = asset_loader.load(FONT_PIXELIFY_SANS_BOLD_PATH);
+    let pixelify_sans_medium = asset_loader.load(FONT_PIXELIFY_SANS_MEDIUM_PATH);
+    let pixelify_sans_semi_bold = asset_loader.load(FONT_PIXELIFY_SANS_SEMI_BOLD_PATH);
     commands.insert_resource(FontResource {
         fine_fantasy,
         badge,
@@ -52,7 +82,7 @@ pub fn setup_fonts(mut commands: Commands, asset_loader: Res<AssetServer>) {
 /// Skills need to be able to reference in data format
 /// what asset they spawn for VFX. For now, this can be tracked in a "DB".
 pub mod sprite_db {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use crate::unit::jobs::UnitJob;
 
@@ -88,6 +118,19 @@ pub mod sprite_db {
         Scepter,
     }
 
+    impl TinyTacticsSprites {
+        pub fn spritesheet_path(&self) -> &'static str {
+            match self {
+                Self::TtMapSheet => BATTLE_TACTICS_TILESHEET,
+                Self::Fighter => "unit_assets/spritesheets/fighter_spritesheet.png",
+                Self::Mage => "unit_assets/spritesheets/mage_spritesheet.png",
+                Self::Cleric => "unit_assets/spritesheets/cleric_spritesheet.png",
+                Self::IronAxe => "unit_assets/spritesheets/IronAxe_spritesheet.png",
+                Self::Scepter => "unit_assets/spritesheets/Scepter_spritesheet.png",
+            }
+        }
+    }
+
     impl From<TinyTacticsSprites> for SpriteId {
         fn from(value: TinyTacticsSprites) -> Self {
             match value {
@@ -95,37 +138,37 @@ pub mod sprite_db {
                 TinyTacticsSprites::Fighter => SpriteId(2),
                 TinyTacticsSprites::Mage => SpriteId(3),
                 TinyTacticsSprites::Cleric => SpriteId(4),
-                TinyTacticsSprites::IronAxe => SpriteId(7),
-                TinyTacticsSprites::Scepter => SpriteId(8),
+                TinyTacticsSprites::IronAxe => SpriteId(12),
+                TinyTacticsSprites::Scepter => SpriteId(13),
             }
         }
     }
 
-    fn build_sprite_map() -> HashMap<SpriteId, String> {
-        HashMap::from([
+    pub(crate) fn build_sprite_map() -> HashMap<SpriteId, String> {
+        let data = [
             (
                 TinyTacticsSprites::TtMapSheet.into(),
                 BATTLE_TACTICS_TILESHEET.to_string(),
             ),
             (
                 TinyTacticsSprites::Fighter.into(),
-                "unit_assets/spritesheets/fighter_spritesheet.png".to_string(),
+                TinyTacticsSprites::Fighter.spritesheet_path().to_string(),
             ),
             (
                 TinyTacticsSprites::Mage.into(),
-                "unit_assets/spritesheets/mage_spritesheet.png".to_string(),
+                TinyTacticsSprites::Mage.spritesheet_path().to_string(),
             ),
             (
                 TinyTacticsSprites::Cleric.into(),
-                "unit_assets/spritesheets/cleric_spritesheet.png".to_string(),
+                TinyTacticsSprites::Cleric.spritesheet_path().to_string(),
             ),
             (
                 TinyTacticsSprites::IronAxe.into(),
-                "unit_assets/spritesheets/IronAxe_spritesheet.png".to_string(),
+                TinyTacticsSprites::IronAxe.spritesheet_path().to_string(),
             ),
             (
                 TinyTacticsSprites::Scepter.into(),
-                "unit_assets/spritesheets/Scepter_spritesheet.png".to_string(),
+                TinyTacticsSprites::Scepter.spritesheet_path().to_string(),
             ),
             (
                 SpriteId(5),
@@ -152,7 +195,23 @@ pub mod sprite_db {
                 UnitJob::Mercenary.demo_sprite_id(),
                 "unit_assets/spritesheets/cgcarter/mercenary.png".to_string(),
             ),
-        ])
+        ];
+        let len = data.len();
+        let map = HashMap::from(data.clone());
+
+        if map.len() != len {
+            let mapped = data.map(|t| t.0);
+            let mut set = HashSet::new();
+            for key in mapped {
+                if set.contains(&key) {
+                    error!("Key already found in set: {:?}", key);
+                } else {
+                    set.insert(key);
+                }
+            }
+            panic!("Keys in SpriteMap are not unique");
+        }
+        map
     }
 
     pub fn build_sprite_db(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -168,7 +227,7 @@ pub mod sprite_db {
 }
 
 pub mod sounds {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, path::PathBuf};
 
     use anyhow::Context;
     use bevy::{audio::Volume, ecs::system::SystemParam, prelude::*};
@@ -380,6 +439,30 @@ pub mod sounds {
                 )),
                 BackgroundMusicPlayer,
             ));
+        }
+
+        pub(crate) fn get_all_sound_paths(&self) -> Vec<PathBuf> {
+            let mut sounds = Vec::new();
+
+            for (_, source) in &self.combat_sounds {
+                if let Some(path) = source.path() {
+                    sounds.push(path.path().to_path_buf());
+                }
+            }
+
+            for (_, source) in &self.ui_sounds {
+                if let Some(path) = source.path() {
+                    sounds.push(path.path().to_path_buf());
+                }
+            }
+
+            for (_, source) in &self.music {
+                if let Some(path) = source.path() {
+                    sounds.push(path.path().to_path_buf());
+                }
+            }
+
+            sounds
         }
     }
 
@@ -657,5 +740,71 @@ pub mod sound_resolvers {
                 }
             };
         }
+    }
+}
+
+/// I keep a fair bit of assets in the assets directory,
+/// but not all of them are actually used for the game. This
+/// hardcodes a list of "used" assets that will be packaged into the
+/// assets directory for a published build of the game.
+pub mod active_assets {
+    use std::{path::PathBuf, str::FromStr};
+
+    use anyhow::Context;
+    use bevy::prelude::*;
+
+    use crate::assets::{
+        BATTLE_TACTICS_TILESHEET, CURSOR_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH,
+        setup_fonts,
+        sounds::{SoundManager, setup_sounds},
+        sprite_db::build_sprite_map,
+    };
+
+    pub const MISC_USED_ASSET_PATHS: &[&'static str] = &[
+        CURSOR_PATH,
+        OVERLAY_PATH,
+        BATTLE_TACTICS_TILESHEET,
+        GRADIENT_PATH,
+    ];
+
+    pub fn get_used_asset_paths() -> anyhow::Result<Vec<PathBuf>> {
+        let mut app = App::new();
+
+        // TODO: It's a little jank that I need to run a bevy app to
+        // get all of the "used" assets, but it's also helpful that I
+        // don't need to change any of the existing loading functions.
+        //
+        // Let's think about restructuring these loaders to not need
+        // to pull in an AssetServer to specify the paths they actively
+        // depend on.
+        app.add_systems(Startup, (setup_fonts, setup_sounds));
+        app.add_plugins(DefaultPlugins);
+        app.world_mut().run_schedule(Startup);
+
+        let w = app.world();
+
+        let font_resource = w
+            .get_resource::<FontResource>()
+            .context("We just setup the FontResource, and we need it to know what fonts exist")?;
+        let sound_manager = w
+            .get_resource::<SoundManager>()
+            .context("We just setup the SoundManager, and we need it to know what sounds exist")?;
+
+        let mut used = Vec::new();
+
+        used.extend(sound_manager.get_all_sound_paths());
+        used.extend(font_resource.get_all_paths());
+
+        for path in MISC_USED_ASSET_PATHS {
+            used.push(
+                PathBuf::from_str(path).context("Creating pathbuf from misc_used_asset_paths")?,
+            );
+        }
+
+        for (_, sprite_path) in build_sprite_map() {
+            used.push(PathBuf::from(sprite_path));
+        }
+
+        Ok(used)
     }
 }

@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use bevy_common_assets::json::JsonAssetPlugin;
+use bevy_ecs_tilemap::prelude::*;
 
 use crate::{
     GameState,
@@ -17,8 +18,7 @@ use crate::{
         update_facing_direction_on_movement,
     },
     assets::{
-        BATTLE_TACTICS_TILESHEET, CURSOR_PATH, EXAMPLE_MAP_2_PATH, FontResource, GRADIENT_PATH,
-        OVERLAY_PATH,
+        BATTLE_TACTICS_TILESHEET, CURSOR_PATH, FontResource, GRADIENT_PATH, OVERLAY_PATH,
         sound_resolvers::{resolve_skill_audio_events, resolve_voice_audio_events},
         sounds::AudioEventMessage,
         sprite_db::{SpriteDB, build_sprite_db},
@@ -44,7 +44,6 @@ use crate::{
         },
         prepare_for_phase, start_phase,
     },
-    bevy_ecs_tilemap_example,
     camera::change_zoom,
     combat::{
         CombatStageComplete, DamageText, ImpactEvent, UnitHealthChangedEvent,
@@ -172,12 +171,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<StartOfPhaseEffectsMessage>()
         .add_message::<UnitHealthChangedEvent>()
         .add_message::<AudioEventMessage>()
-        // .add_plugins(TiledPlugin::default())
-        // .add_plugins(TiledDebugPluginGroup)
-        .add_plugins((
-            TilemapPlugin,
-            bevy_ecs_tilemap_example::tiled::TiledMapPlugin,
-        ))
+        .add_plugins((TilemapPlugin,))
         .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
         .add_systems(
             OnEnter(GameState::Battle),
@@ -631,8 +625,6 @@ pub fn load_battle_asset_resources(
 
     startup_load_tinytactics_assets(&mut commands, &asset_server, &mut texture_atlas_layouts);
 }
-
-use bevy_ecs_tilemap::prelude::*;
 
 pub fn spawn_background_gradient(mut commands: Commands, asset_server: Res<AssetServer>) {
     let background_image = asset_server.load(GRADIENT_PATH);
