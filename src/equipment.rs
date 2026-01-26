@@ -9,7 +9,7 @@ use crate::{
         animation_db::{AnimatedSpriteId, AnimationDB},
     },
     assets::sprite_db::{SpriteDB, SpriteId},
-    unit::{ElementalType, Unit},
+    unit::Unit,
 };
 
 #[derive(Debug)]
@@ -57,8 +57,6 @@ pub struct ArmorItem {
     item_name: String,
     /// The slot that this item can be equipped on
     slot: ArmorEquippableSlot,
-    /// Any stat modifiers on this item
-    stat_modifiers: Vec<StatModifier>,
     item_id: ItemId,
     /// Should the SpriteDB maintain this reference?
     sprite_id: SpriteId,
@@ -72,25 +70,6 @@ pub struct ArmorItem {
 #[derive(Component)]
 pub struct UnitEquipment {
     pub slots: HashMap<ArmorEquippableSlot, Entity>,
-}
-
-/// Making stats impl reflection gives us a way to dynamically update
-/// them.
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
-pub enum StatType {
-    Strength,
-    MaxHealth,
-    MagicPower,
-    Defense,
-    Resistance,
-    ElementalAffinity(ElementalType),
-}
-
-/// Gives us the ability to directly modify stats
-#[derive(Debug, Clone)]
-pub struct StatModifier {
-    stat: StatType,
-    value: i32,
 }
 
 #[derive(Debug)]

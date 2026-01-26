@@ -10,6 +10,10 @@ use crate::assets::sounds::ImpactInteractionRole;
 use crate::gameplay_effects::ActiveEffects;
 use crate::gameplay_effects::Effect;
 use crate::gameplay_effects::EffectMetadata;
+use crate::unit::StatType;
+use crate::unit::StatValue;
+use crate::unit::UnitBaseStats;
+use crate::unit::UnitDerivedStats;
 use crate::{
     animation::{
         AnimToPlay, AnimationId, AnimationMarker, AnimationMarkerMessage, PlayingAnimation,
@@ -25,7 +29,7 @@ use crate::{
     },
     grid::{GridPosition, init_grid_to_world_transform},
     projectile::{ProjectileArrived, spawn_arrow},
-    unit::{Stats, TINY_TACTICS_ANCHOR, Unit, UnitAction, UnitActionCompletedMessage},
+    unit::{TINY_TACTICS_ANCHOR, Unit, UnitAction, UnitActionCompletedMessage},
 };
 
 #[derive(Component)]
@@ -136,53 +140,52 @@ pub struct AttackIntent {
     pub skill: SkillId,
 }
 
-// TODO: I kind of think modifiers need to come with a proportion
-pub fn select_stat(modifier: skills::AttackModifier, stats: &Stats) -> u32 {
-    match modifier {
-        skills::AttackModifier::PhysicalAttack => stats.strength,
-        skills::AttackModifier::PhysicalResistance => stats.defense,
-        skills::AttackModifier::FireAttack => {
-            stats.magic_power
-                + stats
-                    .elemental_affinities
-                    .get(&crate::unit::ElementalType::Fire)
-                    .cloned()
-                    .unwrap_or_default()
-        }
-        skills::AttackModifier::FireResistance => {
-            stats.defense
-                + stats
-                    .elemental_affinities
-                    .get(&crate::unit::ElementalType::Fire)
-                    .cloned()
-                    .unwrap_or_default()
-        }
-        skills::AttackModifier::None => 0,
-    }
-}
-
 /// Assumes everything is gonna hit for now
 fn calculate_damage(
-    attacker: Option<&Unit>,
-    defender: &Unit,
+    attacker: Option<&UnitDerivedStats>,
+    defender: &UnitDerivedStats,
     skill_actions: &Vec<SkillAction>,
 ) -> i32 {
     let (mut damage, mut healing) = (0, 0);
     for action in skill_actions {
         if let SkillActionType::DamagingSkill { scaled_damage } = &action.action_type {
             let bonus_attack = attacker
-                .map(|t| select_stat(scaled_damage.offensive_modifier, &t.stats))
-                .unwrap_or_default();
-            let defense = select_stat(scaled_damage.defensive_modifier, &defender.stats);
+                .map(|t| {
+                    scaled_damage
+                        .offensive_modifier
+                        .as_ref()
+                        .map(|modifier| t.stats.stat(modifier.stat))
+                })
+                .flatten()
+                .unwrap_or_default()
+                .0 as u32;
+            let defense = scaled_damage
+                .defensive_modifier
+                .as_ref()
+                .map(|ref t| defender.stats.stat(t.stat))
+                .unwrap_or_default()
+                .0 as u32;
             damage += scaled_damage.power + bonus_attack - defense;
         }
     }
     for action in skill_actions {
         if let SkillActionType::HealingSkill { scaled_damage } = &action.action_type {
             let bonus_attack = attacker
-                .map(|t| select_stat(scaled_damage.offensive_modifier, &t.stats))
-                .unwrap_or_default();
-            let defense = select_stat(scaled_damage.defensive_modifier, &defender.stats);
+                .map(|t| {
+                    scaled_damage
+                        .offensive_modifier
+                        .as_ref()
+                        .map(|modifier| t.stats.stat(modifier.stat))
+                })
+                .flatten()
+                .unwrap_or_default()
+                .0 as u32;
+            let defense = scaled_damage
+                .defensive_modifier
+                .as_ref()
+                .map(|ref t| defender.stats.stat(t.stat))
+                .unwrap_or_default()
+                .0 as u32;
             healing += scaled_damage.power + bonus_attack - defense;
         }
     }
@@ -754,15 +757,77 @@ pub fn spawn_damage_text(
     }
 }
 
+#[derive(Debug, Message)]
+pub struct UnitStatChangeRequest {
+    entity: Entity,
+    stat: StatType,
+    stat_change: StatValue,
+}
+
+#[derive(Component)]
+pub struct StatsDirty;
+
+pub fn handle_stat_changes(
+    mut reader: MessageReader<UnitStatChangeRequest>,
+    mut query: Query<(&mut UnitBaseStats, &mut UnitDerivedStats)>,
+    mut health_changed_writer: MessageWriter<UnitHealthChangedEvent>,
+) {
+    for message in reader.read() {
+        let Some((mut base_stats, mut derived_stats)) = query.get_mut(message.entity).ok() else {
+            error!(
+                "No stats found for Unit. Could not process request: {:?}",
+                message
+            );
+            continue;
+        };
+
+        let current = base_stats.stats.stat(message.stat);
+        let next = StatValue(current.0 + message.stat_change.0);
+        info!(
+            "Unit {:?} {:?} {:?} -> {:?}",
+            message.entity, message.stat, current, next
+        );
+
+        // TODO: Special handling for this could be encoded for other types
+        // that are capped by another stat?
+        let next = if message.stat == StatType::Health {
+            StatValue(f32::max(
+                f32::min(next.0, derived_stats.stats.stat(StatType::MaxHealth).0),
+                0.,
+            ))
+        } else {
+            StatValue(f32::max(0., next.0))
+        };
+
+        if message.stat == StatType::Health {
+            let difference = next.0 - current.0;
+            health_changed_writer.write(UnitHealthChangedEvent {
+                unit: message.entity,
+                health_changed: difference.round() as i32,
+            });
+        }
+
+        // TODO: Recalculate UnitDerivedStats using any ActiveEffects once those exist, or maybe
+        // the other thing we could do is just insert a Component here?
+        base_stats.stats.with_stat(message.stat, next);
+        derived_stats.stats.with_stat(message.stat, next);
+    }
+}
+
 // TODO: Should Attacker be Optional here?
+//
+// TODO: Stats how to handle Health changes here? Should that be an update to
+// UnitBaseStats? Or just a direct update to UnitDerivedStats?
+//
+// How would you "re-derive" stats? You need "permanent" mutations to apply to base stats I think...
 pub fn impact_event_handler(
     mut impact_events: MessageReader<ImpactEvent>,
     mut unit_query: Query<(
-        &mut Unit,
+        &UnitDerivedStats,
         Option<&mut UnitAnimationPlayer>,
         &mut ActiveEffects,
     )>,
-    mut message_writer: MessageWriter<UnitHealthChangedEvent>,
+    mut stat_change_request: MessageWriter<UnitStatChangeRequest>,
     mut audio_writer: MessageWriter<AudioEventMessage>,
 ) {
     for impact in impact_events.read() {
@@ -771,20 +836,20 @@ pub fn impact_event_handler(
             .map(|t| unit_query.get(t).ok().map(|(attacker, _, _)| attacker))
             .flatten();
 
-        let Some((defender, _, _)) = unit_query.get(impact.defender).ok() else {
+        let Some((defender_derived, _, _)) = unit_query.get(impact.defender).ok() else {
             continue;
         };
 
-        let damage = calculate_damage(attacker, defender, &impact.skill_actions);
+        let damage = calculate_damage(attacker, defender_derived, &impact.skill_actions);
 
-        if let Ok((mut defender, mut animation_player, _)) = unit_query.get_mut(impact.defender) {
+        if let Ok((defender_derived_stats, mut animation_player, _)) =
+            unit_query.get_mut(impact.defender)
+        {
             if damage < 0 {
-                let old_health = defender.stats.health;
-                defender.stats.health = defender.stats.health.saturating_sub(damage.unsigned_abs());
-                let health_changed = old_health - defender.stats.health;
-                message_writer.write(UnitHealthChangedEvent {
-                    unit: impact.defender,
-                    health_changed: -1 * (health_changed as i32),
+                stat_change_request.write(UnitStatChangeRequest {
+                    entity: impact.defender,
+                    stat: StatType::Health,
+                    stat_change: StatValue(damage as f32),
                 });
 
                 if let Some(animation_player) = animation_player.as_mut() {
@@ -804,34 +869,26 @@ pub fn impact_event_handler(
             }
 
             if damage > 0 {
-                let new_health = u32::min(
-                    defender.stats.max_health,
-                    defender.stats.health + damage as u32,
-                );
+                stat_change_request.write(UnitStatChangeRequest {
+                    entity: impact.defender,
+                    stat: StatType::Health,
+                    stat_change: StatValue(damage as f32),
+                });
 
-                let health_changed = new_health - defender.stats.health;
-                defender.stats.health = new_health;
-                if health_changed > 0 {
-                    message_writer.write(UnitHealthChangedEvent {
-                        unit: impact.defender,
-                        health_changed: health_changed as i32,
-                    });
-
-                    if let Some(animation_player) = animation_player.as_mut() {
-                        animation_player.play(AnimToPlay {
-                            id: UnitAnimationKind::TakeDamage.into(),
-                            frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
-                        });
-                    }
-
-                    audio_writer.write(AudioEventMessage {
-                        source: impact.attack_execution,
-                        cue: AudioCue::Healed,
-                        audio_context: AudioContext {
-                            skill_id: Some(impact.skill_id),
-                        },
+                if let Some(animation_player) = animation_player.as_mut() {
+                    animation_player.play(AnimToPlay {
+                        id: UnitAnimationKind::TakeDamage.into(),
+                        frame_duration: HURT_BY_ATTACK_FRAME_DURATION,
                     });
                 }
+
+                audio_writer.write(AudioEventMessage {
+                    source: impact.attack_execution,
+                    cue: AudioCue::Healed,
+                    audio_context: AudioContext {
+                        skill_id: Some(impact.skill_id),
+                    },
+                });
             }
         }
 
@@ -900,6 +957,7 @@ pub mod skills {
         },
         combat::CombatStageId,
         gameplay_effects::{EffectData, StatusTag},
+        unit::StatType,
     };
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -910,24 +968,19 @@ pub mod skills {
     )]
     pub struct SkillId(pub u32);
 
+    #[derive(Clone, Debug)]
+    pub struct AttackModifier {
+        pub(crate) stat: StatType,
+    }
+
     #[derive(Debug, Clone)]
     pub struct DamagingSkill {
         /// The base power of this portion of the skill
         pub power: u32,
         /// The modifer that the offender uses for this skill
-        pub offensive_modifier: AttackModifier,
+        pub offensive_modifier: Option<AttackModifier>,
         /// The modifier that the defender uses against this skill
-        pub defensive_modifier: AttackModifier,
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    pub enum AttackModifier {
-        PhysicalAttack,
-        PhysicalResistance,
-        FireAttack,
-        FireResistance,
-        /// Omg we found Pierce and Flat!
-        None,
+        pub defensive_modifier: Option<AttackModifier>,
     }
 
     /// TODO: How do I represent changes in potency of damage / hit
@@ -1256,8 +1309,12 @@ pub mod skills {
                         action_type: SkillActionType::DamagingSkill {
                             scaled_damage: DamagingSkill {
                                 power: 3,
-                                offensive_modifier: AttackModifier::PhysicalAttack,
-                                defensive_modifier: AttackModifier::PhysicalResistance,
+                                offensive_modifier: Some(AttackModifier {
+                                    stat: StatType::Strength,
+                                }),
+                                defensive_modifier: Some(AttackModifier {
+                                    stat: StatType::Defense,
+                                }),
                             },
                         },
                     }]),
@@ -1333,8 +1390,12 @@ pub mod skills {
                         action_type: SkillActionType::DamagingSkill {
                             scaled_damage: DamagingSkill {
                                 power: 2,
-                                offensive_modifier: AttackModifier::FireAttack,
-                                defensive_modifier: AttackModifier::FireResistance,
+                                offensive_modifier: Some(AttackModifier {
+                                    stat: StatType::Magic,
+                                }),
+                                defensive_modifier: Some(AttackModifier {
+                                    stat: StatType::Resistance,
+                                }),
                             },
                         },
                     }]),
@@ -1417,8 +1478,12 @@ pub mod skills {
                             action_type: SkillActionType::DamagingSkill {
                                 scaled_damage: DamagingSkill {
                                     power: 3,
-                                    offensive_modifier: AttackModifier::PhysicalAttack,
-                                    defensive_modifier: AttackModifier::PhysicalResistance,
+                                    offensive_modifier: Some(AttackModifier {
+                                        stat: StatType::Strength,
+                                    }),
+                                    defensive_modifier: Some(AttackModifier {
+                                        stat: StatType::Defense,
+                                    }),
                                 },
                             },
                         },
@@ -1427,8 +1492,12 @@ pub mod skills {
                             action_type: SkillActionType::DamagingSkill {
                                 scaled_damage: DamagingSkill {
                                     power: 5,
-                                    offensive_modifier: AttackModifier::PhysicalAttack,
-                                    defensive_modifier: AttackModifier::PhysicalResistance,
+                                    offensive_modifier: Some(AttackModifier {
+                                        stat: StatType::Strength,
+                                    }),
+                                    defensive_modifier: Some(AttackModifier {
+                                        stat: StatType::Defense,
+                                    }),
                                 },
                             },
                         },
@@ -1486,8 +1555,12 @@ pub mod skills {
                         action_type: SkillActionType::DamagingSkill {
                             scaled_damage: DamagingSkill {
                                 power: 3,
-                                offensive_modifier: AttackModifier::PhysicalAttack,
-                                defensive_modifier: AttackModifier::PhysicalResistance,
+                                offensive_modifier: Some(AttackModifier {
+                                    stat: StatType::Strength,
+                                }),
+                                defensive_modifier: Some(AttackModifier {
+                                    stat: StatType::Defense,
+                                }),
                             },
                         },
                     }]),
@@ -1522,8 +1595,12 @@ pub mod skills {
                             action_type: SkillActionType::DamagingSkill {
                                 scaled_damage: DamagingSkill {
                                     power: 1,
-                                    offensive_modifier: AttackModifier::PhysicalAttack,
-                                    defensive_modifier: AttackModifier::PhysicalResistance,
+                                    offensive_modifier: Some(AttackModifier {
+                                        stat: StatType::Strength,
+                                    }),
+                                    defensive_modifier: Some(AttackModifier {
+                                        stat: StatType::Defense,
+                                    }),
                                 },
                             },
                         },
@@ -1574,8 +1651,12 @@ pub mod skills {
                             action_type: SkillActionType::DamagingSkill {
                                 scaled_damage: DamagingSkill {
                                     power: 1,
-                                    offensive_modifier: AttackModifier::PhysicalAttack,
-                                    defensive_modifier: AttackModifier::PhysicalResistance,
+                                    offensive_modifier: Some(AttackModifier {
+                                        stat: StatType::Strength,
+                                    }),
+                                    defensive_modifier: Some(AttackModifier {
+                                        stat: StatType::Defense,
+                                    }),
                                 },
                             },
                         },
@@ -1623,8 +1704,8 @@ pub mod skills {
                         action_type: SkillActionType::DamagingSkill {
                             scaled_damage: DamagingSkill {
                                 power: 2,
-                                offensive_modifier: AttackModifier::None,
-                                defensive_modifier: AttackModifier::None,
+                                offensive_modifier: None,
+                                defensive_modifier: None,
                             },
                         },
                     }]),
@@ -1671,8 +1752,8 @@ pub mod skills {
                         action_type: SkillActionType::HealingSkill {
                             scaled_damage: DamagingSkill {
                                 power: 5,
-                                offensive_modifier: AttackModifier::None,
-                                defensive_modifier: AttackModifier::None,
+                                offensive_modifier: None,
+                                defensive_modifier: None,
                             },
                         },
                     }]),

@@ -20,7 +20,7 @@ use crate::{
         ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_MENU_BACKGROUND, UI_TEXT_COLOR},
     },
     player::{self, Player, PlayerInputAction},
-    unit::Unit,
+    unit::{StatType, Unit, UnitDerivedStats},
 };
 
 /// A marker component for the "Standard Battle UI", or the first menu of the Player's battle menu
@@ -573,14 +573,18 @@ pub struct ControlledUnitUiEntities {
 pub fn update_controlled_ui_info(
     player_unit_ui: Query<(&player::Player, &ControlledUnitUiEntities)>,
     unit_query: Query<
-        (&Unit, &UnitPhaseResources, &Player),
-        Or<(Changed<Unit>, Changed<UnitPhaseResources>)>,
+        (&Unit, &UnitPhaseResources, &Player, &UnitDerivedStats),
+        Or<(
+            Changed<Unit>,
+            Changed<UnitDerivedStats>,
+            Changed<UnitPhaseResources>,
+        )>,
     >,
     // So would this block any other queries updating text in the Game?
     mut text: Query<&mut Text>,
 ) {
     for (player, controlled_ui) in player_unit_ui {
-        for (unit, resources, unit_player) in unit_query {
+        for (unit, resources, unit_player, unit_stats) in unit_query {
             if player != unit_player {
                 continue;
             }
@@ -590,7 +594,11 @@ pub fn update_controlled_ui_info(
             }
 
             if let Some(mut text_item) = text.get_mut(controlled_ui.health_text).ok() {
-                text_item.0 = format!("HP: {} / {}", unit.stats.health, unit.stats.max_health);
+                text_item.0 = format!(
+                    "HP: {} / {}",
+                    unit_stats.stats.stat(StatType::Health).0 as u32,
+                    unit_stats.stats.stat(StatType::MaxHealth).0 as u32,
+                );
             }
 
             if let Some(mut text_item) = text.get_mut(controlled_ui.move_text).ok() {
@@ -653,30 +661,6 @@ pub mod player_info_ui_systems {
                     text_item.0 = unit.name.clone();
                 }
             }
-        }
-    }
-
-    /// Kind of a silly trait I made when I thought it would be better to make these systems
-    /// generic instead of all in one system.
-    ///
-    /// Leaving them around for now in case I change my mind.
-    pub trait TextFromUnit: Component {
-        fn derive_text(unit: &Unit) -> String;
-
-        fn update(unit: &Unit, to_update: &mut Text) {
-            to_update.0 = Self::derive_text(unit);
-        }
-    }
-
-    impl TextFromUnit for PlayerUiHealthText {
-        fn derive_text(unit: &Unit) -> String {
-            format!("HP: {}/{}", unit.stats.health, unit.stats.max_health)
-        }
-    }
-
-    impl TextFromUnit for PlayerUiNameText {
-        fn derive_text(unit: &Unit) -> String {
-            unit.name.clone()
         }
     }
 }

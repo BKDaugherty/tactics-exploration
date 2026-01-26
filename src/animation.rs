@@ -18,7 +18,7 @@ use crate::{
     assets::BATTLE_TACTICS_TILESHEET,
     combat::{CombatAnimationId, UnitIsAttacking},
     grid::{GridManagerResource, GridMovement, GridVec},
-    unit::Unit,
+    unit::{Unit, UnitDerivedStats},
 };
 
 #[derive(Component, Debug, Clone)]
@@ -262,12 +262,16 @@ pub mod combat {
 pub fn idle_animation_system(
     res: Res<AnimationDB>,
     mut query: Query<
-        (&Unit, &mut UnitAnimationPlayer, Option<&GridMovement>),
+        (
+            &UnitDerivedStats,
+            &mut UnitAnimationPlayer,
+            Option<&GridMovement>,
+        ),
         Without<UnitIsAttacking>,
     >,
 ) {
-    for (unit, mut anim_player, moving) in &mut query {
-        let anim_kind_to_play = match (unit.downed(), unit.critical_health(), moving) {
+    for (unit_stats, mut anim_player, moving) in &mut query {
+        let anim_kind_to_play = match (unit_stats.downed(), unit_stats.critical_health(), moving) {
             (true, _, _) => UnitAnimationKind::IdleDead,
             (false, true, None) => UnitAnimationKind::IdleHurt,
             (false, true, Some(..)) => UnitAnimationKind::IdleWalk,

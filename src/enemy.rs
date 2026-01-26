@@ -18,7 +18,7 @@ use crate::{
     },
     unit::{
         CombatActionMarker, DIRECTION_VECS, MovementRequest, Unit, UnitActionCompletedMessage,
-        UnitExecuteAction, UnitExecuteActionMessage, build_attack_space_options,
+        UnitDerivedStats, UnitExecuteAction, UnitExecuteActionMessage, build_attack_space_options,
         get_valid_moves_for_unit,
     },
 };
@@ -42,18 +42,18 @@ pub fn begin_enemy_phase(
     mut commands: Commands,
     mut message_reader: MessageReader<PhaseMessage>,
     mut conductor: ResMut<EnemyTurnConductorResource>,
-    enemy_units: Query<(Entity, &Unit), With<Enemy>>,
+    enemy_units: Query<(Entity, &Unit, &UnitDerivedStats), With<Enemy>>,
 ) {
     for message in message_reader.read() {
         let PhaseMessageType::PhaseBegin(phase) = message.0;
         if phase == PlayerEnemyPhase::Enemy {
-            for (e, unit) in enemy_units.iter() {
+            for (e, unit, stats) in enemy_units.iter() {
                 // Clean up any potential stale references to Enemy Behaviors
                 commands
                     .entity(e)
                     .remove::<(ActiveEnemy, PlannedEnemyAction, EnemyActionInProgress)>();
 
-                if unit.downed() {
+                if stats.downed() {
                     continue;
                 }
 
@@ -98,14 +98,14 @@ pub struct PlannedAction {
 fn find_targets_by_distance(
     enemy_unit: &Unit,
     enemy_pos: GridPosition,
-    unit_query_with_position: Query<(Entity, &Unit, &GridPosition)>,
+    unit_query_with_position: Query<(Entity, &Unit, &UnitDerivedStats, &GridPosition)>,
 ) -> Vec<(Entity, Unit, GridPosition, u32)> {
     let mut possible_targets = Vec::new();
     // Some of this could probably be re-used for other behaviors
-    for (e, unit, unit_pos) in unit_query_with_position {
+    for (e, unit, stats, unit_pos) in unit_query_with_position {
         // We don't want trappers just randomly attacking walls (or maybe we do?)
         // so we use "against_me" here.
-        if !enemy_unit.team.against_me(&unit.team) || unit.downed() {
+        if !enemy_unit.team.against_me(&unit.team) || stats.downed() {
             continue;
         }
 
@@ -122,16 +122,16 @@ fn target_enemy_in_range(
     grid_manager: &GridManager,
     enemy_unit: &Unit,
     enemy_pos: GridPosition,
-    unit_query_with_position: Query<(Entity, &Unit, &GridPosition)>,
+    unit_query_with_position: Query<(Entity, &Unit, &UnitDerivedStats, &GridPosition)>,
 ) -> Option<(Entity, GridPosition)> {
     let mut target = None;
 
     let attack_options =
         build_attack_space_options(grid_manager, &Targeting::TargetInRange(1), &enemy_pos);
 
-    for (e, unit, unit_pos) in unit_query_with_position {
+    for (e, unit, stats, unit_pos) in unit_query_with_position {
         if attack_options.contains(&unit_pos)
-            && !unit.downed()
+            && !stats.downed()
             && enemy_unit.team.against_me(&unit.team)
         {
             target = Some((e, *unit_pos));
@@ -156,9 +156,9 @@ pub fn plan_enemy_action(
         (With<ActiveEnemy>, Without<PlannedEnemyAction>),
     >,
     // Used for obstruction checks among other things
-    unit_query: Query<(Entity, &Unit)>,
+    unit_query: Query<(Entity, &Unit, &UnitDerivedStats)>,
     // Used for finding a good target for an attack
-    unit_query_with_position: Query<(Entity, &Unit, &GridPosition)>,
+    unit_query_with_position: Query<(Entity, &Unit, &UnitDerivedStats, &GridPosition)>,
 ) {
     // There should only be at most one ActiveEnemy but :shrug:
     for (enemy, enemy_unit, resources, behavior, enemy_pos) in query {
