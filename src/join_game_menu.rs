@@ -1376,6 +1376,7 @@ fn handle_create_character_command(
     // This clone is a bit expensive just to pass, I could return just the key in return type and require
     // the caller to pull from the DB, but probably fine for now.
     pkv.set(key.pkv_key(), &UnitSave::from(unit_save.clone()))
+        .map_err(|e| anyhow::anyhow!("Failed to set PKV: {:?}", e))
         .context("Failed saving unit to PKV store")?;
 
     Ok(unit_save)
