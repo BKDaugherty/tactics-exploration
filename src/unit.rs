@@ -1394,11 +1394,15 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use crate::{
-        battle::{UnitCommand, UnitSelectionMessage, UnitUiCommandMessage},
+        assets::sounds::{SoundSettings, setup_sounds},
+        battle::{
+            UnitCommand, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
+        },
         battle_phase::{
             PhaseMessage, UnitPhaseResources, check_should_advance_phase, init_phase_system,
-            prepare_for_phase,
+            phase_ui::ShowBattleBannerMessage, prepare_for_phase,
         },
+        combat::skills::setup_skill_system,
         grid::{
             self, GridManager, GridManagerResource, GridMovement, GridPosition,
             sync_grid_positions_to_manager,
@@ -1413,7 +1417,14 @@ mod tests {
         },
     };
     use bevy::{
-        app::App, ecs::system::RunSystemOnce, time::Time, transform::components::Transform,
+        MinimalPlugins,
+        app::{App, Startup},
+        asset::AssetPlugin,
+        audio::AudioPlugin,
+        ecs::system::RunSystemOnce,
+        input::InputPlugin,
+        time::Time,
+        transform::components::Transform,
     };
     use leafwing_input_manager::{plugin::InputManagerPlugin, prelude::ActionState};
 
@@ -1428,6 +1439,8 @@ mod tests {
         app.add_message::<UnitUiCommandMessage>();
         app.add_message::<UnitExecuteActionMessage>();
         app.add_message::<UnitActionCompletedMessage>();
+        app.add_message::<ShowBattleBannerMessage>();
+        app.add_message::<UnitSelectionBackMessage>();
         app.add_message::<PhaseMessage>();
         app.insert_resource(GridManagerResource {
             grid_manager: GridManager::new(6, 6),
@@ -1436,7 +1449,17 @@ mod tests {
         app.insert_resource(PlayerGameStates {
             player_state: HashMap::from([(Player::PlayerId(1), PlayerState::default())]),
         });
-        app.add_plugins(InputManagerPlugin::<PlayerInputAction>::default());
+        app.add_plugins((
+            InputPlugin,
+            InputManagerPlugin::<PlayerInputAction>::default(),
+            MinimalPlugins,
+            AssetPlugin::default(),
+            AudioPlugin::default(),
+        ));
+        app.insert_resource(SoundSettings::default());
+        app.add_systems(Startup, (setup_sounds, setup_skill_system));
+        app.update();
+
         app
     }
 
