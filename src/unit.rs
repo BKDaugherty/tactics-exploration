@@ -20,9 +20,7 @@ use crate::combat::skills::{SkillDBResource, Targeting, UnitSkills};
 use crate::combat::{AttackIntent, StatsDirty};
 use crate::enemy::behaviors::EnemyAiBehavior;
 use crate::gameplay_effects::{ActiveEffects, Operator};
-use crate::grid::{
-    GridManager, GridManagerResource, GridMovement, GridPosition, GridVec, manhattan_distance,
-};
+use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, manhattan_distance};
 use crate::grid_cursor::LockedOn;
 use crate::map_generation::TtIndex;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
@@ -1415,10 +1413,7 @@ mod tests {
         },
     };
     use bevy::{
-        app::{App, Update},
-        ecs::{schedule::IntoScheduleConfigs, system::RunSystemOnce},
-        time::Time,
-        transform::components::Transform,
+        app::App, ecs::system::RunSystemOnce, time::Time, transform::components::Transform,
     };
     use leafwing_input_manager::{plugin::InputManagerPlugin, prelude::ActionState};
 

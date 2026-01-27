@@ -1,54 +1,11 @@
+use crate::unit::StatType;
 use bevy::prelude::*;
-
-use std::collections::HashSet;
 use std::fmt::Debug;
-
-use crate::{combat::skills::AttackModifier, unit::StatType};
-
-/// Looking at GAS from Unreal as a motivator for this
-
-// Choices
-//
-// Should I have different DamageTypes for different elements?
-// Yes.
-// - DamageType - Neutral, Fire, Shadow, Ice, Thunder
-//
-// Do I want skills to be able to choose what stats influence them?
-// For both the defender and the attacker?
-//
-// Seems pretty fun I think. Let's do that with some scale?
-
-// So an attack can then include...
-// Vec<(DamageType, DamageScale)>
-
-#[derive(Clone, Debug)]
-pub struct ModifiyingProportion {
-    modifier: AttackModifier,
-    proportion: f32,
-}
-
-#[derive(Clone, Debug)]
-/// Probably needs to replace `DamagingSkill`
-pub struct Damage {
-    pub base_damage: f32,
-    pub damage_type: DamageType,
-    pub offensive_scalar: Vec<ModifiyingProportion>,
-    pub defensive_scalar: Vec<ModifiyingProportion>,
-    pub combat_tags: HashSet<CombatTag>,
-}
-
-#[derive(Clone, Debug)]
-pub struct HitChance {
-    amount: f32,
-    offensive_modifier: ModifiyingProportion,
-    defensive_modifier: ModifiyingProportion,
-}
 
 #[derive(Clone, Debug)]
 pub enum EffectType {
     StatBuff(StatModification),
     StatusInfliction(StatusTag),
-    AffectsDamage(DamageEffect),
 }
 
 #[derive(Clone, Debug)]
@@ -60,6 +17,7 @@ pub enum AppliesTo<T: Debug + Clone> {
 }
 
 impl<T: PartialEq + Eq + Debug + Clone> AppliesTo<T> {
+    #[allow(dead_code)]
     fn check_applies(&self, t: &T) -> bool {
         match &self {
             AppliesTo::Specific(check) => check == t,
@@ -68,39 +26,6 @@ impl<T: PartialEq + Eq + Debug + Clone> AppliesTo<T> {
             AppliesTo::Always => true,
         }
     }
-}
-
-// Increase Fire Damage by 20%
-// Conditional: CombatTag::Damage
-// AppliesTo: AppliesTo::Specific(DamageType::Fire)
-// value: 1.2
-// operator: Mul
-
-#[derive(Debug, Clone)]
-pub struct DamageEffect {
-    applies_to: AppliesTo<DamageType>,
-    value: f32,
-    operator: Operator,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DamageType {
-    Neutral,
-    Fire,
-    Ice,
-    Thunder,
-    Holy,
-    Shadow,
-}
-
-/// Maybe should be a bitset, but for now let's just use a HashSet
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub enum CombatTag {
-    Damage,
-    Healing,
-    // Sort of types of damage
-    Melee,
-    Ranged,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -208,9 +133,6 @@ impl ActiveEffects {
                 if doesnt_already_have_status {
                     self.effects.push(effect);
                 }
-            }
-            EffectType::AffectsDamage(..) => {
-                error!("Affect Damage Effects aren't implemented, plz don't apply them")
             }
         }
     }

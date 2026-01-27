@@ -78,7 +78,7 @@ use crate::{
     player::{self, Player, RegisteredBattlePlayers},
     projectile::{ProjectileArrived, projectile_arrival_system, projectile_bezier_system},
     unit::{
-        CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, StatType, StatValue, Unit,
+        CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, StatType, StatValue,
         UnitActionCompletedMessage, UnitDerivedStats, UnitExecuteActionMessage, derive_stats,
         execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
@@ -536,7 +536,7 @@ pub fn handle_battle_resolution_ui_buttons(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     let button_entity = click.entity;
-    if let Some(menu_button_action) = menu_button.get(button_entity).ok() {
+    if let Ok(menu_button_action) = menu_button.get(button_entity) {
         click.propagate(false);
         match menu_button_action {
             BattleResolutionMenuAction::Quit => {
@@ -653,7 +653,7 @@ pub fn load_demo_battle_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     map_data: Res<MapResource>,
-    mut registered_players: ResMut<RegisteredBattlePlayers>,
+    registered_players: Res<RegisteredBattlePlayers>,
     tt_assets: Res<TinytacticsAssets>,
     anim_db: Res<AnimationDB>,
     sprite_db: Res<SpriteDB>,
@@ -716,7 +716,7 @@ pub fn load_demo_battle_scene(
         // TODO: Support equipment for a given player!
         let weapon_sheet = tt_assets.iron_axe_spritesheet.clone();
 
-        let unit_e = spawn_unit(
+        spawn_unit(
             &mut commands,
             player_unit_info.save_file_key.name.to_string(),
             &tt_assets,
@@ -730,8 +730,7 @@ pub fn load_demo_battle_scene(
             Direction::NE,
         );
 
-        let cursor_e =
-            grid_cursor::spawn_cursor(&mut commands, cursor_image.clone(), player, position);
+        grid_cursor::spawn_cursor(&mut commands, cursor_image.clone(), player, position);
 
         // registered_players.unit.insert(player, unit_e);
         // registered_players.cursor.insert(player, cursor_e);

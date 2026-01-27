@@ -130,7 +130,7 @@ fn target_enemy_in_range(
         build_attack_space_options(grid_manager, &Targeting::TargetInRange(1), &enemy_pos);
 
     for (e, unit, stats, unit_pos) in unit_query_with_position {
-        if attack_options.contains(&unit_pos)
+        if attack_options.contains(unit_pos)
             && !stats.downed()
             && enemy_unit.team.against_me(&unit.team)
         {
@@ -240,14 +240,14 @@ pub fn plan_enemy_action(
                         let mut choice = None;
                         let mut choices = Vec::new();
                         for (
-                            possible_target,
-                            possible_target_unit,
+                            _possible_target,
+                            _possible_target_unit,
                             possible_target_pos,
-                            dist_from_me,
+                            _dist_from_me,
                         ) in possible_targets
                         {
                             for (pos, valid_move) in &valid_moves {
-                                let resulting_dist = manhattan_distance(&pos, &possible_target_pos);
+                                let resulting_dist = manhattan_distance(pos, &possible_target_pos);
                                 if resulting_dist <= close_enough {
                                     let target = target_enemy_in_range(
                                         &grid_manager.grid_manager,
@@ -281,15 +281,13 @@ pub fn plan_enemy_action(
                                     skill: ATTACK_SKILL_ID,
                                 }),
                             });
-                        } else {
-                            if let Some((valid_move, _)) = choices
-                                .into_iter()
-                                .min_by(|(_, dist), (_, dist2)| dist.cmp(dist2))
-                            {
-                                action_queue.push_back(PlannedAction {
-                                    action: UnitExecuteAction::Move(valid_move.clone()),
-                                });
-                            }
+                        } else if let Some((valid_move, _)) = choices
+                            .into_iter()
+                            .min_by(|(_, dist), (_, dist2)| dist.cmp(dist2))
+                        {
+                            action_queue.push_back(PlannedAction {
+                                action: UnitExecuteAction::Move(valid_move.clone()),
+                            });
                         }
                     }
                 }
@@ -358,6 +356,7 @@ pub fn plan_enemy_action(
 
                 PlannedEnemyAction { action_queue }
             }
+            #[allow(unreachable_patterns)]
             otherwise => {
                 warn!(
                     "No Enemy AI programmed for {:?} yet! Defaulting to waiting",

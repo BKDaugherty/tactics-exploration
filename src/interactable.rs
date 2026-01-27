@@ -157,9 +157,7 @@ pub fn update_player_ui_available_options(
                         }
 
                         for child in children {
-                            if let Some((e, interaction_button)) =
-                                interaction_buttons.get(*child).ok()
-                            {
+                            if let Ok((e, interaction_button)) = interaction_buttons.get(*child) {
                                 commands.entity(e).despawn();
                                 let _ = grid.remove_button(&interaction_button.menu_position);
                             }
@@ -190,8 +188,7 @@ pub fn update_player_ui_available_options(
                         continue;
                     }
                     for child in children {
-                        if let Some((e, interaction_button)) = interaction_buttons.get(*child).ok()
-                        {
+                        if let Ok((e, interaction_button)) = interaction_buttons.get(*child) {
                             commands.entity(e).despawn();
                             let _ = grid.remove_button(&interaction_button.menu_position);
                         }

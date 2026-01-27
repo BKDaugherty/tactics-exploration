@@ -10,7 +10,6 @@ use crate::{
         animation_db::{
             AnimatedSpriteId, AnimationDB, AnimationKey, AnimationStartIndexKey,
             FollowerAnimationKey, RegisteredAnimationId,
-            registered_sprite_ids::FLAME_VFX_ANIMATED_SPRITE_ID,
         },
         combat::ATTACK_FRAME_DURATION,
         tinytactics::{Character, WeaponType},
@@ -18,7 +17,7 @@ use crate::{
     assets::BATTLE_TACTICS_TILESHEET,
     combat::{CombatAnimationId, UnitIsAttacking},
     grid::{GridManagerResource, GridMovement, GridVec},
-    unit::{Unit, UnitDerivedStats},
+    unit::UnitDerivedStats,
 };
 
 #[derive(Component, Debug, Clone)]
@@ -218,7 +217,7 @@ pub fn animation_tick_system(
 /// The set of systems and data associated with Combat Animations
 pub mod combat {
     use super::*;
-    use crate::combat::{AttackExecution, AttackIntent};
+    use crate::combat::AttackExecution;
 
     pub const ATTACK_FRAME_DURATION: f32 = 1.0 / 8.;
     pub const HURT_BY_ATTACK_FRAME_DURATION: f32 = ATTACK_FRAME_DURATION * 2.;

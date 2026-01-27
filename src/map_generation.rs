@@ -3,12 +3,9 @@
 //! should be linear, and should be composed
 //! of DEMO_DUNGEON rooms where the final room is a boss room.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
-use crate::{
-    animation::Direction, assets::BATTLE_TACTICS_TILESHEET, battle::BattleEntity,
-    grid::GridPosition,
-};
+use crate::{animation::Direction, battle::BattleEntity, grid::GridPosition};
 pub const DEMO_DUNGEON_ROOMS: u8 = 3;
 use rand::distr::{Alphanumeric, SampleString, Uniform};
 use rand::prelude::*;
@@ -147,7 +144,6 @@ pub struct TtIndex {
 }
 
 impl TtIndex {
-    const TT_ROWS: u32 = 13;
     const TT_COLS: u32 = 16;
 
     pub fn new(row: u32, col: u32) -> Self {

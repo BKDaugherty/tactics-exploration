@@ -1,21 +1,14 @@
-use std::collections::BTreeMap;
-
 use bevy::prelude::*;
 use bevy_ecs_tilemap::TilemapPlugin;
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use clap::Parser;
-use rand::prelude::*;
-use rand_pcg::Pcg64;
-use rand_seeder::{Seeder, SipHasher};
 use tactics_exploration::{
-    animation::Direction,
     assets::BATTLE_TACTICS_TILESHEET,
     camera::setup_camera,
-    grid::GridPosition,
     map_generation::{
-        BattleMapOptions, BridgeTileType, GrassTileType, LayerId, MapData, MapParams, MapResource,
-        TileType, WaterTileType, build_tilemap_from_map, setup_map_data_from_params,
+        BattleMapOptions, MapParams, MapResource, build_tilemap_from_map,
+        setup_map_data_from_params,
     },
 };
 

@@ -17,7 +17,7 @@ use crate::{
     grid_cursor::Cursor,
     menu::{
         menu_navigation::{ActiveMenu, GameMenuController, GameMenuGrid},
-        ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_MENU_BACKGROUND, UI_TEXT_COLOR},
+        ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_TEXT_COLOR},
     },
     player::{self, Player, PlayerInputAction},
     unit::{StatType, Unit, UnitDerivedStats},
@@ -138,8 +138,6 @@ fn build_stat_box_ui(commands: &mut Commands) -> StatBox {
 ///
 /// Includes the definition of the Battle Menus, PlayerUI, and the ObjectiveUI.
 pub mod battle_menu_ui_definition {
-    use std::collections::HashMap;
-
     use crate::{
         menu::{
             menu_navigation::GameMenuLatch,
@@ -482,7 +480,7 @@ pub mod battle_menu_ui_definition {
                     UnitViewerScreen {
                         name: unit_view_name_text,
                         info_container: view_map_info_container,
-                        stat_box: stat_box,
+                        stat_box,
                     },
                     GameMenuLatch::default(),
                     PlayerBattleMenu,
@@ -615,11 +613,11 @@ pub fn update_controlled_ui_info(
                 continue;
             }
 
-            if let Some(mut text_item) = text.get_mut(controlled_ui.name_text).ok() {
+            if let Ok(mut text_item) = text.get_mut(controlled_ui.name_text) {
                 text_item.0 = unit.name.clone();
             }
 
-            if let Some(mut text_item) = text.get_mut(controlled_ui.health_text).ok() {
+            if let Ok(mut text_item) = text.get_mut(controlled_ui.health_text) {
                 text_item.0 = format!(
                     "HP: {} / {}",
                     unit_stats.stats.stat(StatType::Health).0 as u32,
@@ -627,11 +625,11 @@ pub fn update_controlled_ui_info(
                 );
             }
 
-            if let Some(mut text_item) = text.get_mut(controlled_ui.move_text).ok() {
+            if let Ok(mut text_item) = text.get_mut(controlled_ui.move_text) {
                 text_item.0 = format!("Move: {}", resources.movement_points_left_in_phase);
             }
 
-            if let Some(mut text_item) = text.get_mut(controlled_ui.ap_text).ok() {
+            if let Ok(mut text_item) = text.get_mut(controlled_ui.ap_text) {
                 text_item.0 = format!("AP: {}", resources.action_points_left_in_phase);
             }
         }
@@ -667,13 +665,12 @@ pub mod player_info_ui_systems {
                 let Some((unit, _phase_resources, stats)) = grid_manager
                     .grid_manager
                     .get_by_position(grid_pos)
-                    .map(|t| t.iter().filter_map(|t| unit_query.get(*t).ok()).next())
-                    .flatten()
+                    .and_then(|t| t.iter().filter_map(|t| unit_query.get(*t).ok()).next())
                 else {
                     // Nothing for the viewer to see. Set the internal Viewer Vis to 0?
 
-                    if let Some(mut viewer_container_vis) =
-                        vis_mutator.get_mut(unit_viewer_screen.info_container).ok()
+                    if let Ok(mut viewer_container_vis) =
+                        vis_mutator.get_mut(unit_viewer_screen.info_container)
                     {
                         *viewer_container_vis = Visibility::Hidden
                     }
@@ -681,13 +678,13 @@ pub mod player_info_ui_systems {
                     continue;
                 };
 
-                if let Some(mut viewer_container_vis) =
-                    vis_mutator.get_mut(unit_viewer_screen.info_container).ok()
+                if let Ok(mut viewer_container_vis) =
+                    vis_mutator.get_mut(unit_viewer_screen.info_container)
                 {
                     *viewer_container_vis = Visibility::Inherited
                 }
 
-                if let Some(mut text_item) = text_query.get_mut(unit_viewer_screen.name).ok() {
+                if let Ok(mut text_item) = text_query.get_mut(unit_viewer_screen.name) {
                     text_item.0 = unit.name.clone();
                 }
 
@@ -716,7 +713,6 @@ pub mod player_battle_ui_systems {
 
     use crate::{
         assets::sounds::{SoundManagerParam, UiSound},
-        battle_menu::battle_menu_ui_definition::PlayerBattleMenu,
         combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills},
         grid::GridPosition,
         grid_cursor::LockedOn,
@@ -1170,13 +1166,13 @@ pub mod player_battle_ui_systems {
                         });
                     }
                 }
-            } else if input_actions.just_pressed(&PlayerInputAction::Deselect) {
-                if let Some(dynamic_menu) = nested {
-                    sounds.play_ui_sound(&mut commands, UiSound::Cancel);
-                    let parent = dynamic_menu.parent;
-                    clean_stale_menu(&mut commands, battle_menu_e, true);
-                    commands.entity(parent).insert(ActiveMenu {});
-                }
+            } else if input_actions.just_pressed(&PlayerInputAction::Deselect)
+                && let Some(dynamic_menu) = nested
+            {
+                sounds.play_ui_sound(&mut commands, UiSound::Cancel);
+                let parent = dynamic_menu.parent;
+                clean_stale_menu(&mut commands, battle_menu_e, true);
+                commands.entity(parent).insert(ActiveMenu {});
             }
         }
     }

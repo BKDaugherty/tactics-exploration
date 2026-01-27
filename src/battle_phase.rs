@@ -15,7 +15,7 @@ use crate::{
     gameplay_effects::{ActiveEffects, EffectDuration, StatusTag},
     grid::GridPosition,
     player::Player,
-    unit::{CombatActionMarker, StatType, Unit, UnitDerivedStats},
+    unit::{CombatActionMarker, StatType, UnitDerivedStats},
 };
 
 /// The Phase Manager keeps track of the current phase globally for the battle.
@@ -194,7 +194,7 @@ pub fn decrement_turn_count_effects_on_turn_start<T: PhaseSystem<PlayerEnemyPhas
                 // TODO: Do we need an event here?
                 active_effects.effects.retain(|t| {
                     if let EffectDuration::TurnCount(turn_count) = t.data.duration {
-                        return turn_count != 0;
+                        turn_count != 0
                     } else {
                         true
                     }
@@ -267,13 +267,11 @@ pub fn advance_after_start_of_phase_effects(
     query: Query<Entity, With<StartOfPhaseEffect>>,
     mut message_writer: MessageWriter<TurnStartMessage>,
 ) {
-    if phase_manager.phase_state == PhaseState::HandlingStartOfPhaseEffects {
-        if query.is_empty() {
-            phase_manager.phase_state = PhaseState::Running;
-            message_writer.write(TurnStartMessage {
-                phase: phase_manager.current_phase,
-            });
-        }
+    if phase_manager.phase_state == PhaseState::HandlingStartOfPhaseEffects && query.is_empty() {
+        phase_manager.phase_state = PhaseState::Running;
+        message_writer.write(TurnStartMessage {
+            phase: phase_manager.current_phase,
+        });
     }
 }
 
