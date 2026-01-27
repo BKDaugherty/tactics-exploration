@@ -159,9 +159,9 @@ pub enum Operator {
 
 #[derive(Clone, Debug)]
 pub struct StatModification {
-    attribute_type: StatType,
-    operator: Operator,
-    value: f32,
+    pub attribute_type: StatType,
+    pub operator: Operator,
+    pub value: f32,
 }
 
 #[derive(Clone, Debug, Component)]
@@ -186,7 +186,7 @@ impl ActiveEffects {
     pub fn apply_effect(&mut self, effect: Effect) {
         match effect.data.effect_type {
             EffectType::StatBuff(..) => {
-                error!("Stat Buffs aren't implemented, plz don't apply them");
+                self.effects.push(effect);
             }
             EffectType::StatusInfliction(status_tag) => {
                 let mut doesnt_already_have_status = true;

@@ -1,6 +1,6 @@
 //! This module handles various UI things associated with an in battle character
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::ActionState;
@@ -104,6 +104,7 @@ pub struct UnitViewerItem;
 pub struct UnitViewerScreen {
     name: Entity,
     info_container: Entity,
+    stat_box: StatBox,
 }
 
 #[derive(Component)]
@@ -114,6 +115,24 @@ pub struct UnitViewNameText;
 
 #[derive(Component)]
 pub struct MenuAwaitingInputFromCursor;
+
+#[derive(Component)]
+pub struct StatBox {
+    stat_texts: BTreeMap<StatType, Entity>,
+}
+
+fn build_stat_box_ui(commands: &mut Commands) -> StatBox {
+    let mut stat_texts = BTreeMap::new();
+
+    for stat_type in StatType::VARIANTS {
+        let id = commands
+            .spawn((Text("Stat: Value".to_string()), UnitViewerItem))
+            .id();
+        stat_texts.insert(*stat_type, id);
+    }
+
+    StatBox { stat_texts }
+}
 
 /// Functions for spawning the battle UI itself
 ///
@@ -439,6 +458,12 @@ pub mod battle_menu_ui_definition {
                     UnitViewerItem,
                 ))
                 .id();
+
+            let stat_box = build_stat_box_ui(commands);
+            let mut view_map_children = Vec::new();
+            view_map_children.push(unit_view_name_text);
+            view_map_children.extend(stat_box.stat_texts.values());
+
             let view_map_container = commands
                 .spawn((
                     Name::new("ViewMapScreen"),
@@ -457,6 +482,7 @@ pub mod battle_menu_ui_definition {
                     UnitViewerScreen {
                         name: unit_view_name_text,
                         info_container: view_map_info_container,
+                        stat_box: stat_box,
                     },
                     GameMenuLatch::default(),
                     PlayerBattleMenu,
@@ -465,7 +491,7 @@ pub mod battle_menu_ui_definition {
 
             commands
                 .entity(view_map_info_container)
-                .add_child(unit_view_name_text);
+                .add_children(&view_map_children);
             commands
                 .entity(view_map_container)
                 .add_child(view_map_info_container);
@@ -623,7 +649,11 @@ pub mod player_info_ui_systems {
         grid_manager: Res<grid::GridManagerResource>,
         // TODO: Can I do (Changed<GridPosition> or Changed<Unit>) in two diff queries?
         cursor_query: Query<(&player::Player, &grid::GridPosition), With<Cursor>>,
-        unit_query: Query<(&Unit, Option<&UnitPhaseResources>)>,
+        unit_query: Query<(
+            &Unit,
+            Option<&UnitPhaseResources>,
+            Option<&UnitDerivedStats>,
+        )>,
         player_unit_viewer: Query<(&player::Player, &UnitViewerScreen)>,
         mut vis_mutator: Query<&mut Visibility, With<UnitViewerItem>>,
         mut text_query: Query<&mut Text, With<UnitViewerItem>>,
@@ -634,7 +664,7 @@ pub mod player_info_ui_systems {
                     continue;
                 }
 
-                let Some((unit, _phase_resources)) = grid_manager
+                let Some((unit, _phase_resources, stats)) = grid_manager
                     .grid_manager
                     .get_by_position(grid_pos)
                     .map(|t| t.iter().filter_map(|t| unit_query.get(*t).ok()).next())
@@ -659,6 +689,20 @@ pub mod player_info_ui_systems {
 
                 if let Some(mut text_item) = text_query.get_mut(unit_viewer_screen.name).ok() {
                     text_item.0 = unit.name.clone();
+                }
+
+                if let Some(stats) = stats {
+                    for (stat, stat_ui_entity) in &unit_viewer_screen.stat_box.stat_texts {
+                        let Some(mut text_item) = text_query.get_mut(*stat_ui_entity).ok() else {
+                            continue;
+                        };
+
+                        text_item.0 = format!(
+                            "{}: {}",
+                            stat.abbreviation(),
+                            stats.stats.stat(*stat).0.round() as i32
+                        );
+                    }
                 }
             }
         }

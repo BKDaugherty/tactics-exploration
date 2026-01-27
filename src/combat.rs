@@ -821,6 +821,7 @@ pub fn handle_stat_changes(
 //
 // How would you "re-derive" stats? You need "permanent" mutations to apply to base stats I think...
 pub fn impact_event_handler(
+    mut commands: Commands,
     mut impact_events: MessageReader<ImpactEvent>,
     mut unit_query: Query<(
         &UnitDerivedStats,
@@ -908,6 +909,10 @@ pub fn impact_event_handler(
                         data: effect.clone(),
                     });
                 }
+
+                if effects.len() != 0 {
+                    commands.entity(impact.defender).insert(StatsDirty);
+                }
             }
         }
     }
@@ -956,7 +961,9 @@ pub mod skills {
             sprite_db::SpriteId,
         },
         combat::CombatStageId,
-        gameplay_effects::{EffectData, StatusTag},
+        gameplay_effects::{
+            EffectData, EffectDuration, EffectType, Operator, StatModification, StatusTag,
+        },
         unit::StatType,
     };
 
@@ -1757,9 +1764,63 @@ pub mod skills {
                             },
                         },
                     }]),
-                    targeting: Targeting::TargetInRange(0),
+                    targeting: Targeting::TargetInRange(2),
                     animation_data: vec![
                         // TODO: Using flare damage for now lol
+                        SkillStage {
+                            stage: SkillStageAction::UnitAttack(
+                                SkillAnimationId(1),
+                                UnitAnimationKind::Charge,
+                            ),
+                            advancing_event: SkillEvent::AnimationMarker(
+                                SkillAnimationId(1),
+                                AnimationMarker::Complete,
+                            ),
+                        },
+                        SkillStage {
+                            stage: SkillStageAction::UnitAttack(
+                                SkillAnimationId(2),
+                                UnitAnimationKind::Release,
+                            ),
+                            advancing_event: SkillEvent::AnimationMarker(
+                                SkillAnimationId(2),
+                                AnimationMarker::Complete,
+                            ),
+                        },
+                        SkillStage {
+                            stage: SkillStageAction::Impact(vec![SkillActionIndex(0)]),
+                            advancing_event: SkillEvent::AnimationMarker(
+                                SkillAnimationId(2),
+                                AnimationMarker::Complete,
+                            ),
+                        },
+                    ],
+                    cost: SkillCost { ap: 1 },
+                    audio_cues_to_emit: SkillAudioCues::default(),
+                    audio_profile: AudioProfile::default(),
+                },
+            )?
+            .register_skill(
+                SkillCategoryId(6),
+                SkillId(9),
+                Skill {
+                    skill_id: SkillId(9),
+                    name: "Bulk Up".to_owned(),
+                    actions: Vec::from([SkillAction {
+                        base_accuracy: 1.0,
+                        action_type: SkillActionType::ApplyEffects {
+                            effects: vec![EffectData {
+                                effect_type: EffectType::StatBuff(StatModification {
+                                    attribute_type: StatType::Strength,
+                                    operator: Operator::Add,
+                                    value: 4.0,
+                                }),
+                                duration: EffectDuration::TurnCount(2),
+                            }],
+                        },
+                    }]),
+                    targeting: Targeting::TargetInRange(0),
+                    animation_data: vec![
                         SkillStage {
                             stage: SkillStageAction::UnitAttack(
                                 SkillAnimationId(1),

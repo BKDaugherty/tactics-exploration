@@ -79,7 +79,7 @@ use crate::{
     projectile::{ProjectileArrived, projectile_arrival_system, projectile_bezier_system},
     unit::{
         CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, StatType, StatValue, Unit,
-        UnitActionCompletedMessage, UnitDerivedStats, UnitExecuteActionMessage,
+        UnitActionCompletedMessage, UnitDerivedStats, UnitExecuteActionMessage, derive_stats,
         execute_unit_actions, handle_unit_cursor_actions, handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_ui_command,
@@ -198,7 +198,12 @@ pub fn battle_plugin(app: &mut App) {
             )
                 .chain(),
         )
-        .add_systems(Update, (handle_stat_changes))
+        .add_systems(
+            Update,
+            (handle_stat_changes, derive_stats)
+                .chain()
+                .run_if(in_state(GameState::Battle)),
+        )
         .add_systems(
             Update,
             (
