@@ -168,10 +168,10 @@ pub mod menu_navigation {
         }
 
         pub fn remove_button(&mut self, position: &MenuGridPosition) -> anyhow::Result<()> {
-            if let Some(..) = self.buttons.remove(position) {
-                if let Some(y) = self.column_heights.get_mut(&position.x) {
-                    *y = y.saturating_sub(1);
-                }
+            if self.buttons.remove(position).is_some()
+                && let Some(y) = self.column_heights.get_mut(&position.x)
+            {
+                *y = y.saturating_sub(1);
             }
             Ok(())
         }

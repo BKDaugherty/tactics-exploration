@@ -9,8 +9,7 @@ use crate::{
     animation::{
         Direction, UnitAnimationKind,
         animation_db::{
-            AnimatedSpriteId, AnimationDB, AnimationKey, AnimationStartIndexKey,
-            RegisteredAnimationId,
+            AnimationDB, AnimationKey, AnimationStartIndexKey,
             registered_sprite_ids::{TT_UNIT_ANIMATED_SPRITE_ID, UNIT_DEMO_SPRITE_ID},
         },
     },
@@ -523,7 +522,7 @@ fn join_game(
 
     let e = add_player_ui(
         commands,
-        &fonts,
+        fonts,
         anim_db,
         sprite_db,
         player_ui_parent,
@@ -630,13 +629,6 @@ pub struct HasReadyButton {
 
 #[derive(Component)]
 pub struct ReadyButtonMarker;
-
-pub struct JoinGameButtonEvent {
-    /// The player that pressed the event
-    player: Player,
-    /// The command that was clicked
-    command: UiCommands,
-}
 
 // TODO: This should probably just emit events with the Command tied to this Entity or something
 // and then each system can handle the commands individually?
@@ -809,7 +801,7 @@ fn handle_button_commands(
                             continue;
                         };
 
-                        let Some(player_state) = joined_players.0.get_mut(&player) else {
+                        let Some(player_state) = joined_players.0.get_mut(player) else {
                             error!("No player state for active player: {:?}", player);
                             continue;
                         };
@@ -1203,11 +1195,10 @@ fn display_job_info_horizontal_selector(
                     text.0 = value.name();
                 } else if let Ok(mut text) = desc_query.get_mut(*child) {
                     text.0 = value.description();
-                } else if let Ok(mut ui_image) = image_query.get_mut(*child) {
-                    if let Some(image) = sprite_db.sprite_id_to_handle.get(&value.demo_sprite_id())
-                    {
-                        ui_image.image = image.clone();
-                    }
+                } else if let Ok(mut ui_image) = image_query.get_mut(*child)
+                    && let Some(image) = sprite_db.sprite_id_to_handle.get(&value.demo_sprite_id())
+                {
+                    ui_image.image = image.clone();
                 }
             }
         }
@@ -1262,8 +1253,7 @@ fn highlight_button_on_join_game_added(
     if let Some(mut background_color) = unit_preview_menu
         .get(added.entity)
         .ok()
-        .map(|t| background_color.get_mut(t.entity).ok())
-        .flatten()
+        .and_then(|t| background_color.get_mut(t.entity).ok())
     {
         background_color.0 = UI_CONFIRMED_BUTTON_COLOR;
     }
@@ -1277,8 +1267,7 @@ fn highlight_button_on_join_game_removed(
     if let Some(mut background_color) = unit_preview_menu
         .get(remove.entity)
         .ok()
-        .map(|t| background_color.get_mut(t.entity).ok())
-        .flatten()
+        .and_then(|t| background_color.get_mut(t.entity).ok())
     {
         background_color.0 = SELECTABLE_BUTTON_BACKGROUND;
     }

@@ -30,12 +30,6 @@ pub enum WeaponEquippableSlot {
 }
 
 #[derive(Debug)]
-pub struct Weapon {
-    range: u32,
-    weapon_type: WeaponType,
-}
-
-#[derive(Debug)]
 pub enum WeaponRestrictions {
     OneHanded,
     TwoHanded,
@@ -53,6 +47,7 @@ pub enum ArmorEquippableSlot {
     Feet,
 }
 
+#[allow(dead_code)]
 #[derive(Component, Debug, Clone)]
 pub struct ArmorItem {
     item_name: String,
@@ -76,7 +71,6 @@ pub struct UnitEquipment {
 
 #[derive(Debug)]
 pub enum Item {
-    Weapon(Weapon),
     Armor(ArmorItem),
 }
 
@@ -85,6 +79,7 @@ pub struct ItemId(u32);
 
 #[derive(Resource)]
 pub struct ItemDB {
+    #[allow(dead_code)]
     armor_db: HashMap<ItemId, Item>,
 }
 

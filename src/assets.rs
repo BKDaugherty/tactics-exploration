@@ -444,19 +444,19 @@ pub mod sounds {
         pub(crate) fn get_all_sound_paths(&self) -> Vec<PathBuf> {
             let mut sounds = Vec::new();
 
-            for (_, source) in &self.combat_sounds {
+            for source in self.combat_sounds.values() {
                 if let Some(path) = source.path() {
                     sounds.push(path.path().to_path_buf());
                 }
             }
 
-            for (_, source) in &self.ui_sounds {
+            for source in self.ui_sounds.values() {
                 if let Some(path) = source.path() {
                     sounds.push(path.path().to_path_buf());
                 }
             }
 
-            for (_, source) in &self.music {
+            for source in self.music.values() {
                 if let Some(path) = source.path() {
                     sounds.push(path.path().to_path_buf());
                 }
@@ -559,16 +559,15 @@ pub mod sounds {
                     continue;
                 }
 
-                if let Some(required_role) = response.role {
-                    if !interaction_role
+                if let Some(required_role) = response.role
+                    && !interaction_role
                         .map(|t| t == required_role)
                         .unwrap_or_default()
-                    {
-                        continue;
-                    }
+                {
+                    continue;
                 }
 
-                options.push(response.sound.clone())
+                options.push(response.sound)
             }
             options
         }
@@ -677,17 +676,14 @@ pub mod sound_resolvers {
             let attacker_voice = attack_execution
                 .get(message.source)
                 .ok()
-                .map(|t| t.attacker)
-                .flatten()
-                .map(|t| unit_query.get(t).ok())
-                .flatten();
+                .and_then(|t| t.attacker)
+                .and_then(|t| unit_query.get(t).ok());
 
             let defender_voice = attack_execution
                 .get(message.source)
                 .ok()
                 .map(|t| t.defender)
-                .map(|t| unit_query.get(t).ok())
-                .flatten();
+                .and_then(|t| unit_query.get(t).ok());
 
             info!(
                 "Resolving Voice Audio Event: {:?}, {:?}, {:?}",
@@ -760,7 +756,7 @@ pub mod active_assets {
         sprite_db::build_sprite_map,
     };
 
-    pub const MISC_USED_ASSET_PATHS: &[&'static str] = &[
+    pub const MISC_USED_ASSET_PATHS: &[&str] = &[
         CURSOR_PATH,
         OVERLAY_PATH,
         BATTLE_TACTICS_TILESHEET,

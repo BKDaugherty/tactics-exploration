@@ -6,7 +6,6 @@ use crate::assets::FontResource;
 use crate::assets::sounds::AudioContext;
 use crate::assets::sounds::AudioCue;
 use crate::assets::sounds::AudioEventMessage;
-use crate::assets::sounds::ImpactInteractionRole;
 use crate::gameplay_effects::ActiveEffects;
 use crate::gameplay_effects::Effect;
 use crate::gameplay_effects::EffectMetadata;
@@ -150,19 +149,18 @@ fn calculate_damage(
     for action in skill_actions {
         if let SkillActionType::DamagingSkill { scaled_damage } = &action.action_type {
             let bonus_attack = attacker
-                .map(|t| {
+                .and_then(|t| {
                     scaled_damage
                         .offensive_modifier
                         .as_ref()
                         .map(|modifier| t.stats.stat(modifier.stat))
                 })
-                .flatten()
                 .unwrap_or_default()
                 .0 as u32;
             let defense = scaled_damage
                 .defensive_modifier
                 .as_ref()
-                .map(|ref t| defender.stats.stat(t.stat))
+                .map(|t| defender.stats.stat(t.stat))
                 .unwrap_or_default()
                 .0 as u32;
             damage += scaled_damage.power + bonus_attack - defense;
@@ -171,19 +169,18 @@ fn calculate_damage(
     for action in skill_actions {
         if let SkillActionType::HealingSkill { scaled_damage } = &action.action_type {
             let bonus_attack = attacker
-                .map(|t| {
+                .and_then(|t| {
                     scaled_damage
                         .offensive_modifier
                         .as_ref()
                         .map(|modifier| t.stats.stat(modifier.stat))
                 })
-                .flatten()
                 .unwrap_or_default()
                 .0 as u32;
             let defense = scaled_damage
                 .defensive_modifier
                 .as_ref()
-                .map(|ref t| defender.stats.stat(t.stat))
+                .map(|t| defender.stats.stat(t.stat))
                 .unwrap_or_default()
                 .0 as u32;
             healing += scaled_damage.power + bonus_attack - defense;
@@ -506,10 +503,8 @@ pub fn handle_combat_stage_enter(
                                 continue;
                             };
 
-                            let Some(start_grid_pos) = ae
-                                .attacker
-                                .map(|t| grid_position_query.get(t).ok())
-                                .flatten()
+                            let Some(start_grid_pos) =
+                                ae.attacker.and_then(|t| grid_position_query.get(t).ok())
                             else {
                                 error!("No attacker, or no grid position for spawned projectile!");
                                 continue;
@@ -623,6 +618,7 @@ fn build_timeline_for_skill(
 /// A marker component for tracking that a given unit is attacking
 #[derive(Component)]
 pub struct UnitIsAttacking {
+    #[allow(dead_code)]
     ae_entity: Entity,
 }
 
@@ -651,12 +647,12 @@ pub fn attack_intent_system(
         let mut tracker = commands.entity(e);
         tracker.remove::<AttackIntent>();
 
-        let Some((attacker, attacker_grid_pos)) = unit_query.get(intent.attacker).ok() else {
+        let Some((_attacker, _attacker_grid_pos)) = unit_query.get(intent.attacker).ok() else {
             error!("Attack Intent originated from an Attacker that no longer exists?");
             continue;
         };
 
-        let Some((defender, defender_grid_pos)) = unit_query.get(intent.defender).ok() else {
+        let Some((_defender, defender_grid_pos)) = unit_query.get(intent.defender).ok() else {
             error!("Attack Intent is attacking a defender that no longer exists?");
             continue;
         };
@@ -834,8 +830,7 @@ pub fn impact_event_handler(
     for impact in impact_events.read() {
         let attacker = impact
             .attacker
-            .map(|t| unit_query.get(t).ok().map(|(attacker, _, _)| attacker))
-            .flatten();
+            .and_then(|t| unit_query.get(t).ok().map(|(attacker, _, _)| attacker));
 
         let Some((defender_derived, _, _)) = unit_query.get(impact.defender).ok() else {
             continue;
@@ -843,7 +838,7 @@ pub fn impact_event_handler(
 
         let damage = calculate_damage(attacker, defender_derived, &impact.skill_actions);
 
-        if let Ok((defender_derived_stats, mut animation_player, _)) =
+        if let Ok((_defender_derived_stats, mut animation_player, _)) =
             unit_query.get_mut(impact.defender)
         {
             if damage < 0 {
@@ -910,7 +905,7 @@ pub fn impact_event_handler(
                     });
                 }
 
-                if effects.len() != 0 {
+                if !effects.is_empty() {
                     commands.entity(impact.defender).insert(StatsDirty);
                 }
             }

@@ -213,7 +213,7 @@ fn build_settings_menu(
         save_settings_button,
     ]);
 
-    let settings_column = commands
+    commands
         .spawn((
             Node {
                 display: Display::None,
@@ -251,8 +251,7 @@ fn build_settings_menu(
             sfx_volume_selector,
             save_settings_button,
         ])
-        .id();
-    settings_column
+        .id()
 }
 
 fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
@@ -425,8 +424,7 @@ fn main_menu_action(
                 let Some(global_volume) = setting_query
                     .get(*global_volume_selector)
                     .ok()
-                    .map(|t| t.get_current())
-                    .flatten()
+                    .and_then(|t| t.get_current())
                 else {
                     error!("No Global Volume!");
                     return;
@@ -435,8 +433,7 @@ fn main_menu_action(
                 let Some(music_volume) = setting_query
                     .get(*music_volume_selector)
                     .ok()
-                    .map(|t| t.get_current())
-                    .flatten()
+                    .and_then(|t| t.get_current())
                 else {
                     error!("No Global Volume!");
                     return;
@@ -445,8 +442,7 @@ fn main_menu_action(
                 let Some(sfx_volume) = setting_query
                     .get(*sfx_volume_selector)
                     .ok()
-                    .map(|t| t.get_current())
-                    .flatten()
+                    .and_then(|t| t.get_current())
                 else {
                     error!("No Global Volume!");
                     return;
