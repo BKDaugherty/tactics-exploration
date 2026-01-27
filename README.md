@@ -59,3 +59,35 @@ Host deck
   IdentityFile ~/.ssh/<YOUR_IDENTITY_FILE>
 ```
 Then you can just scp contents over
+
+## Asset Attributions!
+
+I'm using a fair bit of community assets here and there. This section is dedicated to attributions for those! Thank you all so much! It'd be so much worse making a game without all of these!
+
+### Sprites
+
+I'm using a collection of different sprites.
+
+For tiles and some characters for now, I'm using the TinyTactics Battle Kit [here](https://tiopalada.itch.io/tiny-tactics-battle-kit-i) by Tiopalada. See the license [here](assets/unit_assets/tinytactics_battlekiti_v1_0/license.html)
+
+#### VFX
+- Fire Effect Explosion I got [here](https://pimen.itch.io/fire-spell-effect-02)
+- Acid Effect I got [here](https://pimen.itch.io/acid-spell-effect)
+
+### Fonts
+
+In a few places, I'm using the tinyRPGFontKit by Tiopalada. Check out the license [here](assets/font_assets/tinyRPGFontKit01_v1_2/license.html) and the pack [here](https://tiopalada.itch.io/tiny-rpg-font-kit-i).
+
+I'm also using the pixelify_sans font which is licensed [here](ssets/font_assets/pixelify-sans/OFL.txt)
+
+### Sound Assets
+
+#### SFX
+I'm using JD Sherberts Pixel UI Sfx Pack! You can see the license [here](assets/sound_assets/jdsherbert-pixel-ui-sfx-pack-free/LICENSE-1.pdf)
+
+
+I'm using some sfx sounds from Leohpaz! Check it out [here](https://leohpaz.itch.io/rpg-essentials-sfx-free)
+
+#### Battle Music
+
+I recorded this actually!
