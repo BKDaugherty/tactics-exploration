@@ -16,10 +16,10 @@ use crate::battle::{
     BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
 };
 use crate::battle_phase::UnitPhaseResources;
-use crate::combat::AttackIntent;
 use crate::combat::skills::{SkillDBResource, Targeting, UnitSkills};
+use crate::combat::{AttackIntent, StatsDirty};
 use crate::enemy::behaviors::EnemyAiBehavior;
-use crate::gameplay_effects::ActiveEffects;
+use crate::gameplay_effects::{ActiveEffects, Operator};
 use crate::grid::{
     GridManager, GridManagerResource, GridMovement, GridPosition, GridVec, manhattan_distance,
 };
@@ -67,30 +67,44 @@ pub struct Unit {
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy, Reflect, Hash)]
 pub enum StatType {
+    // Not super sure if I want health here, but maybe fine for now?
+    Health,
+    MaxHealth,
+    Movement,
     Strength,
     Magic,
     Defense,
     Resistance,
     Speed,
     Skill,
-    MaxHealth,
-    Movement,
-    // Not super sure if I want health here, but maybe fine for now?
-    Health,
 }
 
 impl StatType {
     pub const VARIANTS: &[StatType] = &[
+        StatType::Health,
+        StatType::MaxHealth,
+        StatType::Movement,
         StatType::Strength,
         StatType::Magic,
         StatType::Defense,
         StatType::Resistance,
         StatType::Speed,
         StatType::Skill,
-        StatType::MaxHealth,
-        StatType::Health,
-        StatType::Movement,
     ];
+
+    pub fn abbreviation(&self) -> &'static str {
+        match &self {
+            StatType::Strength => "STR",
+            StatType::Magic => "MAG",
+            StatType::Defense => "DEF",
+            StatType::Resistance => "RES",
+            StatType::Speed => "SPD",
+            StatType::Skill => "SKL",
+            StatType::MaxHealth => "MAX HP",
+            StatType::Movement => "MOVE",
+            StatType::Health => "HP",
+        }
+    }
 }
 
 #[derive(PartialEq, Clone, Copy, Default, Debug)]
@@ -122,6 +136,40 @@ impl StatContainer {
     pub fn with_stat(&mut self, stat_type: StatType, value: StatValue) -> &mut Self {
         let _ = self.stats.insert(stat_type, value);
         self
+    }
+}
+
+pub fn derive_stats(
+    mut commands: Commands,
+    unit_query: Query<
+        (
+            Entity,
+            &UnitBaseStats,
+            &mut UnitDerivedStats,
+            Option<&ActiveEffects>,
+        ),
+        With<StatsDirty>,
+    >,
+) {
+    for (e, base_stats, mut derived, active_effects) in unit_query {
+        let stat_modifications = active_effects.map(|t| t.stat_buffs()).unwrap_or_default();
+        for stat in StatType::VARIANTS {
+            let mut base = base_stats.stats.stat(*stat);
+            for modification in &stat_modifications {
+                if modification.attribute_type != *stat {
+                    continue;
+                }
+
+                // TODO: Probably need to apply all adds first and then do mul?
+                match modification.operator {
+                    Operator::Add => base.0 += modification.value,
+                    Operator::Mul => base.0 *= modification.value,
+                };
+            }
+
+            derived.stats.with_stat(*stat, base);
+        }
+        commands.entity(e).remove::<StatsDirty>();
     }
 }
 
@@ -1186,7 +1234,7 @@ pub mod jobs {
                     equipped_skill_categories: Vec::from(&[SkillCategoryId(5)]),
                 },
                 UnitJob::Mercenary => UnitSkills {
-                    learned_skills: HashSet::from([SkillId(3)]),
+                    learned_skills: HashSet::from([SkillId(3), SkillId(9)]),
                     equipped_skill_categories: Vec::from(&[SkillCategoryId(6)]),
                 },
             }

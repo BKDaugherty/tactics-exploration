@@ -9,6 +9,7 @@ use crate::{
         animation_db::{AnimatedSpriteId, AnimationDB},
     },
     assets::sprite_db::{SpriteDB, SpriteId},
+    gameplay_effects::StatModification,
     unit::Unit,
 };
 
@@ -57,6 +58,7 @@ pub struct ArmorItem {
     item_name: String,
     /// The slot that this item can be equipped on
     slot: ArmorEquippableSlot,
+    modifiers: Vec<StatModification>,
     item_id: ItemId,
     /// Should the SpriteDB maintain this reference?
     sprite_id: SpriteId,
