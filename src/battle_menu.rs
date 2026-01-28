@@ -20,7 +20,8 @@ use crate::{
         ui_consts::{SELECTABLE_BUTTON_BACKGROUND, UI_TEXT_COLOR},
     },
     player::{self, Player, PlayerInputAction},
-    unit::{StatType, Unit, UnitDerivedStats},
+    unit::Unit,
+    unit_stats::{StatType, UnitDerivedStats},
 };
 
 /// A marker component for the "Standard Battle UI", or the first menu of the Player's battle menu

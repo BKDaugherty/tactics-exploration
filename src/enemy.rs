@@ -18,9 +18,10 @@ use crate::{
     },
     unit::{
         CombatActionMarker, DIRECTION_VECS, MovementRequest, Unit, UnitActionCompletedMessage,
-        UnitDerivedStats, UnitExecuteAction, UnitExecuteActionMessage, build_attack_space_options,
+        UnitExecuteAction, UnitExecuteActionMessage, build_attack_space_options,
         get_valid_moves_for_unit,
     },
+    unit_stats::UnitDerivedStats,
 };
 
 #[derive(Component)]
