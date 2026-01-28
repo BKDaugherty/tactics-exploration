@@ -24,7 +24,9 @@ use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, manhattan_di
 use crate::grid_cursor::LockedOn;
 use crate::map_generation::TtIndex;
 use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
+use crate::unit::jobs::UnitJob;
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
+use crate::unit_stats::experience::UnitLevelManager;
 use crate::unit_stats::{StatContainer, StatType, StatValue, UnitBaseStats, UnitDerivedStats};
 use crate::{enemy, grid, grid_cursor, player};
 
@@ -197,9 +199,13 @@ pub fn spawn_enemy(
         .expect("Must have animation data");
 
     let stat_container = StatContainer::new()
-        .with_stat(StatType::MaxHealth, StatValue(10.))
-        .with_stat(StatType::Health, StatValue(10.))
-        .with_stat(StatType::Defense, StatValue(1.))
+        .with_stat(StatType::MaxHealth, StatValue(12.))
+        .with_stat(StatType::Health, StatValue(12.))
+        .with_stat(StatType::Defense, StatValue(2.))
+        .with_stat(StatType::Strength, StatValue(2.))
+        .with_stat(StatType::Resistance, StatValue(2.))
+        .with_stat(StatType::Speed, StatValue(2.))
+        .with_stat(StatType::Skill, StatValue(2.))
         .with_stat(StatType::Movement, StatValue(3.))
         .to_owned();
 
@@ -287,13 +293,12 @@ pub fn spawn_unit(
     player: crate::player::Player,
     team: Team,
     direction: Direction,
+    job: UnitJob,
 ) -> Entity {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
-    let stats = StatContainer::new()
-        .with_stat(StatType::Health, StatValue(13.))
-        .with_stat(StatType::MaxHealth, StatValue(13.))
-        .with_stat(StatType::Movement, StatValue(4.))
-        .to_owned();
+    let stats = job.default_stats();
+    let growths = job.default_growths("Hello world".to_string());
+    let level_manager = UnitLevelManager::new(growths);
     let unit = commands
         .spawn((
             UnitBundle {
@@ -332,6 +337,7 @@ pub fn spawn_unit(
             },
             BattleEntity {},
             skills,
+            level_manager,
         ))
         .id();
 
@@ -1030,9 +1036,14 @@ pub struct UnitActionCompletedMessage {
 }
 
 pub mod jobs {
+    use std::collections::BTreeMap;
+
+    use rand_distr::Normal;
+
     use crate::{
         assets::sprite_db::{SpriteId, TinyTacticsSprites},
         combat::skills::{SkillCategoryId, SkillId},
+        unit_stats::growths::{StatGrowth, StatGrowthClampedNormalRounded, StatGrowths},
     };
 
     use super::*;
@@ -1114,6 +1125,85 @@ pub mod jobs {
                 UnitJob::Mage => SpriteId(8),
                 UnitJob::Archer => SpriteId(9),
                 UnitJob::Mercenary => SpriteId(10),
+            }
+        }
+
+        pub fn default_stats(&self) -> StatContainer {
+            match &self {
+                UnitJob::Knight => StatContainer::new()
+                    .with_stat(StatType::Health, 20.0.into())
+                    .with_stat(StatType::MaxHealth, 20.0.into())
+                    .with_stat(StatType::Strength, 3.0.into())
+                    .with_stat(StatType::Defense, 5.0.into())
+                    .with_stat(StatType::Magic, 0.0.into())
+                    .with_stat(StatType::Resistance, 1.0.into())
+                    .with_stat(StatType::Speed, 2.0.into())
+                    .with_stat(StatType::Skill, 2.0.into())
+                    .with_stat(StatType::Movement, 3.0.into())
+                    .to_owned(),
+                UnitJob::Mage => StatContainer::new()
+                    .with_stat(StatType::Health, 12.0.into())
+                    .with_stat(StatType::MaxHealth, 12.0.into())
+                    .with_stat(StatType::Strength, 0.0.into())
+                    .with_stat(StatType::Defense, 1.0.into())
+                    .with_stat(StatType::Magic, 5.0.into())
+                    .with_stat(StatType::Resistance, 3.0.into())
+                    .with_stat(StatType::Speed, 3.0.into())
+                    .with_stat(StatType::Skill, 3.0.into())
+                    .with_stat(StatType::Movement, 3.0.into())
+                    .to_owned(),
+                UnitJob::Archer => StatContainer::new()
+                    .with_stat(StatType::Health, 15.0.into())
+                    .with_stat(StatType::MaxHealth, 15.0.into())
+                    .with_stat(StatType::Strength, 3.0.into())
+                    .with_stat(StatType::Defense, 2.0.into())
+                    .with_stat(StatType::Magic, 0.0.into())
+                    .with_stat(StatType::Resistance, 1.0.into())
+                    .with_stat(StatType::Speed, 5.0.into())
+                    .with_stat(StatType::Skill, 5.0.into())
+                    .with_stat(StatType::Movement, 4.0.into())
+                    .to_owned(),
+                UnitJob::Mercenary => StatContainer::new()
+                    .with_stat(StatType::Health, 17.0.into())
+                    .with_stat(StatType::MaxHealth, 17.0.into())
+                    .with_stat(StatType::Strength, 5.0.into())
+                    .with_stat(StatType::Defense, 1.0.into())
+                    .with_stat(StatType::Magic, 0.0.into())
+                    .with_stat(StatType::Resistance, 0.0.into())
+                    .with_stat(StatType::Speed, 5.0.into())
+                    .with_stat(StatType::Skill, 5.0.into())
+                    .with_stat(StatType::Movement, 5.0.into())
+                    .to_owned(),
+            }
+        }
+
+        /// TODO: This probably should return data, that then gets turned into StatGrowth
+        /// moreover, this should probably be read from data itself :shrug:
+        ///
+        pub fn default_growths(&self, seed: String) -> StatGrowths {
+            StatGrowths {
+                growths: BTreeMap::from([
+                    (
+                        StatType::Strength,
+                        Box::new(StatGrowthClampedNormalRounded::new(
+                            seed.clone(),
+                            0.7,
+                            Normal::<f32>::new(1.0, 1.0).expect("Should be able to make distr"),
+                            0.0,
+                            2.0,
+                        )) as Box<dyn StatGrowth>,
+                    ),
+                    (
+                        StatType::Defense,
+                        Box::new(StatGrowthClampedNormalRounded::new(
+                            seed.clone(),
+                            0.7,
+                            Normal::<f32>::new(2.0, 1.0).expect("Should be able to make distr"),
+                            0.0,
+                            4.0,
+                        )) as Box<dyn StatGrowth>,
+                    ),
+                ]),
             }
         }
     }
