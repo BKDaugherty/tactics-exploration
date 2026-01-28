@@ -1,4 +1,4 @@
-use crate::unit::StatType;
+use crate::unit_stats::StatType;
 use bevy::prelude::*;
 use std::fmt::Debug;
 

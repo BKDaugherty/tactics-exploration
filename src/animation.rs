@@ -17,7 +17,7 @@ use crate::{
     assets::BATTLE_TACTICS_TILESHEET,
     combat::{CombatAnimationId, UnitIsAttacking},
     grid::{GridManagerResource, GridMovement, GridVec},
-    unit::UnitDerivedStats,
+    unit_stats::UnitDerivedStats,
 };
 
 #[derive(Component, Debug, Clone)]

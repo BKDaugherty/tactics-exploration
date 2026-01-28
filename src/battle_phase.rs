@@ -15,7 +15,8 @@ use crate::{
     gameplay_effects::{ActiveEffects, EffectDuration, StatusTag},
     grid::GridPosition,
     player::Player,
-    unit::{CombatActionMarker, StatType, UnitDerivedStats},
+    unit::CombatActionMarker,
+    unit_stats::{StatType, UnitDerivedStats},
 };
 
 /// The Phase Manager keeps track of the current phase globally for the battle.

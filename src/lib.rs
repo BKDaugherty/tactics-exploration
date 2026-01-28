@@ -20,6 +20,7 @@ pub mod player;
 pub mod projectile;
 pub mod save_game;
 pub mod unit;
+pub mod unit_stats;
 
 use bevy::prelude::*;
 

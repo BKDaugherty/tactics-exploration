@@ -9,10 +9,8 @@ use crate::assets::sounds::AudioEventMessage;
 use crate::gameplay_effects::ActiveEffects;
 use crate::gameplay_effects::Effect;
 use crate::gameplay_effects::EffectMetadata;
-use crate::unit::StatType;
-use crate::unit::StatValue;
-use crate::unit::UnitBaseStats;
-use crate::unit::UnitDerivedStats;
+use crate::unit_stats::StatsDirty;
+use crate::unit_stats::{StatType, StatValue, UnitDerivedStats, UnitStatChangeRequest};
 use crate::{
     animation::{
         AnimToPlay, AnimationId, AnimationMarker, AnimationMarkerMessage, PlayingAnimation,
@@ -753,63 +751,6 @@ pub fn spawn_damage_text(
     }
 }
 
-#[derive(Debug, Message)]
-pub struct UnitStatChangeRequest {
-    entity: Entity,
-    stat: StatType,
-    stat_change: StatValue,
-}
-
-#[derive(Component)]
-pub struct StatsDirty;
-
-pub fn handle_stat_changes(
-    mut reader: MessageReader<UnitStatChangeRequest>,
-    mut query: Query<(&mut UnitBaseStats, &mut UnitDerivedStats)>,
-    mut health_changed_writer: MessageWriter<UnitHealthChangedEvent>,
-) {
-    for message in reader.read() {
-        let Some((mut base_stats, mut derived_stats)) = query.get_mut(message.entity).ok() else {
-            error!(
-                "No stats found for Unit. Could not process request: {:?}",
-                message
-            );
-            continue;
-        };
-
-        let current = base_stats.stats.stat(message.stat);
-        let next = StatValue(current.0 + message.stat_change.0);
-        info!(
-            "Unit {:?} {:?} {:?} -> {:?}",
-            message.entity, message.stat, current, next
-        );
-
-        // TODO: Special handling for this could be encoded for other types
-        // that are capped by another stat?
-        let next = if message.stat == StatType::Health {
-            StatValue(f32::max(
-                f32::min(next.0, derived_stats.stats.stat(StatType::MaxHealth).0),
-                0.,
-            ))
-        } else {
-            StatValue(f32::max(0., next.0))
-        };
-
-        if message.stat == StatType::Health {
-            let difference = next.0 - current.0;
-            health_changed_writer.write(UnitHealthChangedEvent {
-                unit: message.entity,
-                health_changed: difference.round() as i32,
-            });
-        }
-
-        // TODO: Recalculate UnitDerivedStats using any ActiveEffects once those exist, or maybe
-        // the other thing we could do is just insert a Component here?
-        base_stats.stats.with_stat(message.stat, next);
-        derived_stats.stats.with_stat(message.stat, next);
-    }
-}
-
 // TODO: Should Attacker be Optional here?
 //
 // TODO: Stats how to handle Health changes here? Should that be an update to
@@ -959,7 +900,7 @@ pub mod skills {
         gameplay_effects::{
             EffectData, EffectDuration, EffectType, Operator, StatModification, StatusTag,
         },
-        unit::StatType,
+        unit_stats::StatType,
     };
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
