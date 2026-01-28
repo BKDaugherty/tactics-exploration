@@ -5638,6 +5638,7 @@ dependencies = [
  "leafwing-input-manager",
  "log",
  "rand",
+ "rand_distr",
  "rand_pcg",
  "rand_seeder",
  "serde",

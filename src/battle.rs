@@ -83,8 +83,13 @@ use crate::{
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_ui_command,
     },
-    unit_stats::{StatType, StatValue, UnitDerivedStats, derive_stats},
-    unit_stats::{UnitStatChangeRequest, handle_stat_changes},
+    unit_stats::{
+        StatType, StatValue, UnitDerivedStats, UnitStatChangeRequest, derive_stats,
+        experience::{
+            LevelUpMessage, apply_level_up_to_stats, give_flat_xp_after_attack_action_complete,
+        },
+        handle_stat_changes,
+    },
 };
 
 // TODO: Need to decide how we want to
@@ -174,6 +179,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_message::<UnitHealthChangedEvent>()
         .add_message::<AudioEventMessage>()
         .add_message::<UnitStatChangeRequest>()
+        .add_message::<LevelUpMessage>()
         .add_plugins((TilemapPlugin,))
         .add_plugins(JsonAssetPlugin::<AnimationAsset>::new(&[".json"]))
         .add_systems(
@@ -345,6 +351,13 @@ pub fn battle_plugin(app: &mut App) {
             Update,
             (resolve_skill_audio_events, resolve_voice_audio_events)
                 .run_if(in_state(GameState::Battle)),
+        )
+        .add_systems(
+            Update,
+            (
+                give_flat_xp_after_attack_action_complete,
+                apply_level_up_to_stats,
+            ),
         )
         .add_observer(handle_battle_resolution_ui_buttons)
         .add_systems(OnExit(GameState::BattleResolution), cleanup_battle);
@@ -728,6 +741,7 @@ pub fn load_demo_battle_scene(
             player,
             PLAYER_TEAM,
             Direction::NE,
+            player_unit_info.job,
         );
 
         grid_cursor::spawn_cursor(&mut commands, cursor_image.clone(), player, position);
