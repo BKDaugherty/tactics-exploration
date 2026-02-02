@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 use crate::unit::jobs::UnitJob;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Reflect, Clone, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, serde::Serialize, serde::Deserialize, Reflect, Clone, PartialEq, Eq, Hash, Component,
+)]
 pub struct SaveFileKey {
     pub uid: u32,
     pub name: String,

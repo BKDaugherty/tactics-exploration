@@ -715,6 +715,7 @@ pub mod player_battle_ui_systems {
     use crate::{
         assets::sounds::{SoundManagerParam, UiSound},
         combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills},
+        equipment::UnitEquipment,
         grid::GridPosition,
         grid_cursor::LockedOn,
         menu::NestedDynamicMenu,
@@ -966,7 +967,7 @@ pub mod player_battle_ui_systems {
             With<ActiveMenu>,
         >,
         unit_menu_query: Query<&BattleMenuAction>,
-        unit_info_query: Query<(&UnitSkills, &UnitPhaseResources)>,
+        unit_info_query: Query<(&UnitSkills, &UnitPhaseResources, &UnitEquipment)>,
         mut battle_command_writer: MessageWriter<UnitUiCommandMessage>,
         sounds: SoundManagerParam,
     ) {
@@ -999,7 +1000,8 @@ pub mod player_battle_ui_systems {
                     continue;
                 };
 
-                let Some((_, unit_resources)) = unit_info_query.get(battle_menu.selected_unit).ok()
+                let Some((_, unit_resources, _)) =
+                    unit_info_query.get(battle_menu.selected_unit).ok()
                 else {
                     warn!("No controlled unit for battle menu");
                     continue;
@@ -1054,17 +1056,22 @@ pub mod player_battle_ui_systems {
                         // Should only be one Menu per player
                         let skill_menu = battle_ui_container.skills_menu;
 
-                        let Some((unit_skills, _)) =
+                        let Some((unit_skills, _, unit_equipment)) =
                             unit_info_query.get(battle_menu.selected_unit).ok()
                         else {
                             error!("No skills found for Unit: {:?}", battle_menu.selected_unit);
                             continue;
                         };
 
+                        let attack_skill = unit_equipment
+                            .weapon_data()
+                            .map(|t| t.attack_skill)
+                            .unwrap_or(ATTACK_SKILL_ID);
+
                         let attack_button = commands
                             .spawn(battle_ui_button(
                                 &fonts,
-                                BattleMenuAction::Action(UnitMenuAction::UseSkill(ATTACK_SKILL_ID)),
+                                BattleMenuAction::Action(UnitMenuAction::UseSkill(attack_skill)),
                                 "Attack",
                             ))
                             .id();
@@ -1106,7 +1113,7 @@ pub mod player_battle_ui_systems {
                     }
                     BattleMenuAction::OpenSkillsFilteredByCategoryMenu(selected_category) => {
                         let skill_menu_category = battle_ui_container.filtered_skills_menu;
-                        let Some((unit_skills, _)) =
+                        let Some((unit_skills, _, _)) =
                             unit_info_query.get(battle_menu.selected_unit).ok()
                         else {
                             error!("No skills found for Unit: {:?}", battle_menu.selected_unit);
