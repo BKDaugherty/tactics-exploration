@@ -57,6 +57,7 @@ use crate::{
         begin_enemy_phase, execute_enemy_action, init_enemy_ai_system, plan_enemy_action,
         resolve_enemy_action, select_next_enemy,
     },
+    equipment::setup_item_db,
     grid::{self, GridManager, GridPosition},
     grid_cursor,
     interactable::{
@@ -78,8 +79,8 @@ use crate::{
     projectile::{ProjectileArrived, projectile_arrival_system, projectile_bezier_system},
     unit::{
         CombatActionMarker, ENEMY_TEAM, ObstacleSprite, PLAYER_TEAM, UnitActionCompletedMessage,
-        UnitExecuteActionMessage, execute_unit_actions, handle_unit_cursor_actions,
-        handle_unit_ui_command,
+        UnitExecuteActionMessage, equip_starting_items_on_unit, execute_unit_actions,
+        handle_unit_cursor_actions, handle_unit_ui_command,
         overlay::{OverlaysMessage, TileOverlayAssets, handle_overlays_events_system},
         spawn_enemy, spawn_obstacle_unit, spawn_unit, unlock_cursor_after_unit_ui_command,
     },
@@ -188,6 +189,7 @@ pub fn battle_plugin(app: &mut App) {
                 load_battle_asset_resources,
                 load_animation_data,
                 build_sprite_db,
+                setup_item_db,
             ),
         )
         .add_systems(
@@ -196,6 +198,7 @@ pub fn battle_plugin(app: &mut App) {
                 init_map_params,
                 setup_map_data_from_params.after(init_map_params),
                 load_demo_battle_scene.after(load_battle_asset_resources),
+                equip_starting_items_on_unit.after(load_demo_battle_scene),
                 init_phase_system,
                 init_enemy_ai_system,
                 setup_skill_system,
@@ -726,28 +729,21 @@ pub fn load_demo_battle_scene(
             continue;
         };
 
-        // TODO: Support equipment for a given player!
-        let weapon_sheet = tt_assets.iron_axe_spritesheet.clone();
-
         spawn_unit(
             &mut commands,
             player_unit_info.save_file_key.name.to_string(),
-            &tt_assets,
             position,
             image,
             texture_atlas,
-            weapon_sheet,
             player_unit_info.job.base_unit_skills(),
             player,
             PLAYER_TEAM,
             Direction::NE,
             player_unit_info.job,
+            player_unit_info.save_file_key,
         );
 
         grid_cursor::spawn_cursor(&mut commands, cursor_image.clone(), player, position);
-
-        // registered_players.unit.insert(player, unit_e);
-        // registered_players.cursor.insert(player, cursor_e);
     }
 
     if registered_players.save_files.len() > 1 {

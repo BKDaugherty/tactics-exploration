@@ -1492,7 +1492,7 @@ pub mod skills {
                 SkillId(4),
                 Skill {
                     skill_id: SkillId(4),
-                    name: "Lob Attack".to_owned(),
+                    name: "Shoot".to_owned(),
                     actions: Vec::from([SkillAction {
                         base_accuracy: 1.0,
                         action_type: SkillActionType::DamagingSkill {

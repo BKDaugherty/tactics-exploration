@@ -12,6 +12,7 @@ use crate::animation::{
 };
 use crate::assets::sound_resolvers::Voice;
 use crate::assets::sounds::{SoundManagerParam, UiSound, VoiceId};
+use crate::assets::sprite_db::SpriteDB;
 use crate::battle::{
     BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
 };
@@ -19,11 +20,15 @@ use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
 use crate::combat::skills::{SkillDBResource, Targeting, UnitSkills};
 use crate::enemy::behaviors::EnemyAiBehavior;
+use crate::equipment::{ItemDB, ItemId, UnitEquipment, equip_item_on_unit};
 use crate::gameplay_effects::ActiveEffects;
 use crate::grid::{GridManager, GridMovement, GridPosition, GridVec, manhattan_distance};
 use crate::grid_cursor::LockedOn;
 use crate::map_generation::TtIndex;
-use crate::player::{Player, PlayerCursorState, PlayerInputAction, PlayerState};
+use crate::player::{
+    Player, PlayerCursorState, PlayerInputAction, PlayerState, RegisteredBattlePlayers,
+};
+use crate::save_game::SaveFileKey;
 use crate::unit::jobs::UnitJob;
 use crate::unit::overlay::{OverlaysMessage, TileOverlayBundle};
 use crate::unit_stats::experience::UnitLevelManager;
@@ -280,20 +285,60 @@ pub fn spawn_enemy(
 
 pub const TINY_TACTICS_ANCHOR: Anchor = Anchor(Vec2::new(0., -0.25));
 
+// TODO: I'm not happy with this, but we can address this when we refactor how units are spawned /
+// loaded from some state. Ideally we would build up all the stuff and then spawn them I would guess?
+//
+// For now though, this gives me a place to test out equipment.
+pub fn equip_starting_items_on_unit(
+    mut commands: Commands,
+    anim_db: Res<AnimationDB>,
+    sprite_db: Res<SpriteDB>,
+    item_db: Res<ItemDB>,
+    players: Res<RegisteredBattlePlayers>,
+    query: Query<(Entity, &mut ActiveEffects, &mut UnitEquipment, &Player)>,
+) {
+    for (e, mut active_effects, mut equipment, player) in query {
+        let Some(save_file) = players.save_files.get(player) else {
+            continue;
+        };
+
+        let weapon_item_id = match save_file.job {
+            crate::unit::jobs::UnitJob::Archer => ItemId(2),
+            _ => ItemId(1),
+        };
+
+        let Some(weapon) = item_db.equippable_items.get(&weapon_item_id) else {
+            error!("No weapon for hardcoded item id?");
+            continue;
+        };
+
+        if let Err(e) = equip_item_on_unit(
+            &mut commands,
+            &sprite_db,
+            &anim_db,
+            &mut equipment,
+            &mut active_effects,
+            e,
+            weapon.clone(),
+        ) {
+            error!("Failed to equip starting item on unit: {:?}", e);
+        }
+    }
+}
+
 /// Temporary function for spawning a test unit
 pub fn spawn_unit(
     commands: &mut Commands,
     unit_name: String,
-    tt_assets: &Res<TinytacticsAssets>,
     grid_position: crate::grid::GridPosition,
     spritesheet: Handle<Image>,
     texture_atlas: TextureAtlas,
-    weapon_spritesheet: Handle<Image>,
     skills: UnitSkills,
     player: crate::player::Player,
     team: Team,
     direction: Direction,
     job: UnitJob,
+    key: SaveFileKey,
 ) -> Entity {
     let transform = crate::grid::init_grid_to_world_transform(&grid_position);
     let stats = job.default_stats();
@@ -335,34 +380,13 @@ pub fn spawn_unit(
                     stats: stats.clone(),
                 },
             },
+            UnitEquipment::default(),
             BattleEntity {},
             skills,
             level_manager,
+            key,
         ))
         .id();
-
-    let weapon = commands
-        .spawn((
-            Sprite {
-                image: weapon_spritesheet,
-                texture_atlas: Some(TextureAtlas {
-                    layout: tt_assets.weapon_layout.clone(),
-                    index: 0,
-                }),
-                flip_x: direction.should_flip_across_y(),
-                ..Default::default()
-            },
-            AnimationFollower {
-                leader: unit,
-                animated_sprite_id: TT_WEAPON_ANIMATED_SPRITE_ID,
-            },
-            Visibility::Hidden,
-            TINY_TACTICS_ANCHOR,
-        ))
-        .id();
-
-    commands.entity(unit).add_child(weapon);
-
     unit
 }
 
@@ -384,12 +408,6 @@ pub struct MovementRequest {
     pub origin: GridPosition,
     pub unit: Unit,
     pub movement_points_available: u32,
-}
-
-#[derive(Debug)]
-enum UnitMovementSelection {
-    Selected(Entity),
-    NoPlayerUnitOnTile,
 }
 
 fn spawn_overlays(
@@ -534,25 +552,6 @@ where
         .cloned()
         .unwrap_or_default();
     entities_at_pos.iter().map(query).next().flatten()
-}
-
-fn select_unit_for_movement<F>(
-    cursor_grid_pos: &GridPosition,
-    grid_manager: &GridManager,
-    unit_player_from_entity_query: F,
-) -> UnitMovementSelection
-where
-    F: Fn(&Entity) -> Option<(Entity, Player, Unit)>,
-{
-    let unit = get_singleton_component_on_grid_by_player(
-        cursor_grid_pos,
-        grid_manager,
-        unit_player_from_entity_query,
-    );
-    if let Some((entity, _, _)) = unit {
-        return UnitMovementSelection::Selected(entity);
-    }
-    UnitMovementSelection::NoPlayerUnitOnTile
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
