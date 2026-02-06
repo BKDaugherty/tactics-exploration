@@ -12,6 +12,7 @@ use crate::{
         skills::{ATTACK_SKILL_ID, Targeting},
     },
     enemy::behaviors::EnemyAiBehavior,
+    gameplay_effects::ActiveEffects,
     grid::{
         GridManager, GridManagerResource, GridPosition, GridPositionChangeResult,
         manhattan_distance,
@@ -42,18 +43,26 @@ pub fn begin_enemy_phase(
     mut commands: Commands,
     mut message_reader: MessageReader<PhaseMessage>,
     mut conductor: ResMut<EnemyTurnConductorResource>,
-    enemy_units: Query<(Entity, &Unit, &UnitDerivedStats), With<Enemy>>,
+    enemy_units: Query<(Entity, &Unit, &UnitDerivedStats, Option<&ActiveEffects>), With<Enemy>>,
 ) {
     for message in message_reader.read() {
         let PhaseMessageType::PhaseBegin(phase) = message.0;
         if phase == PlayerEnemyPhase::Enemy {
-            for (e, unit, stats) in enemy_units.iter() {
+            for (e, unit, stats, active_effects) in enemy_units.iter() {
                 // Clean up any potential stale references to Enemy Behaviors
                 commands
                     .entity(e)
                     .remove::<(ActiveEnemy, PlannedEnemyAction, EnemyActionInProgress)>();
 
                 if stats.downed() {
+                    continue;
+                }
+
+                // Skip stunned enemies — they lose their turn
+                if active_effects
+                    .map(|effects| effects.prevent_action() && effects.prevent_move())
+                    .unwrap_or(false)
+                {
                     continue;
                 }
 

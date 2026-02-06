@@ -244,6 +244,25 @@ pub fn check_for_active_effect_damage_on_turn_start<T: PhaseSystem<PlayerEnemyPh
     }
 }
 
+pub fn check_for_stun_on_turn_start<T: PhaseSystem<PlayerEnemyPhase>>(
+    mut message_reader: MessageReader<StartOfPhaseEffectsMessage>,
+    mut query: Query<(&ActiveEffects, &mut UnitPhaseResources), With<T::Marker>>,
+) {
+    for message in message_reader.read() {
+        if message.phase != T::OWNED_PHASE {
+            continue;
+        }
+
+        for (active_effects, mut phase_resources) in query.iter_mut() {
+            if active_effects.statuses().contains(&StatusTag::Stunned) {
+                phase_resources.action_points_left_in_phase = 0;
+                phase_resources.movement_points_left_in_phase = 0;
+                phase_resources.waited = true;
+            }
+        }
+    }
+}
+
 #[derive(Component)]
 struct PoisonDamageEntity;
 

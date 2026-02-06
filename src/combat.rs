@@ -1685,7 +1685,10 @@ pub mod skills {
                             advancing_event: SkillEvent::ProjectileImpact(SkillAnimationId(1)),
                         },
                         SkillStage {
-                            stage: SkillStageAction::Impact(vec![SkillActionIndex(0)]),
+                            stage: SkillStageAction::Impact(vec![
+                                SkillActionIndex(0),
+                                SkillActionIndex(1),
+                            ]),
                             advancing_event: SkillEvent::ProjectileImpact(SkillAnimationId(1)),
                         },
                     ],
