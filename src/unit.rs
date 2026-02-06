@@ -724,18 +724,43 @@ pub fn execute_unit_actions(
     mut commands: Commands,
     mut reader: MessageReader<UnitExecuteActionMessage>,
     mut command_completed_writer: MessageWriter<UnitActionCompletedMessage>,
+    active_effects_query: Query<&ActiveEffects>,
     // I don't love that I do this here since I do the other things out of band, but I don't
     // really need to wait for anything else to wait so :shrug:
     mut unit_phase_resources: Query<&mut UnitPhaseResources>,
 ) {
     for message in reader.read() {
+        let active_effects = active_effects_query.get(message.entity).ok();
+
         match &message.action {
             UnitExecuteAction::Move(valid_move) => {
+                if active_effects
+                    .map(|active_effects| active_effects.prevent_move())
+                    .unwrap_or_default()
+                {
+                    command_completed_writer.write(UnitActionCompletedMessage {
+                        unit: message.entity,
+                        action: UnitAction::Move,
+                    });
+                    continue;
+                }
+
                 commands
                     .entity(message.entity)
                     .insert(GridMovement::new(valid_move.path.clone(), 0.4));
             }
             UnitExecuteAction::Attack(attack_intent) => {
+                if active_effects
+                    .map(|active_effects| active_effects.prevent_action())
+                    .unwrap_or_default()
+                {
+                    command_completed_writer.write(UnitActionCompletedMessage {
+                        unit: message.entity,
+                        action: UnitAction::Attack,
+                    });
+                    continue;
+                }
+
                 commands.spawn((CombatActionMarker, attack_intent.clone()));
             }
             UnitExecuteAction::Wait => {
@@ -1402,7 +1427,14 @@ mod tests {
             PhaseMessage, UnitPhaseResources, check_should_advance_phase, init_phase_system,
             phase_ui::ShowBattleBannerMessage, prepare_for_phase,
         },
-        combat::skills::setup_skill_system,
+        combat::{
+            AttackIntent,
+            skills::{ATTACK_SKILL_ID, setup_skill_system},
+        },
+        gameplay_effects::{
+            ActiveEffects, Effect, EffectData, EffectDuration, EffectMetadata, EffectType,
+            StatusTag,
+        },
         grid::{
             self, GridManager, GridManagerResource, GridMovement, GridPosition,
             sync_grid_positions_to_manager,
@@ -1410,10 +1442,10 @@ mod tests {
         grid_cursor,
         player::{self, Player, PlayerGameStates, PlayerInputAction, PlayerState},
         unit::{
-            PLAYER_TEAM, StatContainer, StatType, StatValue, Unit, UnitActionCompletedMessage,
-            UnitBaseStats, UnitDerivedStats, UnitExecuteActionMessage, execute_unit_actions,
-            handle_unit_cursor_actions, handle_unit_ui_command, overlay::OverlaysMessage,
-            unlock_cursor_after_unit_ui_command,
+            CombatActionMarker, PLAYER_TEAM, StatContainer, StatType, StatValue, Unit, UnitAction,
+            UnitActionCompletedMessage, UnitBaseStats, UnitDerivedStats, UnitExecuteAction,
+            UnitExecuteActionMessage, ValidMove, execute_unit_actions, handle_unit_cursor_actions,
+            handle_unit_ui_command, overlay::OverlaysMessage, unlock_cursor_after_unit_ui_command,
         },
     };
     use bevy::{
@@ -1423,6 +1455,7 @@ mod tests {
         audio::AudioPlugin,
         ecs::system::RunSystemOnce,
         input::InputPlugin,
+        prelude::{Entity, MessageReader, Query},
         time::Time,
         transform::components::Transform,
     };
@@ -1597,6 +1630,93 @@ mod tests {
 
         // Assert GridMovement component is removed
         assert!(app.world().get::<GridMovement>(unit_entity).is_none());
+
+        Ok(())
+    }
+
+    fn stunned_effect(turn_count: u8) -> ActiveEffects {
+        ActiveEffects {
+            effects: vec![Effect {
+                metadata: EffectMetadata {
+                    target: Entity::PLACEHOLDER,
+                    source: None,
+                },
+                data: EffectData {
+                    effect_type: EffectType::StatusInfliction(StatusTag::Stunned),
+                    duration: EffectDuration::TurnCount(turn_count),
+                },
+            }],
+        }
+    }
+
+    #[test]
+    fn test_execute_unit_actions_blocks_stunned_move_and_attack() -> anyhow::Result<()> {
+        let mut app = App::new();
+        app.add_message::<UnitExecuteActionMessage>();
+        app.add_message::<UnitActionCompletedMessage>();
+
+        let stunned_unit = app
+            .world_mut()
+            .spawn((
+                stunned_effect(2),
+                UnitPhaseResources {
+                    movement_points_left_in_phase: 3,
+                    action_points_left_in_phase: 1,
+                    waited: false,
+                },
+                GridPosition { x: 2, y: 2 },
+            ))
+            .id();
+
+        let defender = app.world_mut().spawn_empty().id();
+
+        app.world_mut().write_message(UnitExecuteActionMessage {
+            entity: stunned_unit,
+            action: UnitExecuteAction::Move(ValidMove {
+                target: GridPosition { x: 3, y: 2 },
+                path: vec![GridPosition { x: 2, y: 2 }, GridPosition { x: 3, y: 2 }],
+                movement_used: 1,
+            }),
+        });
+
+        app.world_mut().write_message(UnitExecuteActionMessage {
+            entity: stunned_unit,
+            action: UnitExecuteAction::Attack(AttackIntent {
+                attacker: stunned_unit,
+                defender,
+                skill: ATTACK_SKILL_ID,
+            }),
+        });
+
+        app.world_mut()
+            .run_system_once(execute_unit_actions)
+            .map_err(|e| anyhow::anyhow!("Failed to run execute_unit_actions: {:?}", e))?;
+
+        assert!(app.world().get::<GridMovement>(stunned_unit).is_none());
+
+        let combat_marker_count = app
+            .world_mut()
+            .run_system_once(|query: Query<&CombatActionMarker>| query.iter().count())
+            .map_err(|e| anyhow::anyhow!("Failed to inspect combat markers: {:?}", e))?;
+        assert_eq!(combat_marker_count, 0);
+
+        let completed_actions = app
+            .world_mut()
+            .run_system_once(|mut reader: MessageReader<UnitActionCompletedMessage>| {
+                reader
+                    .read()
+                    .map(|m| (m.unit, m.action))
+                    .collect::<Vec<_>>()
+            })
+            .map_err(|e| anyhow::anyhow!("Failed to read action completion messages: {:?}", e))?;
+
+        assert_eq!(
+            completed_actions,
+            vec![
+                (stunned_unit, UnitAction::Move),
+                (stunned_unit, UnitAction::Attack),
+            ]
+        );
 
         Ok(())
     }

@@ -36,8 +36,9 @@ use crate::{
     battle_phase::{
         PhaseMessage, StartOfPhaseEffectsMessage, TurnStartMessage,
         advance_after_start_of_phase_effects, check_for_active_effect_damage_on_turn_start,
-        check_should_advance_phase, decrement_turn_count_effects_on_turn_start, init_phase_system,
-        is_enemy_phase, is_running_enemy_phase, is_running_player_phase,
+        check_for_stun_on_turn_start, check_should_advance_phase,
+        decrement_turn_count_effects_on_turn_start, init_phase_system, is_enemy_phase,
+        is_running_enemy_phase, is_running_player_phase,
         phase_ui::{
             BattlePhaseMessageComplete, ShowBattleBannerMessage, banner_animation_system,
             spawn_banner_system,
@@ -216,6 +217,8 @@ pub fn battle_plugin(app: &mut App) {
                 decrement_turn_count_effects_on_turn_start::<Enemy>,
                 check_for_active_effect_damage_on_turn_start::<Player>,
                 check_for_active_effect_damage_on_turn_start::<Enemy>,
+                check_for_stun_on_turn_start::<Player>,
+                check_for_stun_on_turn_start::<Enemy>,
                 advance_after_start_of_phase_effects,
                 spawn_banner_system,
                 banner_animation_system,
