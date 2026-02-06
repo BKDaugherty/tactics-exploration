@@ -154,18 +154,39 @@ pub fn check_should_advance_phase<T: PhaseSystem<PlayerEnemyPhase>>(
 pub fn prepare_for_phase<T: PhaseSystem<PlayerEnemyPhase>>(
     phase_manager: ResMut<PhaseManager>,
     mut message_reader: MessageReader<PhaseMessage>,
-    mut query: Query<(&UnitDerivedStats, &mut UnitPhaseResources), With<T::Marker>>,
+    mut query: Query<
+        (&UnitDerivedStats, &mut UnitPhaseResources, &crate::unit::Unit, &GridPosition, &ActiveEffects),
+        With<T::Marker>,
+    >,
     mut battle_phase_change_writer: MessageWriter<ShowBattleBannerMessage>,
 ) {
     for message in message_reader.read() {
         let PhaseMessageType::PhaseBegin(phase) = message.0;
 
         if phase == T::OWNED_PHASE && phase_manager.phase_state == PhaseState::Initializing {
-            for (unit, mut phase_resources) in query.iter_mut() {
+            for (unit, mut phase_resources, unit_comp, grid_pos, effects) in query.iter_mut() {
                 phase_resources.action_points_left_in_phase = 1;
                 phase_resources.movement_points_left_in_phase =
                     unit.stats.stat(StatType::Movement).0 as u32;
                 phase_resources.waited = false;
+
+                let statuses = effects.statuses();
+                let status_str = if statuses.is_empty() {
+                    "none".to_string()
+                } else {
+                    format!("{:?}", statuses)
+                };
+                info!(
+                    "[DEBUG] Phase {:?} start — unit=\"{}\" pos=({},{}) HP={}/{} AP=1 Move={} statuses={}",
+                    T::OWNED_PHASE,
+                    unit_comp.name,
+                    grid_pos.x,
+                    grid_pos.y,
+                    unit.stats.stat(StatType::Health).0,
+                    unit.stats.stat(StatType::MaxHealth).0,
+                    unit.stats.stat(StatType::Movement).0,
+                    status_str,
+                );
             }
 
             battle_phase_change_writer.write(ShowBattleBannerMessage {
@@ -178,20 +199,26 @@ pub fn prepare_for_phase<T: PhaseSystem<PlayerEnemyPhase>>(
 // TODO: It feels like I should apply poison damage here right?
 pub fn decrement_turn_count_effects_on_turn_start<T: PhaseSystem<PlayerEnemyPhase>>(
     mut message_reader: MessageReader<TurnStartMessage>,
-    mut query: Query<&mut ActiveEffects, With<T::Marker>>,
+    mut query: Query<(&mut ActiveEffects, &crate::unit::Unit), With<T::Marker>>,
 ) {
     for message in message_reader.read() {
         if message.phase == T::OWNED_PHASE {
-            for mut active_effects in query.iter_mut() {
+            for (mut active_effects, unit) in query.iter_mut() {
                 for effect in active_effects.effects.iter_mut() {
                     let EffectDuration::TurnCount(turn_count) = &mut effect.data.duration else {
                         continue;
                     };
 
+                    let old = *turn_count;
                     *turn_count = turn_count.saturating_sub(1);
+                    info!(
+                        "[DEBUG] Effect on \"{}\" — {:?} turns {} → {}",
+                        unit.name, effect.data.effect_type, old, *turn_count
+                    );
                 }
 
                 // TODO: Do we need an event here?
+                let before_count = active_effects.effects.len();
                 active_effects.effects.retain(|t| {
                     if let EffectDuration::TurnCount(turn_count) = t.data.duration {
                         turn_count != 0
@@ -199,6 +226,13 @@ pub fn decrement_turn_count_effects_on_turn_start<T: PhaseSystem<PlayerEnemyPhas
                         true
                     }
                 });
+                let removed = before_count - active_effects.effects.len();
+                if removed > 0 {
+                    info!(
+                        "[DEBUG] {} effect(s) expired and removed from \"{}\"",
+                        removed, unit.name
+                    );
+                }
             }
         }
     }
