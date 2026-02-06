@@ -43,6 +43,11 @@ fn main() {
         .init_persistent_resource::<SaveFiles>()
         .init_persistent_resource::<SoundSettings>()
         .init_state::<GameState>()
+        .add_systems(OnEnter(GameState::Initializing), log_game_state_enter)
+        .add_systems(OnEnter(GameState::MainMenu), log_game_state_enter)
+        .add_systems(OnEnter(GameState::JoinGame), log_game_state_enter)
+        .add_systems(OnEnter(GameState::Battle), log_game_state_enter)
+        .add_systems(OnEnter(GameState::BattleResolution), log_game_state_enter)
         .add_systems(
             Startup,
             (
@@ -82,6 +87,10 @@ fn start_music(
     sound_settings: Res<SoundSettings>,
 ) {
     sounds.start_music(&mut commands, &sound_settings, Music::BattleMusic);
+}
+
+fn log_game_state_enter(state: Res<State<GameState>>) {
+    info!("[GAME_STATE] entered {:?}", state.get());
 }
 
 fn boot_game(mut commands: Commands, mut game_state: ResMut<NextState<GameState>>) {

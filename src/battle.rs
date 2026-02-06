@@ -59,7 +59,7 @@ use crate::{
         resolve_enemy_action, select_next_enemy,
     },
     grid::{self, GridManager, GridPosition},
-    grid_cursor,
+    grid_cursor::{self, Cursor},
     interactable::{
         InteractionEnabled, ObtainableItem, TreasureChest, handle_interactions,
         update_player_ui_available_options,
@@ -239,6 +239,7 @@ pub fn battle_plugin(app: &mut App) {
                 grid::sync_grid_position_to_transform,
                 grid::sync_grid_positions_to_manager,
                 grid_cursor::handle_cursor_movement,
+                log_cursor_position,
                 // Unit Movement + Overlay UI
                 handle_overlays_events_system,
                 handle_unit_ui_command,
@@ -634,6 +635,31 @@ pub fn load_battle_asset_resources(
     });
 
     startup_load_tinytactics_assets(&mut commands, &asset_server, &mut texture_atlas_layouts);
+}
+
+/// Logs the cursor's grid position whenever it actually changes, so play-test
+/// scripts can verify cursor location via `[CURSOR_POS]` console markers.
+///
+/// Uses a `Local` to track the last emitted position per player, because
+/// `Changed<GridPosition>` fires every frame due to DerefMut in
+/// `handle_cursor_movement` even when the position stays the same.
+pub fn log_cursor_position(
+    cursor_query: Query<(&GridPosition, &Player), With<Cursor>>,
+    mut last_positions: Local<std::collections::HashMap<u32, GridPosition>>,
+) {
+    for (pos, player) in cursor_query.iter() {
+        let pid = player.id();
+        let changed = last_positions
+            .get(&pid)
+            .map_or(true, |prev| prev != pos);
+        if changed {
+            last_positions.insert(pid, *pos);
+            info!(
+                "[CURSOR_POS] player={} x={} y={}",
+                pid, pos.x, pos.y
+            );
+        }
+    }
 }
 
 pub fn spawn_background_gradient(mut commands: Commands, asset_server: Res<AssetServer>) {
