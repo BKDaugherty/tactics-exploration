@@ -385,7 +385,6 @@ fn main_menu_action(
                 app_exit_writer.write(AppExit::Success);
             }
             MainMenuButtonAction::PlayDemo => {
-                info!("Got signal to JoinGame!");
                 game_state.set(GameState::JoinGame);
             }
             MainMenuButtonAction::OpenSettings => {
