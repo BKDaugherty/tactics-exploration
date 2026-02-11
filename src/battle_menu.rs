@@ -182,11 +182,11 @@ pub mod battle_menu_ui_definition {
                     align_content: AlignContent::Center,
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
+                    border_radius: BorderRadius::all(percent(20)),
                     ..Default::default()
                 },
                 BackgroundColor(UI_MENU_BACKGROUND),
                 ObjectiveUi {},
-                BorderRadius::all(percent(20)),
                 children![(
                     // Lol
                     Text("Objective:    Defeat all Enemies".to_string()),
@@ -241,9 +241,9 @@ pub mod battle_menu_ui_definition {
                         padding: UiRect::bottom(percent(2)),
                         justify_content: JustifyContent::SpaceEvenly,
                         flex_direction: FlexDirection::Column,
+                        border_radius: BorderRadius::all(percent(20)),
                         ..Default::default()
                     },
-                    BorderRadius::all(percent(20)),
                 ))
                 .id();
 
@@ -306,6 +306,7 @@ pub mod battle_menu_ui_definition {
                             left: percent(5),
                             ..Default::default()
                         },
+                        border_radius: BorderRadius::all(percent(20)),
                         ..Default::default()
                     },
                     player,
@@ -316,7 +317,6 @@ pub mod battle_menu_ui_definition {
                         ap_text,
                         name_text,
                     },
-                    BorderRadius::all(percent(20)),
                 ))
                 .id();
 
@@ -331,10 +331,10 @@ pub mod battle_menu_ui_definition {
                         justify_content: JustifyContent::SpaceEvenly,
                         align_items: AlignItems::FlexStart,
                         padding: UiRect::all(percent(1)),
+                        border_radius: BorderRadius::all(percent(20)),
                         ..Default::default()
                     },
                     BackgroundColor(UI_MENU_BACKGROUND),
-                    BorderRadius::all(percent(20)),
                     player,
                     SkillMenu {},
                     GameMenuLatch::default(),
@@ -388,6 +388,7 @@ pub mod battle_menu_ui_definition {
                         justify_content: JustifyContent::SpaceEvenly,
                         align_items: AlignItems::FlexStart,
                         padding: UiRect::all(percent(1)),
+                        border_radius: BorderRadius::all(percent(20)),
                         ..Default::default()
                     },
                     GameMenuController {
@@ -396,7 +397,6 @@ pub mod battle_menu_ui_definition {
                     GameMenuLatch::default(),
                     menu,
                     BattlePlayerUI {},
-                    BorderRadius::all(percent(20)),
                     player,
                     BackgroundColor(UI_MENU_BACKGROUND),
                     PlayerBattleMenu,
@@ -415,10 +415,10 @@ pub mod battle_menu_ui_definition {
                         justify_content: JustifyContent::SpaceEvenly,
                         align_items: AlignItems::FlexStart,
                         padding: UiRect::all(percent(1)),
+                        border_radius: BorderRadius::all(percent(20)),
                         ..Default::default()
                     },
                     BackgroundColor(UI_MENU_BACKGROUND),
-                    BorderRadius::all(percent(20)),
                     player,
                     SkillsFilteredByCategoryMenu {},
                     GameMenuLatch::default(),
@@ -472,10 +472,10 @@ pub mod battle_menu_ui_definition {
                         flex_direction: FlexDirection::Column,
                         justify_content: JustifyContent::SpaceEvenly,
                         align_items: AlignItems::FlexStart,
+                        border_radius: BorderRadius::all(percent(20)),
                         ..Default::default()
                     },
                     BackgroundColor(UI_MENU_BACKGROUND),
-                    BorderRadius::all(percent(20)),
                     player,
                     UnitViewerScreen {
                         name: unit_view_name_text,
@@ -547,7 +547,6 @@ pub mod battle_menu_ui_definition {
 pub fn battle_ui_button(fonts: &FontResource, action: BattleMenuAction, text: &str) -> impl Bundle {
     (
         BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
-        BorderRadius::all(percent(20)),
         Button,
         Node {
             width: percent(80),
@@ -558,6 +557,7 @@ pub fn battle_ui_button(fonts: &FontResource, action: BattleMenuAction, text: &s
             align_self: AlignSelf::Center,
             border: UiRect::all(percent(0.5)),
             padding: UiRect::left(percent(1)),
+            border_radius: BorderRadius::all(percent(20)),
             ..Default::default()
         },
         action,

@@ -369,9 +369,9 @@ pub mod phase_ui {
                     height: percent(20),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
+                    border_radius: BorderRadius::all(percent(20)),
                     ..Default::default()
                 },
-                BorderRadius::all(percent(20)),
                 BackgroundColor(Color::linear_rgba(0.7, 0.7, 0.7, 0.8)),
                 children![(
                     TextColor(color),

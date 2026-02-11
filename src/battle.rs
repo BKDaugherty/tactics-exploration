@@ -380,7 +380,6 @@ pub fn spawn_battle_resolution_ui(
     let ui_container = commands
         .spawn((
             Name::new("BattleResolutionUI"),
-            BorderRadius::all(percent(20)),
             Node {
                 width: percent(100),
                 height: percent(100),
@@ -388,6 +387,7 @@ pub fn spawn_battle_resolution_ui(
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 align_content: AlignContent::SpaceEvenly,
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             BattleEntity {},
@@ -404,10 +404,10 @@ pub fn spawn_battle_resolution_ui(
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::SpaceEvenly,
                 padding: UiRect::horizontal(percent(2)),
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             BackgroundColor(UI_MENU_BACKGROUND),
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -417,6 +417,7 @@ pub fn spawn_battle_resolution_ui(
         border: UiRect::all(px(2)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
+        border_radius: BorderRadius::all(percent(20)),
         ..Default::default()
     };
 
@@ -441,9 +442,9 @@ pub fn spawn_battle_resolution_ui(
                 padding: UiRect::top(percent(1)),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
-            BorderRadius::all(percent(20)),
             BackgroundColor(UI_MENU_BACKGROUND),
             children![
                 (
@@ -472,7 +473,6 @@ pub fn spawn_battle_resolution_ui(
         .spawn((
             Name::new("MainMenuButton"),
             Button,
-            BorderRadius::all(percent(20)),
             button_node.clone(),
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BattleResolutionMenuAction::MainMenu,
@@ -488,7 +488,6 @@ pub fn spawn_battle_resolution_ui(
         .spawn((
             Name::new("QuitButton"),
             Button,
-            BorderRadius::all(percent(20)),
             button_node.clone(),
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BattleResolutionMenuAction::Quit,

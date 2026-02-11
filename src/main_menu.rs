@@ -129,6 +129,7 @@ fn build_settings_menu(
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
         border: UiRect::all(percent(0.5)),
+        border_radius: BorderRadius::all(percent(20)),
         ..default()
     };
 
@@ -152,7 +153,6 @@ fn build_settings_menu(
                 GlobalVolumeSelector,
                 button_text_font.clone()
             )],
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -169,7 +169,6 @@ fn build_settings_menu(
                 MusicVolumeSelector,
                 button_text_font.clone()
             )],
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -182,7 +181,6 @@ fn build_settings_menu(
             SfxVolumeSelector,
             selector,
             children![(Text::default(), SfxVolumeSelector, button_text_font.clone())],
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -190,7 +188,6 @@ fn build_settings_menu(
     let save_settings_button = commands
         .spawn((
             Button,
-            BorderRadius::all(percent(20)),
             button_node.clone(),
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             MainMenuButtonAction::SaveSettings(SaveSettingsSubmit {
@@ -221,10 +218,10 @@ fn build_settings_menu(
                 align_items: AlignItems::Center,
                 width: percent(40),
                 height: percent(85),
+                border_radius: BorderRadius::all(percent(20)),
                 ..default()
             },
             BackgroundColor(UI_MENU_BACKGROUND),
-            BorderRadius::all(percent(20)),
             children![(
                 Text::new("Settings"),
                 TextFont {
@@ -275,6 +272,7 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
         margin: UiRect::all(px(20)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
+        border_radius: BorderRadius::all(percent(20)),
         ..default()
     };
 
@@ -287,7 +285,6 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
     let play_button = commands
         .spawn((
             Button,
-            BorderRadius::all(percent(20)),
             button_node.clone(),
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             MainMenuButtonAction::PlayDemo,
@@ -302,7 +299,6 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
     let settings_button = commands
         .spawn((
             Button,
-            BorderRadius::all(percent(20)),
             button_node.clone(),
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             MainMenuButtonAction::OpenSettings,
@@ -318,7 +314,6 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
         .spawn((
             Button,
             button_node.clone(),
-            BorderRadius::all(percent(20)),
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             MainMenuButtonAction::Quit,
             children![(
@@ -336,10 +331,10 @@ fn main_menu_setup(mut commands: Commands, font_resource: Res<FontResource>) {
         Node {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
+            border_radius: BorderRadius::all(percent(20)),
             ..default()
         },
         BackgroundColor(UI_MENU_BACKGROUND),
-        BorderRadius::all(percent(20)),
         children![(
             Text::new("Couch Tactics"),
             TextFont {
