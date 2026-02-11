@@ -197,10 +197,10 @@ fn add_player_ui(
             Node {
                 height: percent(100),
                 width: percent(24.),
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             BackgroundColor(UI_MENU_BACKGROUND),
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -211,6 +211,7 @@ fn add_player_ui(
                 width: percent(80),
                 height: percent(10),
                 border: UiRect::all(percent(0.5)),
+                border_radius: BorderRadius::all(percent(20)),
                 ..default()
             },
             TextInput,
@@ -227,7 +228,6 @@ fn add_player_ui(
                 retain_on_submit: true,
                 ..default()
             },
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -257,6 +257,7 @@ fn add_player_ui(
                 align_items: AlignItems::Center,
                 align_content: AlignContent::SpaceEvenly,
                 flex_direction: FlexDirection::Column,
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             HorizontalSelector::new(&[
@@ -289,7 +290,6 @@ fn add_player_ui(
                     font_settings.clone()
                 )
             ],
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -310,6 +310,7 @@ fn add_player_ui(
                 align_items: AlignItems::Center,
                 align_content: AlignContent::SpaceEvenly,
                 flex_direction: FlexDirection::Column,
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             HorizontalSelector::new(&[
@@ -322,7 +323,6 @@ fn add_player_ui(
                 SaveFileColorText,
                 font_settings.clone()
             ),],
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -338,6 +338,7 @@ fn add_player_ui(
                 align_items: AlignItems::Center,
 
                 border: UiRect::all(percent(0.5)),
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             children![(Text::new("Create Character"), font_settings.clone())],
@@ -347,7 +348,6 @@ fn add_player_ui(
                 job_selector_entity: character_job_selector,
                 color_selector_entity: character_color_selector,
             }),
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -370,6 +370,7 @@ fn add_player_ui(
                 justify_content: JustifyContent::SpaceEvenly,
                 align_content: AlignContent::SpaceEvenly,
                 align_items: AlignItems::Center,
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             GameMenuController {
@@ -379,7 +380,6 @@ fn add_player_ui(
             PlayerGameMenu,
             new_character_menu,
             BackgroundColor(UI_MENU_BACKGROUND),
-            BorderRadius::all(percent(20)),
         ))
         .add_children(&[
             name_input_id,
@@ -401,13 +401,13 @@ fn add_player_ui(
                 align_content: AlignContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(percent(0.5)),
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             children![(Text::new("New Character"), font_settings.clone())],
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BorderColor::all(Color::NONE),
             UiCommands::OpenNestedScreen(new_character_screen),
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -422,13 +422,13 @@ fn add_player_ui(
                 align_content: AlignContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(percent(0.5)),
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             children![(Text::new("Load Character"), font_settings.clone())],
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BorderColor::all(Color::NONE),
             UiCommands::OpenLoadCharacterScreen,
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -443,13 +443,13 @@ fn add_player_ui(
                 align_content: AlignContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(percent(0.5)),
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             children![(Text::new("(DEV) Delete All Data"), font_settings.clone())],
             BackgroundColor(SELECTABLE_BUTTON_BACKGROUND),
             BorderColor::all(Color::NONE),
             UiCommands::ErasePkvData,
-            BorderRadius::all(percent(20)),
         ))
         .id();
     menu.push_buttons_to_stack(&[
@@ -994,6 +994,7 @@ fn build_unit_preview_screen(
                 align_items: AlignItems::Center,
                 align_content: AlignContent::SpaceEvenly,
                 flex_direction: FlexDirection::Column,
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             BackgroundColor(unit_save.save_file_key.color.color()),
@@ -1004,7 +1005,6 @@ fn build_unit_preview_screen(
                     ..Default::default()
                 }
             )],
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -1039,6 +1039,7 @@ fn build_unit_preview_screen(
                 align_items: AlignItems::Center,
                 align_content: AlignContent::SpaceEvenly,
                 flex_direction: FlexDirection::Column,
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             ReadyButtonMarker,
@@ -1049,7 +1050,6 @@ fn build_unit_preview_screen(
                     ..Default::default()
                 }
             )],
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -1067,6 +1067,7 @@ fn build_unit_preview_screen(
                 align_items: AlignItems::Center,
                 align_content: AlignContent::SpaceEvenly,
                 display: Display::None,
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             BackgroundColor(UI_MENU_BACKGROUND),
@@ -1081,7 +1082,6 @@ fn build_unit_preview_screen(
             },
             menu,
             UnitPreviewScreen,
-            BorderRadius::all(percent(20)),
         ))
         .add_children(&[unit_name, unit_preview_image, ready_button])
         .id();
@@ -1114,6 +1114,7 @@ fn build_load_file_screen(
                 align_content: AlignContent::SpaceEvenly,
                 display: Display::None,
                 padding: UiRect::top(percent(1.)),
+                border_radius: BorderRadius::all(percent(20)),
                 ..Default::default()
             },
             BackgroundColor(UI_MENU_BACKGROUND),
@@ -1123,7 +1124,6 @@ fn build_load_file_screen(
                 players: HashSet::from([player]),
             },
             GameMenuLatch::default(),
-            BorderRadius::all(percent(20)),
         ))
         .id();
 
@@ -1152,6 +1152,7 @@ fn build_load_file_screen(
                     align_items: AlignItems::Center,
                     align_content: AlignContent::SpaceEvenly,
                     flex_direction: FlexDirection::Column,
+                    border_radius: BorderRadius::all(percent(20)),
                     ..Default::default()
                 },
                 BackgroundColor(save_file_key.color.color()),
@@ -1163,7 +1164,6 @@ fn build_load_file_screen(
                         ..Default::default()
                     }
                 )],
-                BorderRadius::all(percent(20)),
             ))
             .id();
         load_menu.push_button_to_stack(button);
