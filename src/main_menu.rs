@@ -23,10 +23,7 @@ use crate::{
 
 pub fn main_menu_plugin(app: &mut App) {
     app.add_plugins(InputDispatchPlugin)
-        .add_systems(
-            OnEnter(GameState::MainMenu),
-            (main_menu_setup, main_menu_initialized).chain(),
-        )
+        .add_systems(OnEnter(GameState::MainMenu), main_menu_setup)
         .add_systems(
             Update,
             (
@@ -64,10 +61,6 @@ enum MainMenuButtonAction {
 
 #[derive(Component)]
 pub struct MainMenuMarker;
-
-fn main_menu_initialized(mut game_state: ResMut<NextState<GameState>>) {
-    game_state.set(GameState::MainMenu);
-}
 
 #[derive(Component)]
 pub struct GlobalVolumeSelector;
