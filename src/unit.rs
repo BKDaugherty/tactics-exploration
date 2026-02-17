@@ -14,7 +14,8 @@ use crate::assets::sound_resolvers::Voice;
 use crate::assets::sounds::{SoundManagerParam, UiSound, VoiceId};
 use crate::assets::sprite_db::SpriteDB;
 use crate::battle::{
-    BattleEntity, Enemy, UnitSelectionBackMessage, UnitSelectionMessage, UnitUiCommandMessage,
+    BattleEntity, Enemy, UnitCommand, UnitSelectionBackMessage, UnitSelectionMessage,
+    UnitUiCommandMessage,
 };
 use crate::battle_phase::UnitPhaseResources;
 use crate::combat::AttackIntent;
@@ -567,6 +568,11 @@ pub fn unlock_cursor_after_unit_ui_command(
     cursor_query: Query<(Entity, &Player), With<LockedOn>>,
 ) {
     for message in unit_command_message.read() {
+        // Only unlock cursor if the player needs it to perform the command.
+        if matches!(message.command, UnitCommand::Wait) {
+            continue;
+        }
+
         for (e, cursor_player) in cursor_query.iter() {
             if *cursor_player != message.player {
                 continue;
@@ -863,40 +869,10 @@ pub fn handle_unit_cursor_actions(
                 continue;
             };
 
-            // If the cursor is idle, and there's a unit at the cursor position,
-            // generate overlays using that unit's movement
+            // If the cursor is "idle" while viewing the map
+            // and the player presses back, go back to the UI Menu.
             if player_state.cursor_state == player::PlayerCursorState::Idle {
-                // TODO: We don't need this anymore probably
-                if action_state.just_pressed(&PlayerInputAction::Select) {
-                    let selection = select_unit_for_movement(
-                        &cursor_grid_pos,
-                        &grid_manager_res.grid_manager,
-                        |entity| {
-                            // Get the first Unit owned by this player, and then clone the values to satisfy lifetimes.
-                            let queried = player_unit_query
-                                .get(*entity)
-                                .ok()
-                                .filter(|(_, p, _, _)| **p == *player);
-                            queried.map(|(a, b, c, _)| (a, *b, c.clone()))
-                        },
-                    );
-
-                    match selection {
-                        UnitMovementSelection::Selected(entity) => {
-                            unit_selection_message.write(UnitSelectionMessage {
-                                entity,
-                                player: *player,
-                            });
-
-                            commands.entity(cursor_entity).insert(LockedOn {});
-                            sounds.play_ui_sound(&mut commands, UiSound::OpenMenu);
-                        }
-                        UnitMovementSelection::NoPlayerUnitOnTile => {
-                            sounds.play_ui_sound(&mut commands, UiSound::Error);
-                            warn!("Selected tile with no player unit");
-                        }
-                    }
-                } else if action_state.just_pressed(&PlayerInputAction::Deselect) {
+                if action_state.just_pressed(&PlayerInputAction::Deselect) {
                     let Some((controlled_unit, unit_pos)) = player_unit_query
                         .iter()
                         .find(|t| t.1 == player)
