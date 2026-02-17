@@ -131,6 +131,10 @@ impl ActiveEffects {
                     }
                 }
                 if doesnt_already_have_status {
+                    info!(
+                        "[DEBUG] Status {:?} applied with duration {:?}",
+                        status_tag, effect.data.duration
+                    );
                     self.effects.push(effect);
                 }
             }
