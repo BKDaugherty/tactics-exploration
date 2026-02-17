@@ -150,6 +150,7 @@ pub fn plan_enemy_action(
         (
             Entity,
             &Unit,
+            &UnitDerivedStats,
             &UnitPhaseResources,
             &EnemyAiBehavior,
             &GridPosition,
@@ -162,7 +163,11 @@ pub fn plan_enemy_action(
     unit_query_with_position: Query<(Entity, &Unit, &UnitDerivedStats, &GridPosition)>,
 ) {
     // There should only be at most one ActiveEnemy but :shrug:
-    for (enemy, enemy_unit, resources, behavior, enemy_pos) in query {
+    for (enemy, enemy_unit, stats, resources, behavior, enemy_pos) in query {
+        if stats.downed() {
+            commands.entity(enemy).remove::<ActiveEnemy>();
+        }
+
         // Plan the unit's action
         info!("Planning action for {:?}", enemy_unit.name);
         let planned_action = match &behavior.behavior {
