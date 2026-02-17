@@ -565,14 +565,13 @@ fn wait_for_joining_player(
     players_ui_container: Single<Entity, With<PlayersUIContainer>>,
 ) {
     for (gamepad_entity, gamepad) in gamepads.iter() {
-        if gamepad.just_pressed(GamepadButton::LeftTrigger)
-            && gamepad.just_pressed(GamepadButton::RightTrigger)
+        if gamepad.pressed(GamepadButton::LeftTrigger)
+            && gamepad.pressed(GamepadButton::RightTrigger)
         {
             if joined_players.0.iter().any(|(_, v)| match v.controller {
                 PlayerController::Gamepad(e) => e == gamepad_entity,
                 _ => false,
             }) {
-                warn!("Gamepad {:?} is already registered!", gamepad_entity);
                 continue;
             }
 
