@@ -5,10 +5,10 @@ use crate::{
     animation::{TinytacticsAssets, animation_db::AnimationDB},
     assets::sprite_db::SpriteDB,
     battle::populate_room,
-    grid::GridPosition,
+    interactable::{Interactable, InteractionMenuLabel},
     map_generation::{MapParams, setup_map_data_from_params},
-    player::{Player, RegisteredBattlePlayers},
-    unit::Unit,
+    player::RegisteredBattlePlayers,
+    unit::{UnitExecuteAction, UnitExecuteActionMessage},
 };
 
 #[derive(SubStates, Clone, PartialEq, Eq, Hash, Debug, Default, Reflect)]
@@ -34,6 +34,9 @@ pub struct DungeonManager {
 }
 
 #[derive(Component)]
+#[require(Interactable, InteractionMenuLabel {
+    label: "Advance to Next Room"
+})]
 pub struct Teleporter {
     pub current_room: RoomId,
     pub next_room: RoomId,
@@ -96,19 +99,28 @@ pub fn unload_room(
     next_state.set(DungeonState::LoadRoom)
 }
 
-pub fn check_player_on_teleporter(
-    teleporter_query: Query<(&Teleporter, &GridPosition)>,
-    unit_query: Query<&GridPosition, (With<Unit>, With<Player>)>,
+/// Watches for [`UnitExecuteActionMessage`]s that use [`Teleporter`]s.
+///
+/// When one is seen, updates the [`DungeonManager`] accordingly, and unloads the current room, and loads the next room.
+pub fn handle_teleporter_interaction(
+    mut reader: MessageReader<UnitExecuteActionMessage>,
+    teleporter_query: Query<&Teleporter>,
     mut next_state: ResMut<NextState<DungeonState>>,
     mut dungeon_manager: ResMut<DungeonManager>,
 ) {
-    for (teleporter, teleporter_position) in teleporter_query {
-        for player_position in unit_query {
-            if player_position == teleporter_position {
-                // unload_room
-                dungeon_manager.current_room = teleporter.next_room;
-                next_state.set(DungeonState::UnloadRoom)
-            }
-        }
+    for message in reader.read() {
+        let UnitExecuteAction::Interact {
+            interactable_entity,
+        } = message.action
+        else {
+            continue;
+        };
+
+        let Some(teleporter) = teleporter_query.get(interactable_entity).ok() else {
+            continue;
+        };
+
+        dungeon_manager.current_room = teleporter.next_room;
+        next_state.set(DungeonState::UnloadRoom)
     }
 }

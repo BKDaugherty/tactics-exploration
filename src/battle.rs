@@ -54,7 +54,7 @@ use crate::{
         spawn_damage_text,
     },
     dungeon::{
-        DungeonEntity, DungeonState, RoomId, Teleporter, check_player_on_teleporter,
+        DungeonEntity, DungeonState, RoomId, Teleporter, handle_teleporter_interaction,
         init_dungeon_manager, load_room, unload_room,
     },
     enemy::{
@@ -233,7 +233,7 @@ pub fn battle_plugin(app: &mut App) {
                 spawn_banner_system,
                 banner_animation_system,
                 start_phase,
-                check_player_on_teleporter,
+                handle_teleporter_interaction,
             )
                 .run_if(in_state(DungeonState::InBattle))
                 .chain()
@@ -708,22 +708,18 @@ pub fn populate_room(
     let enemy_2_grid_pos = GridPosition { x: 4, y: 2 };
     let enemy_3_grid_pos = GridPosition { x: 4, y: 4 };
 
-    commands.spawn((
-        Teleporter {
-            current_room: room_id,
-            next_room: RoomId(room_id.0 + 1),
-        },
-        map_data.bridge_end_locations[0],
-        DungeonEntity,
-    ));
-    commands.spawn((
-        Teleporter {
-            current_room: room_id,
-            next_room: RoomId(room_id.0 + 1),
-        },
-        map_data.bridge_end_locations[1],
-        DungeonEntity,
-    ));
+    for loc in map_data.bridge_end_locations {
+        commands.spawn((
+            Teleporter {
+                current_room: room_id,
+                next_room: RoomId(room_id.0 + 1),
+            },
+            // TODO: Add `InteractionEnabled` only when the room is clear.
+            InteractionEnabled,
+            loc,
+            DungeonEntity,
+        ));
+    }
 
     commands.insert_resource(grid::GridManagerResource {
         grid_manager: GridManager::new(13, 13),

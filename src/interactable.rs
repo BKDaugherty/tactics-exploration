@@ -28,7 +28,7 @@ pub struct InteractionEnabled;
 /// A label for the Interaction to be displayed on the Menu for the player.
 #[derive(Component)]
 pub struct InteractionMenuLabel {
-    label: &'static str,
+    pub label: &'static str,
 }
 
 /// A marker component to say that this is button is tied to a specific interactable.
