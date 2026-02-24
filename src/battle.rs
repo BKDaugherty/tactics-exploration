@@ -708,7 +708,7 @@ pub fn populate_room(
     let enemy_2_grid_pos = GridPosition { x: 4, y: 2 };
     let enemy_3_grid_pos = GridPosition { x: 4, y: 4 };
 
-    for loc in map_data.bridge_end_locations {
+    for loc in &map_data.bridge_end_locations {
         commands.spawn((
             Teleporter {
                 current_room: room_id,
@@ -716,7 +716,7 @@ pub fn populate_room(
             },
             // TODO: Add `InteractionEnabled` only when the room is clear.
             InteractionEnabled,
-            loc,
+            *loc,
             DungeonEntity,
         ));
     }

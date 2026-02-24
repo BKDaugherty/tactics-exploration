@@ -5,7 +5,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use clap::Parser;
 use tactics_exploration::{
     camera::setup_camera,
-    map_generation::{BattleMapOptions, MapParams},
+    map_generation::{BattleMapOptions, DungeonGenerationParams},
 };
 
 fn main() {
@@ -13,7 +13,7 @@ fn main() {
 
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-        .insert_resource(MapParams { options })
+        .insert_resource(DungeonGenerationParams { options })
         .add_plugins(TilemapPlugin)
         .add_plugins(EguiPlugin::default())
         .add_plugins(WorldInspectorPlugin::new())
