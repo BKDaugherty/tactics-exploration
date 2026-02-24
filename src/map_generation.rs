@@ -23,7 +23,7 @@ pub struct MapData {
     pub tiles: BTreeMap<LayerId, BTreeMap<GridPosition, TileType>>,
     pub player_start_locations: [GridPosition; 4],
     pub bridge_start_locations: [GridPosition; 2],
-    pub bridge_end_locations: [GridPosition; 2],
+    pub bridge_end_locations: Vec<GridPosition>,
     pub obstacles: HashMap<GridPosition, Obstacle>,
 }
 
@@ -207,7 +207,7 @@ impl BridgeTileType {
 }
 
 #[derive(Resource)]
-pub struct MapParams {
+pub struct DungeonGenerationParams {
     pub options: BattleMapOptions,
 }
 
@@ -217,7 +217,25 @@ pub struct BattleMapOptions {
     pub(crate) seed: String,
 }
 
-pub fn setup_map_data_from_params(_commands: &mut Commands, seed: String) -> MapData {
+pub enum RoomType {
+    Standard,
+    BossRoom,
+}
+
+impl RoomType {
+    fn has_bridge_exit(&self) -> bool {
+        match self {
+            RoomType::Standard => true,
+            RoomType::BossRoom => false,
+        }
+    }
+}
+
+pub fn setup_map_data_from_params(
+    _commands: &mut Commands,
+    seed: String,
+    room_type: RoomType,
+) -> MapData {
     let grid_size = (17, 17);
     let game_grid_space_x = 2..(grid_size.0 - 2);
     let game_grid_space_y = 2..(grid_size.1 - 2);
@@ -261,19 +279,9 @@ pub fn setup_map_data_from_params(_commands: &mut Commands, seed: String) -> Map
 
     // Need to tell someone about the bridge location we've chosen
     let bridge_location_x_1 = rng.random_range(2..=(bounds_max_x - 2 - 1));
-    let bridge_location_x_2 = rng.random_range(2..=(bounds_max_x - 2 - 1));
 
     for i in bridge_location_x_1..=(bridge_location_x_1 + 1) {
         for y in 0..=2 {
-            ground_layer.insert(
-                GridPosition { x: i, y },
-                TileType::Bridge(BridgeTileType::Plain(Direction::NE)),
-            );
-        }
-    }
-
-    for i in bridge_location_x_2..=(bridge_location_x_2 + 1) {
-        for y in (bounds_max_y - 2)..=bounds_max_y {
             ground_layer.insert(
                 GridPosition { x: i, y },
                 TileType::Bridge(BridgeTileType::Plain(Direction::NE)),
@@ -302,29 +310,47 @@ pub fn setup_map_data_from_params(_commands: &mut Commands, seed: String) -> Map
 
     let bridge_start_positions = [player_start_positions[0], player_start_positions[1]];
 
-    let bridge_end_no_block_locations = [
-        to_game_space(GridPosition {
-            x: bridge_location_x_2,
-            y: bounds_max_y - 2,
-        }),
-        to_game_space(GridPosition {
-            x: bridge_location_x_2 + 1,
-            y: bounds_max_y - 2,
-        }),
-        to_game_space(GridPosition {
-            x: bridge_location_x_2,
-            y: bounds_max_y - 3,
-        }),
-        to_game_space(GridPosition {
-            x: bridge_location_x_2 + 1,
-            y: bounds_max_y - 3,
-        }),
-    ];
+    let (bridge_end_no_block_locations, on_bridge_end_locations) = if room_type.has_bridge_exit() {
+        let bridge_location_x_2 = rng.random_range(2..=(bounds_max_x - 2 - 1));
+        let bridge_end_no_block_locations = [
+            to_game_space(GridPosition {
+                x: bridge_location_x_2,
+                y: bounds_max_y - 2,
+            }),
+            to_game_space(GridPosition {
+                x: bridge_location_x_2 + 1,
+                y: bounds_max_y - 2,
+            }),
+            to_game_space(GridPosition {
+                x: bridge_location_x_2,
+                y: bounds_max_y - 3,
+            }),
+            to_game_space(GridPosition {
+                x: bridge_location_x_2 + 1,
+                y: bounds_max_y - 3,
+            }),
+        ];
 
-    let on_bridge_end_locations = [
-        bridge_end_no_block_locations[0],
-        bridge_end_no_block_locations[1],
-    ];
+        for i in bridge_location_x_2..=(bridge_location_x_2 + 1) {
+            for y in (bounds_max_y - 2)..=bounds_max_y {
+                ground_layer.insert(
+                    GridPosition { x: i, y },
+                    TileType::Bridge(BridgeTileType::Plain(Direction::NE)),
+                );
+            }
+        }
+
+        let on_bridge_end_locations = [
+            bridge_end_no_block_locations[0],
+            bridge_end_no_block_locations[1],
+        ];
+        (
+            Vec::from(bridge_end_no_block_locations),
+            Vec::from(on_bridge_end_locations),
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
 
     let mut obstacles = HashMap::new();
     for x in game_grid_space_x.clone() {
@@ -413,7 +439,7 @@ pub struct MapResource {
 pub fn init_map_params(mut commands: Commands) {
     let seed = Alphanumeric.sample_string(&mut rand::rng(), 16);
     info!("Running with seed: {:?}", seed);
-    commands.insert_resource(MapParams {
+    commands.insert_resource(DungeonGenerationParams {
         options: BattleMapOptions { seed },
     })
 }

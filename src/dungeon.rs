@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
 use crate::{
@@ -6,7 +8,7 @@ use crate::{
     assets::sprite_db::SpriteDB,
     battle::populate_room,
     interactable::{Interactable, InteractionMenuLabel},
-    map_generation::{MapParams, setup_map_data_from_params},
+    map_generation::{DungeonGenerationParams, MapData, RoomType, setup_map_data_from_params},
     player::RegisteredBattlePlayers,
     unit::{UnitExecuteAction, UnitExecuteActionMessage},
 };
@@ -28,9 +30,14 @@ pub struct DungeonEntity;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Reflect)]
 pub struct RoomId(pub u32);
 
-#[derive(Resource, Reflect)]
+#[derive(Resource)]
 pub struct DungeonManager {
     pub current_room: RoomId,
+    rooms: HashMap<RoomId, DungeonRoomData>,
+}
+
+pub struct DungeonRoomData {
+    map_data: MapData,
 }
 
 #[derive(Component)]
@@ -42,12 +49,27 @@ pub struct Teleporter {
     pub next_room: RoomId,
 }
 
+pub const DUNGEON_ROOM_COUNT: u32 = 3;
+
 pub fn init_dungeon_manager(
     mut commands: Commands,
+    dungeon_params: Res<DungeonGenerationParams>,
     mut next_state: ResMut<NextState<DungeonState>>,
 ) {
+    let mut rooms = HashMap::new();
+    for room_id in 0..DUNGEON_ROOM_COUNT {
+        let map_data = setup_map_data_from_params(
+            &mut commands,
+            dungeon_params.options.seed.clone() + room_id.to_string().as_str(),
+            RoomType::Standard,
+        );
+
+        rooms.insert(RoomId(room_id), DungeonRoomData { map_data });
+    }
+
     commands.insert_resource(DungeonManager {
         current_room: RoomId(0),
+        rooms,
     });
 
     next_state.set(DungeonState::LoadRoom);
@@ -56,7 +78,6 @@ pub fn init_dungeon_manager(
 pub fn load_room(
     mut commands: Commands,
     dungeon_manager: Res<DungeonManager>,
-    map_params: Res<MapParams>,
     asset_server: Res<AssetServer>,
     registered_players: Res<RegisteredBattlePlayers>,
     tt_assets: Res<TinytacticsAssets>,
@@ -65,14 +86,14 @@ pub fn load_room(
     mut next_state: ResMut<NextState<DungeonState>>,
 ) {
     let room_id = dungeon_manager.current_room;
-    let map_data = setup_map_data_from_params(
-        &mut commands,
-        map_params.options.seed.clone() + room_id.0.to_string().as_str(),
-    );
+    let Some(room) = dungeon_manager.rooms.get(&room_id) else {
+        panic!("Dungeon is mis-initialized!!");
+    };
+
     populate_room(
         &mut commands,
         &asset_server,
-        &map_data,
+        &room.map_data,
         &registered_players,
         &tt_assets,
         &anim_db,
