@@ -28,7 +28,7 @@ use crate::{
         player_battle_ui_systems::{
             activate_battle_ui, clear_stale_battle_menus_on_activate, close_player_battle_menus,
             handle_battle_ui_interactions, on_unit_completed_action_reopen_battle_menu,
-            reactivate_ui_on_back_message, set_active_battle_menu,
+            reactivate_ui_on_back_message, set_active_battle_menu_on_player_turn,
         },
         player_info_ui_systems::update_unit_viewer_ui,
         update_controlled_ui_info,
@@ -204,11 +204,7 @@ pub fn battle_plugin(app: &mut App) {
         .add_systems(OnEnter(DungeonState::LoadRoom), load_room)
         .add_systems(
             OnEnter(DungeonState::InBattle),
-            (
-                equip_starting_items_on_unit,
-                init_phase_system,
-                set_active_battle_menu,
-            ),
+            (equip_starting_items_on_unit, init_phase_system),
         )
         .add_systems(OnEnter(DungeonState::UnloadRoom), unload_room)
         .add_systems(
@@ -216,6 +212,10 @@ pub fn battle_plugin(app: &mut App) {
             (handle_stat_changes, derive_stats)
                 .chain()
                 .run_if(in_state(DungeonState::InBattle)),
+        )
+        .add_systems(
+            Update,
+            (set_active_battle_menu_on_player_turn).run_if(in_state(DungeonState::InBattle)),
         )
         .add_systems(
             Update,
