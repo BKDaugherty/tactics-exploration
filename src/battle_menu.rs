@@ -714,6 +714,7 @@ pub mod player_battle_ui_systems {
 
     use crate::{
         assets::sounds::{SoundManagerParam, UiSound},
+        battle_phase::{PhaseMessage, PhaseMessageType, PlayerEnemyPhase},
         combat::skills::{ATTACK_SKILL_ID, SkillDBResource, UnitSkills},
         equipment::UnitEquipment,
         grid::GridPosition,
@@ -879,20 +880,27 @@ pub mod player_battle_ui_systems {
 
     /// At the moment a player has exactly one Unit on the board.
     /// This system links the UI that the player will get to that entity.
-    pub fn set_active_battle_menu(
+    pub fn set_active_battle_menu_on_player_turn(
         mut commands: Commands,
+        mut reader: MessageReader<PhaseMessage>,
         player_units: Query<(Entity, &Player), With<Unit>>,
         battle_menus: Query<(Entity, &Player), With<BattlePlayerUI>>,
     ) {
-        for (e, player) in player_units {
-            for (battle_menu_e, battle_player) in battle_menus {
-                if player != battle_player {
-                    continue;
-                }
+        for message in reader.read() {
+            let PhaseMessageType::PhaseBegin(PlayerEnemyPhase::Player) = message.0 else {
+                continue;
+            };
 
-                commands
-                    .entity(battle_menu_e)
-                    .insert((ActiveBattleMenu { selected_unit: e }, ActiveMenu {}));
+            for (e, player) in player_units {
+                for (battle_menu_e, battle_player) in battle_menus {
+                    if player != battle_player {
+                        continue;
+                    }
+
+                    commands
+                        .entity(battle_menu_e)
+                        .insert((ActiveBattleMenu { selected_unit: e }, ActiveMenu {}));
+                }
             }
         }
     }
@@ -1050,6 +1058,7 @@ pub mod player_battle_ui_systems {
                             },
                             unit: battle_menu.selected_unit,
                         });
+                        info!("I am removing the active menu for {:?}", battle_menu_e);
                         commands.entity(battle_menu_e).remove::<ActiveMenu>();
                     }
                     BattleMenuAction::OpenSkillMenu => {
